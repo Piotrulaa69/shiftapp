@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "shiftapp",
+    "name": "ShiftApp",
     "slug": "shiftapp",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -43,6 +43,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "9b2a13e7-1d3e-4472-ae76-192afe2e608f"
+      }
+    },
+    "owner": "solpysik"
   }
 }
