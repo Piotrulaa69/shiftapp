@@ -1,9 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { tasks as initialTasks, Task, TaskPriority, TaskStatus } from '../../data/mockData';
+import { ConfirmationType, tasks as initialTasks, Task, TaskPriority, TaskStatus } from '../../data/mockData';
 import { theme } from '../../styles/theme';
+
+const CONFIRM_CONFIG: Record<ConfirmationType, { icon: string; label: string; color: string; bg: string; route: string }> = {
+  photo: { icon: 'camera-outline', label: 'Zdjęcie', color: theme.colors.primary, bg: theme.colors.primaryLight, route: '/task/confirm-photo' },
+  values: { icon: 'thermometer-outline', label: 'Wartości', color: theme.colors.orange, bg: theme.colors.orangeLight, route: '/task/confirm-values' },
+  description: { icon: 'document-text-outline', label: 'Opis', color: theme.colors.purple, bg: theme.colors.purpleLight, route: '/task/confirm-description' },
+};
 
 const PRIORITY_CONFIG: Record<TaskPriority, { label: string; color: string; bg: string }> = {
   wysoki: { label: 'WYSOKI PRIORYTET', color: theme.colors.error, bg: theme.colors.errorLight },
@@ -19,6 +26,8 @@ const TABS: { key: TaskStatus | 'all'; label: string }[] = [
 
 function TaskCard({ task, onToggle }: { task: Task; onToggle: () => void }) {
   const p = PRIORITY_CONFIG[task.priority];
+  const router = useRouter();
+  const confirmCfg = task.confirmationType ? CONFIRM_CONFIG[task.confirmationType] : null;
 
   return (
     <TouchableOpacity style={tStyles.card} activeOpacity={0.85} onPress={onToggle}>
@@ -42,6 +51,16 @@ function TaskCard({ task, onToggle }: { task: Task; onToggle: () => void }) {
           </View>
           {task.status === 'w_trakcie' && (
             <Text style={[tStyles.statusText, { color: theme.colors.primary }]}>• W toku</Text>
+          )}
+          {confirmCfg && !task.completed && (
+            <TouchableOpacity
+              style={[tStyles.confirmBtn, { backgroundColor: confirmCfg.bg }]}
+              onPress={(e) => { e.stopPropagation?.(); router.push({ pathname: confirmCfg.route as any, params: { taskId: task.id } }); }}
+              activeOpacity={0.75}
+            >
+              <Ionicons name={confirmCfg.icon as any} size={13} color={confirmCfg.color} />
+              <Text style={[tStyles.confirmBtnText, { color: confirmCfg.color }]}>Potwierdź</Text>
+            </TouchableOpacity>
           )}
           <View style={[tStyles.checkbox, task.completed && tStyles.checkboxDone]}>
             {task.completed && <Ionicons name="checkmark" size={12} color={theme.colors.white} />}
@@ -85,6 +104,12 @@ const tStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkboxDone: { backgroundColor: theme.colors.green, borderColor: theme.colors.green },
+  confirmBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    borderRadius: theme.borderRadius.full,
+    paddingHorizontal: 10, paddingVertical: 4,
+  },
+  confirmBtnText: { fontSize: 12, fontWeight: '700' },
 });
 
 export default function TasksScreen() {

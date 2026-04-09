@@ -22,6 +22,7 @@ export type Shift = {
 
 export type TaskPriority = 'wysoki' | 'normalny' | 'niski';
 export type TaskStatus = 'do_zrobienia' | 'w_trakcie' | 'zamkniete';
+export type ConfirmationType = 'photo' | 'values' | 'description';
 
 export type Task = {
   id: string;
@@ -32,6 +33,7 @@ export type Task = {
   priority: TaskPriority;
   status: TaskStatus;
   durationMin: number;
+  confirmationType?: ConfirmationType;
 };
 
 export type Training = {
@@ -108,13 +110,14 @@ export const shifts: Shift[] = [
 ];
 
 export const tasks: Task[] = [
-  { id: 't1', title: 'Przygotowanie ekspresu', description: 'Uruchom i skalibruj ekspres do kawy przed otwarciem.', assignedTime: '08:00', completed: false, priority: 'wysoki', status: 'w_trakcie', durationMin: 15 },
-  { id: 't2', title: 'Inwentaryzacja Sektora B2', description: 'Sprawdzenie stanów magazynowych na regałach od 10 do 25. Wymagane zdjęcia.', assignedTime: '15:30', completed: false, priority: 'wysoki', status: 'do_zrobienia', durationMin: 60 },
+  { id: 't1', title: 'Przygotowanie ekspresu', description: 'Uruchom i skalibruj ekspres do kawy przed otwarciem. Wykonaj zdjęcie gotowej stacji kawowej.', assignedTime: '08:00', completed: false, priority: 'wysoki', status: 'w_trakcie', durationMin: 15, confirmationType: 'photo' },
+  { id: 't2', title: 'Inwentaryzacja Sektora B2', description: 'Sprawdzenie stanów magazynowych na regałach od 10 do 25. Wymagane zdjęcia.', assignedTime: '15:30', completed: false, priority: 'wysoki', status: 'do_zrobienia', durationMin: 60, confirmationType: 'photo' },
+  { id: 't8', title: 'Kontrola temperatur w lodówkach', description: 'Codzienna kontrola temperatur wszystkich urządzeń chłodniczych zgodnie z procedurą HACCP.', assignedTime: '07:00', completed: false, priority: 'wysoki', status: 'w_trakcie', durationMin: 20, confirmationType: 'values' },
   { id: 't3', title: 'Przygotowanie palet do wysyłki', description: 'Zabezpieczenie folią stretch 5 palet dla klienta XYZ.', assignedTime: '17:00', completed: false, priority: 'normalny', status: 'do_zrobienia', durationMin: 45 },
+  { id: 't7', title: 'Kontakt z dostawcą warzyw', description: 'Potwierdzenie zamówienia na poniedziałek. Opisz ustalenia z rozmowy.', assignedTime: '14:00', completed: false, priority: 'normalny', status: 'do_zrobienia', durationMin: 15, confirmationType: 'description' },
   { id: 't4', title: 'Uzupełnienie witryny', description: 'Uzupełnij witrynę chłodniczą o produkty z zaplecza.', assignedTime: '09:30', completed: true, priority: 'normalny', status: 'zamkniete', durationMin: 20 },
   { id: 't5', title: 'Sprawdzenie ekspresu', description: 'Codzienna kontrola i czyszczenie ekspresu.', assignedTime: '07:30', completed: true, priority: 'niski', status: 'zamkniete', durationMin: 10 },
   { id: 't6', title: 'Aktualizacja tablicy specjałów', description: 'Wpisz dzisiejsze dania dnia na tablicę kredową.', assignedTime: '08:30', completed: true, priority: 'niski', status: 'zamkniete', durationMin: 10 },
-  { id: 't7', title: 'Kontakt z dostawcą warzyw', description: 'Potwierdzenie zamówienia na poniedziałek.', assignedTime: '14:00', completed: false, priority: 'normalny', status: 'do_zrobienia', durationMin: 15 },
 ];
 
 export const trainings: Training[] = [
