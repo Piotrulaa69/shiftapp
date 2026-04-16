@@ -2,18 +2,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  Alert,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { tasks } from '../../data/mockData';
+import { useAlert } from '../../context/AlertContext';
+import { store } from '../../data/store';
 import { theme } from '../../styles/theme';
 
 type CheckItem = {
@@ -54,7 +54,8 @@ const STATUS_CONFIG = {
 export default function ConfirmValuesScreen() {
   const { taskId } = useLocalSearchParams<{ taskId: string }>();
   const router = useRouter();
-  const task = tasks.find((t) => t.id === taskId) ?? tasks[2];
+  const { showAlert, showSuccess, showConfirm } = useAlert();
+  const task = store.tasks.find((t) => t.id === taskId) ?? store.tasks[2];
   const [items, setItems] = useState<CheckItem[]>(TEMP_ITEMS);
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
@@ -71,30 +72,19 @@ export default function ConfirmValuesScreen() {
   const handleConfirm = () => {
     const unfilled = items.filter((i) => !i.value.trim());
     if (unfilled.length > 0) {
-      Alert.alert('Brak wartości', `Uzupełnij wszystkie pola (brakuje ${unfilled.length}).`);
+      showAlert('Brak wartości', `Uzupełnij wszystkie pola (brakuje ${unfilled.length}).`);
       return;
     }
     const warnings = items.filter((i) => getStatus(i) !== 'ok');
     if (warnings.length > 0) {
-      Alert.alert(
+      showConfirm(
         '⚠️ Wykryto odchylenia',
         `${warnings.length} urządzenie(a) poza normą. Czy potwierdzić i zgłosić do kierownika?`,
-        [
-          { text: 'Anuluj', style: 'cancel' },
-          {
-            text: 'Potwierdź i zgłoś',
-            onPress: () => {
-              Alert.alert('Zgłoszono!', 'Wyniki zostały zapisane i przesłane do kierownika.', [
-                { text: 'OK', onPress: () => router.back() },
-              ]);
-            },
-          },
-        ]
+        () => showSuccess('Zgłoszono!', 'Wyniki zostały zapisane i przesłane do kierownika.', () => router.back()),
+        'Potwierdź i zgłoś'
       );
     } else {
-      Alert.alert('✅ Wszystkie temperatury w normie!', 'Wyniki zostały zapisane.', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+      showSuccess('Wszystkie temperatury w normie!', 'Wyniki zostały zapisane.', () => router.back());
     }
   };
 

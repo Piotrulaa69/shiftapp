@@ -1,7 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { theme } from '../styles/theme';
-import { roleColors } from '../data/mockData';
 
 type Props = {
   name: string;
@@ -11,7 +10,7 @@ type Props = {
 };
 
 export default function EmployeeCard({ name, role, initials, avatarColor }: Props) {
-  const roleColor = roleColors[role] ?? avatarColor;
+  const roleColor = avatarColor;
 
   return (
     <View style={styles.card}>

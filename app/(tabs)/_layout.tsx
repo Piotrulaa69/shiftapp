@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { currentUser } from '../../data/mockData';
 import { theme } from '../../styles/theme';
 
 const TAB_CONFIG: Record<string, { label: string; icon: string }> = {
@@ -22,20 +21,24 @@ const TAB_CONFIG: Record<string, { label: string; icon: string }> = {
   schedule: { label: 'Grafik', icon: 'calendar' },
   tasks: { label: 'Zadania', icon: 'list' },
   szkolenia: { label: 'Szkolenia', icon: 'school' },
+  admin: { label: 'Zarządzanie', icon: 'settings' },
 };
 
-const NAV_ITEMS = [
+const NAV_ITEMS_BASE = [
   { key: 'dashboard', route: '/(tabs)/dashboard' as const },
   { key: 'schedule', route: '/(tabs)/schedule' as const },
   { key: 'tasks', route: '/(tabs)/tasks' as const },
   { key: 'szkolenia', route: '/(tabs)/szkolenia' as const },
 ];
 
+const NAV_ITEM_ADMIN = { key: 'admin', route: '/(tabs)/admin' as const };
+
 /* ─────────────── DESKTOP SIDEBAR ─────────────── */
 function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
-  const { logout } = useAuth();
+  const { logout, isOwner, restaurant, user } = useAuth();
+  const NAV_ITEMS = isOwner ? [...NAV_ITEMS_BASE, NAV_ITEM_ADMIN] : NAV_ITEMS_BASE;
 
   return (
     <View style={sideStyles.sidebar}>
@@ -55,7 +58,7 @@ function Sidebar() {
             <TouchableOpacity
               key={item.key}
               style={[sideStyles.navItem, isActive && sideStyles.navItemActive]}
-              onPress={() => router.push(item.route)}
+              onPress={() => router.push(item.route as any)}
               activeOpacity={0.7}
             >
               <View style={[sideStyles.navIcon, isActive && sideStyles.navIconActive]}>
@@ -76,11 +79,11 @@ function Sidebar() {
       <View style={sideStyles.bottom}>
         <View style={sideStyles.userRow}>
           <View style={sideStyles.userAvatar}>
-            <Text style={sideStyles.userInitials}>{currentUser.initials}</Text>
+            <Text style={sideStyles.userInitials}>{user?.initials ?? '??'}</Text>
           </View>
           <View style={sideStyles.userInfo}>
-            <Text style={sideStyles.userName} numberOfLines={1}>{currentUser.name}</Text>
-            <Text style={sideStyles.userRole} numberOfLines={1}>{currentUser.role}</Text>
+            <Text style={sideStyles.userName} numberOfLines={1}>{user?.name}</Text>
+            <Text style={sideStyles.userRole} numberOfLines={1}>{restaurant?.name ?? user?.jobTitle}</Text>
           </View>
         </View>
         <TouchableOpacity style={sideStyles.logoutBtn} onPress={logout} activeOpacity={0.7}>
@@ -231,7 +234,7 @@ const tabStyles = StyleSheet.create({
 
 /* ─────────────── ROOT ─────────────── */
 export default function TabLayout() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isOwner } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
 
@@ -250,6 +253,7 @@ export default function TabLayout() {
             <Tabs.Screen name="schedule" />
             <Tabs.Screen name="tasks" />
             <Tabs.Screen name="szkolenia" />
+            <Tabs.Screen name="admin" options={{ href: isOwner ? undefined : null }} />
             <Tabs.Screen name="team" options={{ href: null }} />
           </Tabs>
         </View>
@@ -266,6 +270,7 @@ export default function TabLayout() {
       <Tabs.Screen name="schedule" />
       <Tabs.Screen name="tasks" />
       <Tabs.Screen name="szkolenia" />
+      <Tabs.Screen name="admin" options={{ href: isOwner ? undefined : null }} />
       <Tabs.Screen name="team" options={{ href: null }} />
     </Tabs>
   );

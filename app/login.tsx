@@ -3,7 +3,6 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Image,
     KeyboardAvoidingView,
     Platform,
@@ -13,9 +12,10 @@ import {
     TextInput,
     TouchableOpacity,
     useWindowDimensions,
-    View,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAlert } from '../context/AlertContext';
 import { useAuth } from '../context/AuthContext';
 import { theme } from '../styles/theme';
 
@@ -25,20 +25,21 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
   const { login, isLoading } = useAuth();
+  const { showAlert } = useAlert();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Brakujące dane', 'Wprowadź e-mail/telefon i hasło.');
+      showAlert('Brakujące dane', 'Wprowadź e-mail/telefon i hasło.');
       return;
     }
     const success = await login(email, password);
     if (success) {
       router.replace('/(tabs)/dashboard');
     } else {
-      Alert.alert('Błąd logowania', 'Sprawdź swoje dane i spróbuj ponownie.');
+      showAlert('Błąd logowania', 'Sprawdź swoje dane i spróbuj ponownie.');
     }
   };
 
@@ -135,6 +136,26 @@ export default function LoginScreen() {
         <TouchableOpacity style={styles.socialBtn}>
           <Text style={styles.socialBtnText}> Apple</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* Join restaurant */}
+      <View style={styles.joinSection}>
+        <Text style={styles.joinTitle}>Masz kod od pracodawcy?</Text>
+        <TouchableOpacity style={styles.joinBtn} onPress={() => router.push('/join' as any)} activeOpacity={0.8}>
+          <Ionicons name="people" size={18} color={theme.colors.primary} />
+          <Text style={styles.joinBtnText}>Dołącz do restauracji</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Demo accounts */}
+      <View style={styles.demoBox}>
+        <Text style={styles.demoTitle}>Konta demo:</Text>
+        <Text style={styles.demoItem}>🏠 Właściciel: anna@cafe.pl / demo</Text>
+        <Text style={styles.demoItem}>👨‍🍳 Pracownik: marek@cafe.pl / demo</Text>
+        <Text style={styles.demoItem}>🍕 Pizzeria: tomasz@roma.pl / demo</Text>
+        <Text style={[styles.demoTitle, { marginTop: 8 }]}>Kody zaproszeń:</Text>
+        <Text style={styles.demoItem}>☕ Cafe Centrum: CAFE01 lub CAFE02</Text>
+        <Text style={styles.demoItem}>🍕 Pizzeria Roma: ROMA01 lub ROMA02</Text>
       </View>
 
       <Text style={styles.footer}>© 2025 ShiftApp. Wszelkie prawa zastrzeżone.</Text>
@@ -331,4 +352,25 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
   footerDot: { ...theme.typography.caption, color: theme.colors.textMuted },
+
+  joinSection: {
+    alignItems: 'center', gap: 8,
+    borderTopWidth: 1, borderTopColor: theme.colors.border,
+    paddingTop: 20, marginTop: 4,
+  },
+  joinTitle: { fontSize: 13, color: theme.colors.textSecondary },
+  joinBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderWidth: 1.5, borderColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.md,
+    paddingHorizontal: 20, height: 44,
+  },
+  joinBtnText: { fontSize: 14, fontWeight: '700', color: theme.colors.primary },
+
+  demoBox: {
+    backgroundColor: theme.colors.background, borderRadius: theme.borderRadius.md,
+    padding: 14, gap: 6, marginTop: 8,
+  },
+  demoTitle: { fontSize: 12, fontWeight: '700', color: theme.colors.textSecondary, marginBottom: 2 },
+  demoItem: { fontSize: 12, color: theme.colors.textMuted, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
 });

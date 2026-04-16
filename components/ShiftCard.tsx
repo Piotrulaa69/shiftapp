@@ -1,7 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { theme } from '../styles/theme';
-import { roleColors } from '../data/mockData';
 
 type Props = {
   employeeName: string;
@@ -12,7 +11,7 @@ type Props = {
 };
 
 export default function ShiftCard({ employeeName, role, startTime, endTime, initials }: Props) {
-  const roleColor = roleColors[role] ?? theme.colors.primary;
+  const roleColor = theme.colors.primary;
   const avatarInitials = initials ?? employeeName.split(' ').map((n) => n[0]).join('').slice(0, 2);
 
   return (

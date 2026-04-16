@@ -2,18 +2,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  Alert,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { tasks } from '../../data/mockData';
+import { useAlert } from '../../context/AlertContext';
+import { store } from '../../data/store';
 import { theme } from '../../styles/theme';
 
 const PRIORITY_LABEL: Record<string, string> = {
@@ -25,7 +25,8 @@ const PRIORITY_LABEL: Record<string, string> = {
 export default function ConfirmPhotoScreen() {
   const { taskId } = useLocalSearchParams<{ taskId: string }>();
   const router = useRouter();
-  const task = tasks.find((t) => t.id === taskId) ?? tasks[0];
+  const { showAlert, showSuccess } = useAlert();
+  const task = store.tasks.find((t) => t.id === taskId) ?? store.tasks[0];
   const [hasPhoto, setHasPhoto] = useState(false);
   const [notes, setNotes] = useState('');
   const { width } = useWindowDimensions();
@@ -35,14 +36,10 @@ export default function ConfirmPhotoScreen() {
 
   const handleConfirm = () => {
     if (!hasPhoto) {
-      Alert.alert('Brak zdjęcia', 'Dodaj zdjęcie potwierdzające wykonanie zadania.');
+      showAlert('Brak zdjęcia', 'Dodaj zdjęcie potwierdzające wykonanie zadania.');
       return;
     }
-    Alert.alert(
-      '✅ Zadanie potwierdzone!',
-      'Świetna robota! Kierownik zmiany zostanie powiadomiony.',
-      [{ text: 'Wróć do zadań', onPress: () => router.back() }]
-    );
+    showSuccess('Zadanie potwierdzone!', 'Świetna robota! Kierownik zmiany zostanie powiadomiony.', () => router.back());
   };
 
   return (

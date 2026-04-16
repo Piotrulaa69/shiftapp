@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { currentUser, tasks, todayShift } from '../../data/mockData';
+import { store } from '../../data/store';
 import { theme } from '../../styles/theme';
 
 const QUICK_ACTIONS = [
@@ -22,12 +22,15 @@ const QUICK_ACTIONS = [
 ];
 
 export default function DashboardScreen() {
-  const { logout } = useAuth();
+  const { logout, user, restaurant } = useAuth();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
-  const completedTasks = useMemo(() => tasks.filter((t) => t.completed), []);
-  const pendingTasks = useMemo(() => tasks.filter((t) => !t.completed).slice(0, 4), []);
+  const rid = user?.restaurantId ?? '';
+  const tasks = useMemo(() => store.getTasks(rid), [rid]);
+  const todayShift = useMemo(() => store.getTodayShift(rid, user?.id ?? ''), [rid, user?.id]);
+  const completedTasks = useMemo(() => tasks.filter((t) => t.completed), [tasks]);
+  const pendingTasks = useMemo(() => tasks.filter((t) => !t.completed).slice(0, 4), [tasks]);
   const progress = tasks.length > 0 ? completedTasks.length / tasks.length : 0;
 
   return (
@@ -38,11 +41,11 @@ export default function DashboardScreen() {
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{currentUser.initials}</Text>
+              <Text style={styles.avatarText}>{user?.initials ?? '?'}</Text>
             </View>
             <View>
-              <Text style={styles.greeting}>Cześć, {currentUser.firstName}! 👋</Text>
-              <Text style={styles.greetingSub}>Gotowa na dzisiejszą zmianę?</Text>
+              <Text style={styles.greeting}>Cześć, {user?.firstName}! 👋</Text>
+              <Text style={styles.greetingSub}>{restaurant?.name}</Text>
             </View>
           </View>
           <TouchableOpacity onPress={() => {}}>
@@ -70,11 +73,11 @@ export default function DashboardScreen() {
           <View style={styles.shiftDetails}>
             <View>
               <Text style={styles.shiftDetailLabel}>Godziny</Text>
-              <Text style={styles.shiftTime}>{todayShift.startTime} - {todayShift.endTime}</Text>
+              <Text style={styles.shiftTime}>{todayShift?.startTime ?? '--:--'} - {todayShift?.endTime ?? '--:--'}</Text>
             </View>
             <View>
               <Text style={styles.shiftDetailLabel}>Lokalizacja</Text>
-              <Text style={styles.shiftLocation}>{todayShift.location}</Text>
+              <Text style={styles.shiftLocation}>{todayShift?.location ?? 'Brak'}</Text>
             </View>
           </View>
 
@@ -83,7 +86,7 @@ export default function DashboardScreen() {
               <Text style={styles.leaderAvatarText}>MN</Text>
             </View>
             <Text style={styles.leaderLabel}>Lider zmiany: </Text>
-            <Text style={styles.leaderName}>{todayShift.leader}</Text>
+            <Text style={styles.leaderName}>{todayShift?.leader ?? 'N/A'}</Text>
           </View>
 
           <TouchableOpacity style={styles.checkinBtn} activeOpacity={0.85}>

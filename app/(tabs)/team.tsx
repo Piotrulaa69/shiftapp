@@ -1,28 +1,32 @@
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TextInput,
-  StyleSheet,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import EmployeeCard from '../../components/EmployeeCard';
-import { employees } from '../../data/mockData';
+import { useAuth } from '../../context/AuthContext';
+import { store } from '../../data/store';
 import { theme } from '../../styles/theme';
 
 export default function TeamScreen() {
+  const { user } = useAuth();
+  const rid = user?.restaurantId ?? '';
+  const employees = store.getEmployees(rid);
   const [search, setSearch] = useState('');
 
   const filtered = employees.filter(
     (e) =>
       e.name.toLowerCase().includes(search.toLowerCase()) ||
-      e.role.toLowerCase().includes(search.toLowerCase())
+      e.jobTitle.toLowerCase().includes(search.toLowerCase())
   );
 
-  const roleGroups = Array.from(new Set(employees.map((e) => e.role)));
+  const roleGroups = Array.from(new Set(employees.map((e) => e.jobTitle)));
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -32,22 +36,22 @@ export default function TeamScreen() {
         end={{ x: 1, y: 1 }}
         style={styles.header}
       >
-        <Text style={styles.screenTitle}>Team</Text>
+        <Text style={styles.screenTitle}>Zespół</Text>
 
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Text style={styles.statNum}>{employees.length}</Text>
-            <Text style={styles.statLabel}>Total staff</Text>
+            <Text style={styles.statLabel}>Łącznie</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={styles.statNum}>{roleGroups.length}</Text>
-            <Text style={styles.statLabel}>Roles</Text>
+            <Text style={styles.statLabel}>Stanowiska</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={styles.statNum}>{employees.length}</Text>
-            <Text style={styles.statLabel}>Active</Text>
+            <Text style={styles.statLabel}>Aktywni</Text>
           </View>
         </View>
       </LinearGradient>
@@ -57,7 +61,7 @@ export default function TeamScreen() {
           <Ionicons name="search-outline" size={18} color={theme.colors.textMuted} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search by name or role..."
+            placeholder="Szukaj po imieniu lub stanowisku..."
             placeholderTextColor={theme.colors.textMuted}
             value={search}
             onChangeText={setSearch}
@@ -87,7 +91,7 @@ export default function TeamScreen() {
               <EmployeeCard
                 key={employee.id}
                 name={employee.name}
-                role={employee.role}
+                role={employee.jobTitle}
                 initials={employee.initials}
                 avatarColor={employee.avatarColor}
               />
@@ -95,9 +99,9 @@ export default function TeamScreen() {
           ) : (
             <View style={styles.emptyState}>
               <Ionicons name="people-outline" size={48} color={theme.colors.border} />
-              <Text style={styles.emptyTitle}>No results</Text>
+              <Text style={styles.emptyTitle}>Brak wyników</Text>
               <Text style={styles.emptySubtitle}>
-                No team members match "{search}"
+                Brak osób pasujących do "{search}"
               </Text>
             </View>
           )}

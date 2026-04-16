@@ -1,17 +1,12 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import React, { useState } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { trainings, Training, currentUser } from '../../data/mockData';
+import { useAuth } from '../../context/AuthContext';
+import { store, Training } from '../../data/store';
 import { theme } from '../../styles/theme';
 
 type FilterKey = 'wszystkie' | 'dla_mnie' | 'obowiazkowe' | 'nowe';
-
-const FILTERS: { key: FilterKey; label: string }[] = [
-  { key: 'wszystkie', label: `Wszystkie (${trainings.length})` },
-  { key: 'obowiazkowe', label: `BHP (${trainings.filter((t) => t.category === 'BHP').length})` },
-  { key: 'dla_mnie', label: 'Procedury' },
-];
 
 const STATUS_CONFIG = {
   w_toku: { label: 'W TOKU', color: theme.colors.primary, bg: theme.colors.primaryLight },
@@ -136,6 +131,9 @@ const tStyles = StyleSheet.create({
 });
 
 export default function SzkoleniaScreen() {
+  const { user } = useAuth();
+  const rid = user?.restaurantId ?? '';
+  const trainings = store.getTrainings(rid);
   const [activeFilter, setActiveFilter] = useState<FilterKey>('wszystkie');
   const requiredCount = trainings.filter((t) => t.required && t.status !== 'ukonczone').length;
 
@@ -153,7 +151,7 @@ export default function SzkoleniaScreen() {
         <View style={styles.headerRight}>
           <View style={styles.xpBadge}>
             <Ionicons name="star" size={13} color={theme.colors.yellow} />
-            <Text style={styles.xpText}>{currentUser.xpPoints}</Text>
+            <Text style={styles.xpText}>1250</Text>
           </View>
           <TouchableOpacity>
             <Ionicons name="notifications-outline" size={24} color={theme.colors.text} />
@@ -173,16 +171,16 @@ export default function SzkoleniaScreen() {
             </View>
             <View>
               <Text style={styles.streakLabel}>SERIA DNI</Text>
-              <Text style={styles.streakValue}>{currentUser.streakDays} Dni</Text>
+              <Text style={styles.streakValue}>7 Dni</Text>
             </View>
           </View>
 
           <View style={styles.levelRow}>
-            <Text style={styles.levelLabel}>Poziom 2: {currentUser.level}</Text>
-            <Text style={styles.levelPct}>{currentUser.levelProgress}%</Text>
+            <Text style={styles.levelLabel}>Poziom 2: Adept</Text>
+            <Text style={styles.levelPct}>65%</Text>
           </View>
           <View style={styles.levelBg}>
-            <View style={[styles.levelFill, { width: `${currentUser.levelProgress}%` }]} />
+            <View style={[styles.levelFill, { width: '65%' }]} />
           </View>
           <Text style={styles.levelHint}>Jeszcze 350 pkt do awansu</Text>
         </View>

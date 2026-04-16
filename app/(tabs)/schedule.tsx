@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Shift, shifts, ShiftStatus } from '../../data/mockData';
+import { useAuth } from '../../context/AuthContext';
+import { Shift, ShiftStatus, store } from '../../data/store';
 import { theme } from '../../styles/theme';
 
 const DAY_SHORT = ['Pon', 'Wto', 'Śro', 'Czw', 'Pt', 'Sob', 'Nie'];
@@ -150,6 +151,9 @@ const cardStyles = StyleSheet.create({
 });
 
 export default function ScheduleScreen() {
+  const { user } = useAuth();
+  const rid = user?.restaurantId ?? '';
+  const allShifts = useMemo(() => store.getShifts(rid), [rid]);
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedIdx, setSelectedIdx] = useState(() => {
     const d = new Date().getDay();
@@ -159,7 +163,7 @@ export default function ScheduleScreen() {
   const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
   const monthLabel = useMemo(() => formatMonth(weekDates), [weekDates]);
   const today = new Date().toISOString().split('T')[0];
-  const weekShifts = useMemo(() => shifts.filter((s) => weekDates.includes(s.day)), [weekDates]);
+  const weekShifts = useMemo(() => allShifts.filter((s) => weekDates.includes(s.day)), [weekDates, allShifts]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>

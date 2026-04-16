@@ -22,6 +22,8 @@ export const theme = {
     errorLight: '#FEF2F2',
     success: '#22C55E',
     warning: '#F97316',
+    gradientStart: '#2196C9',
+    gradientEnd: '#5BC8F5',
   },
   spacing: {
     xs: 4,

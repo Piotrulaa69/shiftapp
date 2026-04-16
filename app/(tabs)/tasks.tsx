@@ -3,7 +3,8 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ConfirmationType, tasks as initialTasks, Task, TaskPriority, TaskStatus } from '../../data/mockData';
+import { useAuth } from '../../context/AuthContext';
+import { ConfirmationType, store, Task, TaskPriority, TaskStatus } from '../../data/store';
 import { theme } from '../../styles/theme';
 
 const CONFIRM_CONFIG: Record<ConfirmationType, { icon: string; label: string; color: string; bg: string; route: string }> = {
@@ -113,7 +114,9 @@ const tStyles = StyleSheet.create({
 });
 
 export default function TasksScreen() {
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const { user } = useAuth();
+  const rid = user?.restaurantId ?? '';
+  const [tasks, setTasks] = useState<Task[]>(store.getTasks(rid));
   const [activeTab, setActiveTab] = useState<TaskStatus | 'all'>('all');
 
   const toggleTask = (id: string) => {

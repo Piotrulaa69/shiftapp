@@ -2,18 +2,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  Alert,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { tasks } from '../../data/mockData';
+import { useAlert } from '../../context/AlertContext';
+import { store } from '../../data/store';
 import { theme } from '../../styles/theme';
 
 type ChecklistItem = { id: string; label: string; checked: boolean };
@@ -28,7 +28,8 @@ const CHECKLIST: ChecklistItem[] = [
 export default function ConfirmDescriptionScreen() {
   const { taskId } = useLocalSearchParams<{ taskId: string }>();
   const router = useRouter();
-  const task = tasks.find((t) => t.id === taskId) ?? tasks[4];
+  const { showAlert, showSuccess } = useAlert();
+  const task = store.tasks.find((t) => t.id === taskId) ?? store.tasks[4];
   const [description, setDescription] = useState('');
   const [checklist, setChecklist] = useState<ChecklistItem[]>(CHECKLIST);
   const { width } = useWindowDimensions();
@@ -45,14 +46,10 @@ export default function ConfirmDescriptionScreen() {
 
   const handleConfirm = () => {
     if (description.trim().length < 20) {
-      Alert.alert('Za krótki opis', 'Opisz szczegółowo przebieg zadania (minimum 20 znaków).');
+      showAlert('Za krótki opis', 'Opisz szczegółowo przebieg zadania (minimum 20 znaków).');
       return;
     }
-    Alert.alert(
-      '✅ Zadanie potwierdzone!',
-      'Opis został zapisany. Kierownik zmiany zostanie powiadomiony.',
-      [{ text: 'Wróć do zadań', onPress: () => router.back() }]
-    );
+    showSuccess('Zadanie potwierdzone!', 'Opis został zapisany. Kierownik zmiany zostanie powiadomiony.', () => router.back());
   };
 
   return (
