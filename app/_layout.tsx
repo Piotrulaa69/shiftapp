@@ -14,6 +14,7 @@ export default function RootLayout() {
           <Stack.Screen name="task/confirm-photo" />
           <Stack.Screen name="task/confirm-values" />
           <Stack.Screen name="task/confirm-description" />
+          <Stack.Screen name="training/quiz" />
         </Stack>
       </AuthProvider>
     </AlertProvider>

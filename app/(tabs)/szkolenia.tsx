@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,6 +24,14 @@ const BADGES = [
 
 function TrainingCard({ training }: { training: DbTraining }) {
   const cfg = STATUS_CONFIG[training.status];
+  const router = useRouter();
+
+  const handleStart = () => {
+    router.push({
+      pathname: '/training/quiz' as any,
+      params: { trainingId: training.id, category: training.category, title: training.title },
+    });
+  };
 
   return (
     <View style={tStyles.card}>
@@ -61,7 +70,7 @@ function TrainingCard({ training }: { training: DbTraining }) {
           </View>
         )}
 
-        <TouchableOpacity style={tStyles.btn}>
+        <TouchableOpacity style={tStyles.btn} onPress={handleStart} activeOpacity={0.85}>
           <Ionicons name="play" size={14} color={theme.colors.white} />
           <Text style={tStyles.btnText}>
             {training.progress_percent === 0 ? 'Rozpocznij' : training.progress_percent === 100 ? 'Powtórz' : 'Kontynuuj'}
