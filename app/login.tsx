@@ -150,12 +150,11 @@ export default function LoginScreen() {
       {/* Demo accounts */}
       <View style={styles.demoBox}>
         <Text style={styles.demoTitle}>Konta demo:</Text>
-        <Text style={styles.demoItem}>🏠 Właściciel: anna@cafe.pl / demo</Text>
-        <Text style={styles.demoItem}>👨‍🍳 Pracownik: marek@cafe.pl / demo</Text>
-        <Text style={styles.demoItem}>🍕 Pizzeria: tomasz@roma.pl / demo</Text>
+        <Text style={styles.demoItem}>�️ Spektakulinarna: admin@spektakulinarna / Demo123!</Text>
+        <Text style={styles.demoItem}>� Donut Spot: admin@donutspot.pl / Demo123!</Text>
         <Text style={[styles.demoTitle, { marginTop: 8 }]}>Kody zaproszeń:</Text>
-        <Text style={styles.demoItem}>☕ Cafe Centrum: CAFE01 lub CAFE02</Text>
-        <Text style={styles.demoItem}>🍕 Pizzeria Roma: ROMA01 lub ROMA02</Text>
+        <Text style={styles.demoItem}>🍽️ Spektakulinarna: SPKT01 lub SPKT02</Text>
+        <Text style={styles.demoItem}>� Donut Spot: DNUT01 lub DNUT02</Text>
       </View>
 
       <Text style={styles.footer}>© 2025 ShiftApp. Wszelkie prawa zastrzeżone.</Text>
