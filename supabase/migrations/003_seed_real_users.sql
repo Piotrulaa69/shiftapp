@@ -8,8 +8,8 @@
 -- ── 1. Restaurants ───────────────────────────────────────────
 insert into public.restaurants (id, name, address, phone, plan, logo_color, created_at)
 values
-  ('aaaaaaaa-0001-0000-0000-000000000001', 'Spektakulinarna',  'ul. Smaczna 1, Warszawa',   '+48 500 100 200', 'premium', '#2196C9', now()),
-  ('aaaaaaaa-0002-0000-0000-000000000002', 'Donut Spot',       'ul. Słodka 12, Kraków',     '+48 500 300 400', 'basic',   '#F97316', now())
+  ('aaaaaaaa-0001-0000-0000-000000000001', 'Spektakulinarna',  'Józefa Sierakowskiego 4/Lok. U13, 03-712 Warszawa', '+48 537 922 338', 'premium', '#2196C9', now()),
+  ('aaaaaaaa-0002-0000-0000-000000000002', 'Donut Spot',       'Bratnia 1, 60-185 Skórzewo',                       '+48 575 865 565', 'basic',   '#F97316', now())
 on conflict (id) do nothing;
 
 -- ── 2. Profiles (owners) ─────────────────────────────────────

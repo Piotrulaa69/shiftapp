@@ -1,13 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 import 'react-native-url-polyfill/auto';
 
 const SUPABASE_URL = 'https://ugecoqbfvvkvaadtxtiu.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_8joyS8Hfw80T9J6U-mqleg_0esf67nm';
 
+// On web use localStorage, on native use AsyncStorage
+const storage = Platform.OS === 'web'
+  ? {
+      getItem: (key: string) => Promise.resolve(localStorage.getItem(key)),
+      setItem: (key: string, value: string) => Promise.resolve(localStorage.setItem(key, value)),
+      removeItem: (key: string) => Promise.resolve(localStorage.removeItem(key)),
+    }
+  : AsyncStorage;
+
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    storage: AsyncStorage,
+    storage,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
