@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { toggleTask as dbToggleTask, getTasks } from '../../lib/db';
+import { createTask, deleteTask as dbDeleteTask, toggleTask as dbToggleTask, getTasks } from '../../lib/db';
 import type { DbTask } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
@@ -30,7 +30,7 @@ const TABS: { key: TaskStatus | 'all'; label: string }[] = [
   { key: 'zamkniete', label: 'Zamknięte' },
 ];
 
-function TaskCard({ task, onToggle }: { task: DbTask; onToggle: () => void }) {
+function TaskCard({ task, onToggle, onDelete }: { task: DbTask; onToggle: () => void; onDelete?: () => void }) {
   const p = PRIORITY_CONFIG[task.priority as TaskPriority] ?? PRIORITY_CONFIG.normalny;
   const router = useRouter();
   const confirmCfg = task.confirmation_type ? CONFIRM_CONFIG[task.confirmation_type as ConfirmationType] : null;
@@ -71,6 +71,11 @@ function TaskCard({ task, onToggle }: { task: DbTask; onToggle: () => void }) {
           <View style={[tStyles.checkbox, task.completed && tStyles.checkboxDone]}>
             {task.completed && <Ionicons name="checkmark" size={12} color={theme.colors.white} />}
           </View>
+          {onDelete && (
+            <TouchableOpacity onPress={(e) => { e.stopPropagation?.(); onDelete(); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="trash-outline" size={16} color={theme.colors.error} />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </TouchableOpacity>
@@ -118,12 +123,31 @@ const tStyles = StyleSheet.create({
   confirmBtnText: { fontSize: 12, fontWeight: '700' },
 });
 
+const PRIORITIES: Array<'wysoki' | 'normalny' | 'niski'> = ['wysoki', 'normalny', 'niski'];
+const CONFIRM_TYPES: Array<{ value: 'photo' | 'values' | 'description' | null; label: string }> = [
+  { value: null, label: 'Brak' },
+  { value: 'photo', label: 'Zdjęcie' },
+  { value: 'values', label: 'Wartości' },
+  { value: 'description', label: 'Opis' },
+];
+
 export default function TasksScreen() {
-  const { user } = useAuth();
+  const { user, isOwner } = useAuth();
   const rid = user?.restaurantId ?? '';
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width >= 768;
   const [tasks, setTasks] = useState<DbTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TaskStatus | 'all'>('all');
+  const [showModal, setShowModal] = useState(false);
+
+  const [newTitle, setNewTitle] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const [newTime, setNewTime] = useState('08:00');
+  const [newPriority, setNewPriority] = useState<'wysoki' | 'normalny' | 'niski'>('normalny');
+  const [newDuration, setNewDuration] = useState('30');
+  const [newConfirm, setNewConfirm] = useState<'photo' | 'values' | 'description' | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!rid) return;
@@ -137,6 +161,29 @@ export default function TasksScreen() {
     const newCompleted = !task.completed;
     setTasks((prev) => prev.map((t) => t.id === id ? { ...t, completed: newCompleted, status: newCompleted ? 'zamkniete' : 'do_zrobienia' } : t));
     await dbToggleTask(id, newCompleted);
+  };
+
+  const deleteTask = async (id: string) => {
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+    await dbDeleteTask(id);
+  };
+
+  const handleCreate = async () => {
+    if (!newTitle.trim()) return;
+    setSaving(true);
+    const created = await createTask(rid, {
+      title: newTitle.trim(),
+      description: newDesc.trim(),
+      assigned_to: user?.id ?? null,
+      assigned_time: newTime,
+      priority: newPriority,
+      duration_min: parseInt(newDuration) || 30,
+      confirmation_type: newConfirm,
+    });
+    if (created) setTasks((prev) => [...prev, created]);
+    setSaving(false);
+    setShowModal(false);
+    setNewTitle(''); setNewDesc(''); setNewTime('08:00'); setNewPriority('normalny'); setNewDuration('30'); setNewConfirm(null);
   };
 
   if (loading) return (
@@ -166,13 +213,12 @@ export default function TasksScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Moje Zadania</Text>
         <View style={styles.headerRight}>
-          <View style={styles.xpBadge}>
-            <Ionicons name="star" size={13} color={theme.colors.yellow} />
-            <Text style={styles.xpText}>120</Text>
-          </View>
-          <TouchableOpacity>
-            <Ionicons name="notifications-outline" size={24} color={theme.colors.text} />
-          </TouchableOpacity>
+          {isOwner && (
+            <TouchableOpacity style={styles.addBtn} onPress={() => setShowModal(true)} activeOpacity={0.8}>
+              <Ionicons name="add" size={18} color={theme.colors.white} />
+              <Text style={styles.addBtnText}>Nowe zadanie</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -222,6 +268,14 @@ export default function TasksScreen() {
 
         {/* Tasks */}
         <View style={styles.body}>
+          {tasks.length === 0 && (
+            <View style={styles.emptyState}>
+              <Ionicons name="list-outline" size={48} color={theme.colors.border} />
+              <Text style={styles.emptyTitle}>Brak zadań</Text>
+              {isOwner && <Text style={styles.emptySub}>Dodaj pierwsze zadanie przyciskiem „Nowe zadanie”</Text>}
+            </View>
+          )}
+
           {doZrobienia.length > 0 && (
             <>
               <View style={styles.sectionRow}>
@@ -230,7 +284,7 @@ export default function TasksScreen() {
                 <Text style={styles.sectionCount}>{doZrobienia.length}</Text>
               </View>
               {doZrobienia.map((t) => (
-                <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} />
+                <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} />
               ))}
             </>
           )}
@@ -243,7 +297,7 @@ export default function TasksScreen() {
                 <Text style={styles.sectionCount}>{wTrakcie.length}</Text>
               </View>
               {wTrakcie.map((t) => (
-                <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} />
+                <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} />
               ))}
             </>
           )}
@@ -256,12 +310,72 @@ export default function TasksScreen() {
                 <Text style={styles.sectionCount}>{zamkniete.length}</Text>
               </View>
               {zamkniete.map((t) => (
-                <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} />
+                <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} />
               ))}
             </>
           )}
         </View>
       </ScrollView>
+
+      {/* Create Task Modal */}
+      <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
+        <View style={mStyles.overlay}>
+          <View style={[mStyles.sheet, isDesktop && mStyles.sheetDesktop]}>
+            <View style={mStyles.header}>
+              <Text style={mStyles.headerTitle}>Nowe zadanie</Text>
+              <TouchableOpacity onPress={() => setShowModal(false)}>
+                <Ionicons name="close" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={mStyles.body}>
+              <Text style={mStyles.label}>Tytuł *</Text>
+              <TextInput style={mStyles.input} value={newTitle} onChangeText={setNewTitle} placeholder="np. Przygotowanie sali" placeholderTextColor={theme.colors.textMuted} />
+
+              <Text style={mStyles.label}>Opis</Text>
+              <TextInput style={[mStyles.input, mStyles.inputMulti]} value={newDesc} onChangeText={setNewDesc} placeholder="Szczegóły zadania..." placeholderTextColor={theme.colors.textMuted} multiline numberOfLines={3} />
+
+              <View style={mStyles.row}>
+                <View style={mStyles.half}>
+                  <Text style={mStyles.label}>Godzina</Text>
+                  <TextInput style={mStyles.input} value={newTime} onChangeText={setNewTime} placeholder="08:00" placeholderTextColor={theme.colors.textMuted} />
+                </View>
+                <View style={mStyles.half}>
+                  <Text style={mStyles.label}>Czas (min)</Text>
+                  <TextInput style={mStyles.input} value={newDuration} onChangeText={setNewDuration} keyboardType="numeric" placeholder="30" placeholderTextColor={theme.colors.textMuted} />
+                </View>
+              </View>
+
+              <Text style={mStyles.label}>Priorytet</Text>
+              <View style={mStyles.chips}>
+                {PRIORITIES.map((p) => (
+                  <TouchableOpacity key={p} style={[mStyles.chip, newPriority === p && mStyles.chipActive]} onPress={() => setNewPriority(p)} activeOpacity={0.7}>
+                    <Text style={[mStyles.chipText, newPriority === p && mStyles.chipTextActive]}>{p.charAt(0).toUpperCase() + p.slice(1)}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={mStyles.label}>Potwierdzenie</Text>
+              <View style={mStyles.chips}>
+                {CONFIRM_TYPES.map((c) => (
+                  <TouchableOpacity key={String(c.value)} style={[mStyles.chip, newConfirm === c.value && mStyles.chipActive]} onPress={() => setNewConfirm(c.value)} activeOpacity={0.7}>
+                    <Text style={[mStyles.chipText, newConfirm === c.value && mStyles.chipTextActive]}>{c.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+
+            <View style={mStyles.footer}>
+              <TouchableOpacity style={mStyles.cancelBtn} onPress={() => setShowModal(false)} activeOpacity={0.7}>
+                <Text style={mStyles.cancelText}>Anuluj</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[mStyles.saveBtn, !newTitle.trim() && mStyles.saveBtnDisabled]} onPress={handleCreate} activeOpacity={0.85} disabled={saving || !newTitle.trim()}>
+                {saving ? <ActivityIndicator size="small" color={theme.colors.white} /> : <Text style={mStyles.saveText}>Dodaj zadanie</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -364,4 +478,43 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
+  addBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderRadius: theme.borderRadius.full,
+  },
+  addBtnText: { fontSize: 13, fontWeight: '700', color: theme.colors.white },
+  emptyState: { alignItems: 'center', paddingVertical: 48, gap: 12 },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: theme.colors.textMuted },
+  emptySub: { fontSize: 13, color: theme.colors.textMuted, textAlign: 'center', paddingHorizontal: 32 },
+});
+
+const mStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: theme.colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '92%' },
+  sheetDesktop: { maxWidth: 560, alignSelf: 'center', width: '100%', borderRadius: 24, marginBottom: 40 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
+  body: { padding: 20, gap: 4 },
+  label: { fontSize: 13, fontWeight: '700', color: theme.colors.textSecondary, marginTop: 12, marginBottom: 6 },
+  input: {
+    borderWidth: 1.5, borderColor: theme.colors.border, borderRadius: theme.borderRadius.md,
+    paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: theme.colors.text,
+    backgroundColor: theme.colors.white,
+  },
+  inputMulti: { height: 88, textAlignVertical: 'top' },
+  row: { flexDirection: 'row', gap: 12 },
+  half: { flex: 1 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: theme.borderRadius.full, borderWidth: 1.5, borderColor: theme.colors.border },
+  chipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  chipText: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary },
+  chipTextActive: { color: theme.colors.white },
+  footer: { flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: theme.colors.border },
+  cancelBtn: { flex: 1, height: 50, borderRadius: theme.borderRadius.md, borderWidth: 1.5, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center' },
+  cancelText: { fontSize: 15, fontWeight: '700', color: theme.colors.textSecondary },
+  saveBtn: { flex: 2, height: 50, borderRadius: theme.borderRadius.md, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center' },
+  saveBtnDisabled: { opacity: 0.5 },
+  saveText: { fontSize: 15, fontWeight: '700', color: theme.colors.white },
 });

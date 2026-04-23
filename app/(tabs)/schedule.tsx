@@ -1,9 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { getShifts } from '../../lib/db';
+import { createShift, deleteShift as dbDeleteShift, getEmployees, getShifts } from '../../lib/db';
 import type { DbShift } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
@@ -36,7 +36,7 @@ const STATUS_CONFIG: Record<ShiftStatus, { label: string; color: string; bg: str
   urlop: { label: 'URLOP', color: theme.colors.textSecondary, bg: theme.colors.background },
 };
 
-function ShiftItemCard({ shift, today }: { shift: DbShift; today: string }) {
+function ShiftItemCard({ shift, today, onDelete }: { shift: DbShift; today: string; onDelete?: () => void }) {
   const cfg = STATUS_CONFIG[shift.status];
   const isUrlop = shift.status === 'urlop';
   const needsAction = shift.status === 'do_potwierdzenia';
@@ -82,11 +82,18 @@ function ShiftItemCard({ shift, today }: { shift: DbShift; today: string }) {
           </View>
         )}
 
-        {!needsAction && !isUrlop && (
-          <TouchableOpacity style={cardStyles.detailsBtn}>
-            <Text style={cardStyles.detailsBtnText}>Szczegóły</Text>
-          </TouchableOpacity>
-        )}
+        <View style={cardStyles.bottomRow}>
+          {!needsAction && !isUrlop && (
+            <TouchableOpacity style={cardStyles.detailsBtn}>
+              <Text style={cardStyles.detailsBtnText}>Szczegóły</Text>
+            </TouchableOpacity>
+          )}
+          {onDelete && (
+            <TouchableOpacity onPress={onDelete} style={cardStyles.deleteBtn}>
+              <Ionicons name="trash-outline" size={15} color={theme.colors.error} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -142,7 +149,9 @@ const cardStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   confirmBtnText: { fontSize: 13, fontWeight: '700', color: theme.colors.white },
+  bottomRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   detailsBtn: {
+    flex: 1,
     height: 36,
     borderWidth: 1.5,
     borderColor: theme.colors.border,
@@ -150,15 +159,27 @@ const cardStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  deleteBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#FEF2F2', alignItems: 'center', justifyContent: 'center' },
   detailsBtnText: { fontSize: 13, fontWeight: '600', color: theme.colors.text },
 });
 
 export default function ScheduleScreen() {
-  const { user } = useAuth();
+  const { user, isOwner } = useAuth();
   const rid = user?.restaurantId ?? '';
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width >= 768;
   const [allShifts, setAllShifts] = useState<DbShift[]>([]);
+  const [employees, setEmployees] = useState<import('../../lib/supabase').DbProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [weekOffset, setWeekOffset] = useState(0);
+  const [showModal, setShowModal] = useState(false);
+
+  const [selEmployee, setSelEmployee] = useState('');
+  const [newDay, setNewDay] = useState(new Date().toISOString().split('T')[0]);
+  const [newStart, setNewStart] = useState('08:00');
+  const [newEnd, setNewEnd] = useState('16:00');
+  const [newLocation, setNewLocation] = useState('Restauracja');
+  const [saving, setSaving] = useState(false);
 
   const [selectedIdx, setSelectedIdx] = useState(() => {
     const d = new Date().getDay();
@@ -168,8 +189,33 @@ export default function ScheduleScreen() {
   useEffect(() => {
     if (!rid) return;
     setLoading(true);
-    getShifts(rid).then((data) => { setAllShifts(data); setLoading(false); });
+    Promise.all([getShifts(rid), isOwner ? getEmployees(rid) : Promise.resolve([])])
+      .then(([shifts, emps]) => { setAllShifts(shifts); setEmployees(emps); setLoading(false); });
   }, [rid]);
+
+  const handleDeleteShift = async (id: string) => {
+    setAllShifts((prev) => prev.filter((s) => s.id !== id));
+    await dbDeleteShift(id);
+  };
+
+  const handleCreate = async () => {
+    const emp = employees.find((e) => e.id === selEmployee);
+    if (!emp) return;
+    setSaving(true);
+    const created = await createShift(rid, {
+      employee_id: emp.id,
+      employee_name: `${emp.first_name} ${emp.last_name}`,
+      job_title: emp.job_title,
+      day: newDay,
+      start_time: newStart,
+      end_time: newEnd,
+      location: newLocation,
+      status: 'zaplanowana',
+    });
+    if (created) setAllShifts((prev) => [...prev, created]);
+    setSaving(false);
+    setShowModal(false);
+  };
 
   if (loading) return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#F8FAFC' }} edges={['top']}>
@@ -237,17 +283,71 @@ export default function ScheduleScreen() {
 
         {/* Shifts for the week */}
         <View style={styles.body}>
-          <Text style={styles.sectionTitle}>Zmiany w tym tygodniu</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Zmiany w tym tygodniu</Text>
+            {isOwner && (
+              <TouchableOpacity style={styles.addBtn} onPress={() => setShowModal(true)} activeOpacity={0.8}>
+                <Ionicons name="add" size={16} color={theme.colors.white} />
+                <Text style={styles.addBtnText}>Dodaj zmianę</Text>
+              </TouchableOpacity>
+            )}
+          </View>
           {weekShifts.length > 0 ? (
-            weekShifts.map((s) => <ShiftItemCard key={s.id} shift={s} today={today} />)
+            weekShifts.map((s) => <ShiftItemCard key={s.id} shift={s} today={today} onDelete={isOwner ? () => handleDeleteShift(s.id) : undefined} />)
           ) : (
             <View style={styles.empty}>
               <Ionicons name="calendar-outline" size={44} color={theme.colors.border} />
-              <Text style={styles.emptyText}>Brak zmian w tym tygodniu</Text>
+              <Text style={styles.emptyText}>{isOwner ? 'Brak zmian — dodaj pierwszą zmianę' : 'Brak zmian w tym tygodniu'}</Text>
             </View>
           )}
         </View>
       </ScrollView>
+
+      {/* Create Shift Modal */}
+      <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
+        <View style={mStyles.overlay}>
+          <View style={[mStyles.sheet, isDesktop && mStyles.sheetDesktop]}>
+            <View style={mStyles.header}>
+              <Text style={mStyles.headerTitle}>Nowa zmiana</Text>
+              <TouchableOpacity onPress={() => setShowModal(false)}>
+                <Ionicons name="close" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={mStyles.body}>
+              <Text style={mStyles.label}>Pracownik *</Text>
+              <View style={mStyles.chips}>
+                {employees.map((e) => (
+                  <TouchableOpacity key={e.id} style={[mStyles.chip, selEmployee === e.id && mStyles.chipActive]} onPress={() => setSelEmployee(e.id)} activeOpacity={0.7}>
+                    <Text style={[mStyles.chipText, selEmployee === e.id && mStyles.chipTextActive]}>{e.first_name} {e.last_name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={mStyles.label}>Data (RRRR-MM-DD)</Text>
+              <TextInput style={mStyles.input} value={newDay} onChangeText={setNewDay} placeholder="2025-01-15" placeholderTextColor={theme.colors.textMuted} />
+              <View style={mStyles.row}>
+                <View style={mStyles.half}>
+                  <Text style={mStyles.label}>Od</Text>
+                  <TextInput style={mStyles.input} value={newStart} onChangeText={setNewStart} placeholder="08:00" placeholderTextColor={theme.colors.textMuted} />
+                </View>
+                <View style={mStyles.half}>
+                  <Text style={mStyles.label}>Do</Text>
+                  <TextInput style={mStyles.input} value={newEnd} onChangeText={setNewEnd} placeholder="16:00" placeholderTextColor={theme.colors.textMuted} />
+                </View>
+              </View>
+              <Text style={mStyles.label}>Lokalizacja</Text>
+              <TextInput style={mStyles.input} value={newLocation} onChangeText={setNewLocation} placeholder="Restauracja" placeholderTextColor={theme.colors.textMuted} />
+            </ScrollView>
+            <View style={mStyles.footer}>
+              <TouchableOpacity style={mStyles.cancelBtn} onPress={() => setShowModal(false)} activeOpacity={0.7}>
+                <Text style={mStyles.cancelText}>Anuluj</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[mStyles.saveBtn, !selEmployee && mStyles.saveBtnDisabled]} onPress={handleCreate} activeOpacity={0.85} disabled={saving || !selEmployee}>
+                {saving ? <ActivityIndicator size="small" color={theme.colors.white} /> : <Text style={mStyles.saveText}>Dodaj zmianę</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -303,7 +403,34 @@ const styles = StyleSheet.create({
   dayNumSelected: { color: theme.colors.white },
   dot: { width: 5, height: 5, borderRadius: 2.5 },
   body: { padding: 16, paddingTop: 20 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: theme.colors.text, marginBottom: 14 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: theme.colors.text },
+  addBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: theme.colors.primary, paddingHorizontal: 12, paddingVertical: 7, borderRadius: theme.borderRadius.full },
+  addBtnText: { fontSize: 12, fontWeight: '700', color: theme.colors.white },
   empty: { alignItems: 'center', paddingVertical: 40, gap: 10 },
   emptyText: { ...theme.typography.bodySmall, color: theme.colors.textMuted },
+});
+
+const mStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: theme.colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '92%' },
+  sheetDesktop: { maxWidth: 560, alignSelf: 'center', width: '100%', borderRadius: 24, marginBottom: 40 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
+  body: { padding: 20, gap: 4 },
+  label: { fontSize: 13, fontWeight: '700', color: theme.colors.textSecondary, marginTop: 12, marginBottom: 6 },
+  input: { borderWidth: 1.5, borderColor: theme.colors.border, borderRadius: theme.borderRadius.md, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: theme.colors.text, backgroundColor: theme.colors.white },
+  row: { flexDirection: 'row', gap: 12 },
+  half: { flex: 1 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: theme.borderRadius.full, borderWidth: 1.5, borderColor: theme.colors.border },
+  chipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  chipText: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary },
+  chipTextActive: { color: theme.colors.white },
+  footer: { flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: theme.colors.border },
+  cancelBtn: { flex: 1, height: 50, borderRadius: theme.borderRadius.md, borderWidth: 1.5, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center' },
+  cancelText: { fontSize: 15, fontWeight: '700', color: theme.colors.textSecondary },
+  saveBtn: { flex: 2, height: 50, borderRadius: theme.borderRadius.md, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center' },
+  saveBtnDisabled: { opacity: 0.5 },
+  saveText: { fontSize: 15, fontWeight: '700', color: theme.colors.white },
 });

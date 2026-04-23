@@ -4,11 +4,11 @@
  * Every function is scoped to a restaurantId (enforced also by RLS).
  */
 
-import { supabase } from './supabase';
 import type { DbInvitation, DbProfile, DbRestaurant, DbShift, DbTask, DbTraining } from './supabase';
+import { supabase } from './supabase';
 
 // Re-export types for screens
-export type { DbInvitation as Invitation, DbProfile as AppUser, DbRestaurant as Restaurant, DbShift as Shift, DbTask as Task, DbTraining as Training };
+export type { DbProfile as AppUser, DbInvitation as Invitation, DbRestaurant as Restaurant, DbShift as Shift, DbTask as Task, DbTraining as Training };
 
 export type ShiftStatus = 'zaplanowana' | 'do_potwierdzenia' | 'potwierdzona' | 'urlop';
 export type TaskPriority = 'wysoki' | 'normalny' | 'niski';
@@ -48,6 +48,33 @@ export async function confirmShift(shiftId: string): Promise<boolean> {
   return !error;
 }
 
+export async function createShift(
+  restaurantId: string,
+  fields: {
+    employee_id: string;
+    employee_name: string;
+    job_title: string;
+    day: string;
+    start_time: string;
+    end_time: string;
+    location: string;
+    status: 'zaplanowana' | 'do_potwierdzenia' | 'potwierdzona' | 'urlop';
+  }
+): Promise<DbShift | null> {
+  const { data, error } = await supabase
+    .from('shifts')
+    .insert({ restaurant_id: restaurantId, ...fields })
+    .select()
+    .single();
+  if (error) { console.error('createShift', error); return null; }
+  return data as DbShift;
+}
+
+export async function deleteShift(shiftId: string): Promise<boolean> {
+  const { error } = await supabase.from('shifts').delete().eq('id', shiftId);
+  return !error;
+}
+
 // ─── Tasks ────────────────────────────────────────────────────────────────────
 
 export async function getTasks(restaurantId: string): Promise<DbTask[]> {
@@ -65,6 +92,32 @@ export async function toggleTask(taskId: string, completed: boolean): Promise<bo
     .from('tasks')
     .update({ completed, status: completed ? 'zamkniete' : 'do_zrobienia' })
     .eq('id', taskId);
+  return !error;
+}
+
+export async function createTask(
+  restaurantId: string,
+  fields: {
+    title: string;
+    description: string;
+    assigned_to: string | null;
+    assigned_time: string;
+    priority: 'wysoki' | 'normalny' | 'niski';
+    duration_min: number;
+    confirmation_type: 'photo' | 'values' | 'description' | null;
+  }
+): Promise<DbTask | null> {
+  const { data, error } = await supabase
+    .from('tasks')
+    .insert({ restaurant_id: restaurantId, completed: false, status: 'do_zrobienia', ...fields })
+    .select()
+    .single();
+  if (error) { console.error('createTask', error); return null; }
+  return data as DbTask;
+}
+
+export async function deleteTask(taskId: string): Promise<boolean> {
+  const { error } = await supabase.from('tasks').delete().eq('id', taskId);
   return !error;
 }
 
