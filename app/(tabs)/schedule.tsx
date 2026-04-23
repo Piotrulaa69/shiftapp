@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { getShifts } from '../../lib/db';
@@ -157,16 +157,27 @@ export default function ScheduleScreen() {
   const { user } = useAuth();
   const rid = user?.restaurantId ?? '';
   const [allShifts, setAllShifts] = useState<DbShift[]>([]);
+  const [loading, setLoading] = useState(true);
   const [weekOffset, setWeekOffset] = useState(0);
 
-  useEffect(() => {
-    if (!rid) return;
-    getShifts(rid).then(setAllShifts);
-  }, [rid]);
   const [selectedIdx, setSelectedIdx] = useState(() => {
     const d = new Date().getDay();
     return d === 0 ? 6 : d - 1;
   });
+
+  useEffect(() => {
+    if (!rid) return;
+    setLoading(true);
+    getShifts(rid).then((data) => { setAllShifts(data); setLoading(false); });
+  }, [rid]);
+
+  if (loading) return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8FAFC' }} edges={['top']}>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color="#2196C9" />
+      </View>
+    </SafeAreaView>
+  );
 
   const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
   const monthLabel = useMemo(() => formatMonth(weekDates), [weekDates]);

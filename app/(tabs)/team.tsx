@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
+    ActivityIndicator,
     ScrollView,
     StyleSheet,
     Text,
@@ -19,12 +20,22 @@ export default function TeamScreen() {
   const { user } = useAuth();
   const rid = user?.restaurantId ?? '';
   const [employees, setEmployees] = useState<DbProfile[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
   useEffect(() => {
     if (!rid) return;
-    getEmployees(rid).then(setEmployees);
+    setLoading(true);
+    getEmployees(rid).then((data) => { setEmployees(data); setLoading(false); });
   }, [rid]);
+
+  if (loading) return (
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color="#2196C9" />
+      </View>
+    </SafeAreaView>
+  );
 
   const filtered = employees.filter(
     (e) => {

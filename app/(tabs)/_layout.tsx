@@ -3,6 +3,7 @@ import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Redirect, Tabs, usePathname, useRouter } from 'expo-router';
 import React from 'react';
 import {
+    ActivityIndicator,
     Image,
     Platform,
     ScrollView,
@@ -234,10 +235,17 @@ const tabStyles = StyleSheet.create({
 
 /* ─────────────── ROOT ─────────────── */
 export default function TabLayout() {
-  const { isAuthenticated, isOwner } = useAuth();
+  const { isAuthenticated, isOwner, isLoading } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
 
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' }}>
+        <ActivityIndicator size="large" color="#2196C9" />
+      </View>
+    );
+  }
   if (!isAuthenticated) return <Redirect href="/login" />;
 
   if (isDesktop) {

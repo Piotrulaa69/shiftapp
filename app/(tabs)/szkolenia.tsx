@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { getTrainings } from '../../lib/db';
@@ -135,12 +135,23 @@ export default function SzkoleniaScreen() {
   const { user } = useAuth();
   const rid = user?.restaurantId ?? '';
   const [trainings, setTrainings] = useState<DbTraining[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterKey>('wszystkie');
 
   useEffect(() => {
     if (!rid) return;
-    getTrainings(rid).then(setTrainings);
+    setLoading(true);
+    getTrainings(rid).then((data) => { setTrainings(data); setLoading(false); });
   }, [rid]);
+
+  if (loading) return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8FAFC' }} edges={['top']}>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color="#2196C9" />
+      </View>
+    </SafeAreaView>
+  );
+
   const requiredCount = trainings.filter((t) => t.required && t.status !== 'ukonczone').length;
 
   const filtered = activeFilter === 'obowiazkowe'

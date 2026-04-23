@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
+    ActivityIndicator,
     Platform,
     ScrollView,
     StyleSheet,
@@ -42,6 +43,19 @@ export default function DashboardScreen() {
   const pendingTasks = tasks.filter((t) => !t.completed).slice(0, 4);
   const progress = tasks.length > 0 ? completedTasks.length / tasks.length : 0;
 
+  const STATUS_LABELS: Record<string, string> = {
+    zaplanowana: 'Zaplanowana',
+    do_potwierdzenia: 'Do potwierdzenia',
+    potwierdzona: 'Potwierdzona',
+    urlop: 'Urlop',
+  };
+
+  if (!user) return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' }}>
+      <ActivityIndicator size="large" color="#2196C9" />
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scroll, isDesktop && styles.scrollDesktop]}>
@@ -76,7 +90,7 @@ export default function DashboardScreen() {
           </View>
 
           <View style={styles.statusBadge}>
-            <Text style={styles.statusBadgeText}>Zaplanowana</Text>
+            <Text style={styles.statusBadgeText}>{todayShift ? STATUS_LABELS[todayShift.status] ?? todayShift.status : 'Brak zmiany'}</Text>
           </View>
 
           <View style={styles.shiftDetails}>

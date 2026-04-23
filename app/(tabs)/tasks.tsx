@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { toggleTask as dbToggleTask, getTasks } from '../../lib/db';
@@ -122,11 +122,13 @@ export default function TasksScreen() {
   const { user } = useAuth();
   const rid = user?.restaurantId ?? '';
   const [tasks, setTasks] = useState<DbTask[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TaskStatus | 'all'>('all');
 
   useEffect(() => {
     if (!rid) return;
-    getTasks(rid).then(setTasks);
+    setLoading(true);
+    getTasks(rid).then((data) => { setTasks(data); setLoading(false); });
   }, [rid]);
 
   const toggleTask = async (id: string) => {
@@ -136,6 +138,14 @@ export default function TasksScreen() {
     setTasks((prev) => prev.map((t) => t.id === id ? { ...t, completed: newCompleted, status: newCompleted ? 'zamkniete' : 'do_zrobienia' } : t));
     await dbToggleTask(id, newCompleted);
   };
+
+  if (loading) return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8FAFC' }} edges={['top']}>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color="#2196C9" />
+      </View>
+    </SafeAreaView>
+  );
 
   const completedCount = tasks.filter((t) => t.completed).length;
   const totalCount = tasks.length;
