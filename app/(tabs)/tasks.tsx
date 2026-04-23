@@ -1,11 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { ConfirmationType, store, Task, TaskPriority, TaskStatus } from '../../data/store';
+import { toggleTask as dbToggleTask, getTasks } from '../../lib/db';
+import type { DbTask } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
+
+type ConfirmationType = 'photo' | 'values' | 'description';
+type TaskPriority = 'wysoki' | 'normalny' | 'niski';
+type TaskStatus = 'do_zrobienia' | 'w_trakcie' | 'zamkniete';
 
 const CONFIRM_CONFIG: Record<ConfirmationType, { icon: string; label: string; color: string; bg: string; route: string }> = {
   photo: { icon: 'camera-outline', label: 'Zdjęcie', color: theme.colors.primary, bg: theme.colors.primaryLight, route: '/task/confirm-photo' },
@@ -25,10 +30,10 @@ const TABS: { key: TaskStatus | 'all'; label: string }[] = [
   { key: 'zamkniete', label: 'Zamknięte' },
 ];
 
-function TaskCard({ task, onToggle }: { task: Task; onToggle: () => void }) {
-  const p = PRIORITY_CONFIG[task.priority];
+function TaskCard({ task, onToggle }: { task: DbTask; onToggle: () => void }) {
+  const p = PRIORITY_CONFIG[task.priority as TaskPriority] ?? PRIORITY_CONFIG.normalny;
   const router = useRouter();
-  const confirmCfg = task.confirmationType ? CONFIRM_CONFIG[task.confirmationType] : null;
+  const confirmCfg = task.confirmation_type ? CONFIRM_CONFIG[task.confirmation_type as ConfirmationType] : null;
 
   return (
     <TouchableOpacity style={tStyles.card} activeOpacity={0.85} onPress={onToggle}>
@@ -40,7 +45,7 @@ function TaskCard({ task, onToggle }: { task: Task; onToggle: () => void }) {
           </View>
           <View style={tStyles.timeRow}>
             <Ionicons name="time-outline" size={12} color={theme.colors.textMuted} />
-            <Text style={tStyles.timeText}>{task.assignedTime}</Text>
+            <Text style={tStyles.timeText}>{task.assigned_time}</Text>
           </View>
         </View>
         <Text style={[tStyles.title, task.completed && tStyles.titleDone]}>{task.title}</Text>
@@ -48,7 +53,7 @@ function TaskCard({ task, onToggle }: { task: Task; onToggle: () => void }) {
         <View style={tStyles.footer}>
           <View style={tStyles.duration}>
             <Ionicons name="timer-outline" size={12} color={theme.colors.textMuted} />
-            <Text style={tStyles.durationText}>{task.durationMin} min</Text>
+            <Text style={tStyles.durationText}>{task.duration_min} min</Text>
           </View>
           {task.status === 'w_trakcie' && (
             <Text style={[tStyles.statusText, { color: theme.colors.primary }]}>• W toku</Text>
@@ -116,15 +121,20 @@ const tStyles = StyleSheet.create({
 export default function TasksScreen() {
   const { user } = useAuth();
   const rid = user?.restaurantId ?? '';
-  const [tasks, setTasks] = useState<Task[]>(store.getTasks(rid));
+  const [tasks, setTasks] = useState<DbTask[]>([]);
   const [activeTab, setActiveTab] = useState<TaskStatus | 'all'>('all');
 
-  const toggleTask = (id: string) => {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === id ? { ...t, completed: !t.completed, status: t.completed ? 'do_zrobienia' : 'zamkniete' } : t
-      )
-    );
+  useEffect(() => {
+    if (!rid) return;
+    getTasks(rid).then(setTasks);
+  }, [rid]);
+
+  const toggleTask = async (id: string) => {
+    const task = tasks.find((t) => t.id === id);
+    if (!task) return;
+    const newCompleted = !task.completed;
+    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, completed: newCompleted, status: newCompleted ? 'zamkniete' : 'do_zrobienia' } : t));
+    await dbToggleTask(id, newCompleted);
   };
 
   const completedCount = tasks.filter((t) => t.completed).length;

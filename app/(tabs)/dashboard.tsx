@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     Platform,
     ScrollView,
@@ -12,7 +12,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { store } from '../../data/store';
+import { getTasks, getTodayShift } from '../../lib/db';
+import type { DbShift, DbTask } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
 const QUICK_ACTIONS = [
@@ -27,10 +28,18 @@ export default function DashboardScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
   const rid = user?.restaurantId ?? '';
-  const tasks = useMemo(() => store.getTasks(rid), [rid]);
-  const todayShift = useMemo(() => store.getTodayShift(rid, user?.id ?? ''), [rid, user?.id]);
-  const completedTasks = useMemo(() => tasks.filter((t) => t.completed), [tasks]);
-  const pendingTasks = useMemo(() => tasks.filter((t) => !t.completed).slice(0, 4), [tasks]);
+
+  const [tasks, setTasks] = useState<DbTask[]>([]);
+  const [todayShift, setTodayShift] = useState<DbShift | null>(null);
+
+  useEffect(() => {
+    if (!rid) return;
+    getTasks(rid).then(setTasks);
+    getTodayShift(rid, user?.id ?? '').then(setTodayShift);
+  }, [rid, user?.id]);
+
+  const completedTasks = tasks.filter((t) => t.completed);
+  const pendingTasks = tasks.filter((t) => !t.completed).slice(0, 4);
   const progress = tasks.length > 0 ? completedTasks.length / tasks.length : 0;
 
   return (
@@ -73,7 +82,7 @@ export default function DashboardScreen() {
           <View style={styles.shiftDetails}>
             <View>
               <Text style={styles.shiftDetailLabel}>Godziny</Text>
-              <Text style={styles.shiftTime}>{todayShift?.startTime ?? '--:--'} - {todayShift?.endTime ?? '--:--'}</Text>
+              <Text style={styles.shiftTime}>{todayShift?.start_time ?? '--:--'} - {todayShift?.end_time ?? '--:--'}</Text>
             </View>
             <View>
               <Text style={styles.shiftDetailLabel}>Lokalizacja</Text>
@@ -86,7 +95,7 @@ export default function DashboardScreen() {
               <Text style={styles.leaderAvatarText}>MN</Text>
             </View>
             <Text style={styles.leaderLabel}>Lider zmiany: </Text>
-            <Text style={styles.leaderName}>{todayShift?.leader ?? 'N/A'}</Text>
+            <Text style={styles.leaderName}>{todayShift?.employee_name ?? 'N/A'}</Text>
           </View>
 
           <TouchableOpacity style={styles.checkinBtn} activeOpacity={0.85}>

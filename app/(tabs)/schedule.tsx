@@ -1,10 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { Shift, ShiftStatus, store } from '../../data/store';
+import { getShifts } from '../../lib/db';
+import type { DbShift } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
+
+type ShiftStatus = 'zaplanowana' | 'do_potwierdzenia' | 'potwierdzona' | 'urlop';
 
 const DAY_SHORT = ['Pon', 'Wto', 'Śro', 'Czw', 'Pt', 'Sob', 'Nie'];
 const DAY_FULL_PL = ['Poniedziałek', 'Wtorek', 'Środa', 'Czwartek', 'Piątek', 'Sobota', 'Niedziela'];
@@ -33,7 +36,7 @@ const STATUS_CONFIG: Record<ShiftStatus, { label: string; color: string; bg: str
   urlop: { label: 'URLOP', color: theme.colors.textSecondary, bg: theme.colors.background },
 };
 
-function ShiftItemCard({ shift }: { shift: Shift }) {
+function ShiftItemCard({ shift, today }: { shift: DbShift; today: string }) {
   const cfg = STATUS_CONFIG[shift.status];
   const isUrlop = shift.status === 'urlop';
   const needsAction = shift.status === 'do_potwierdzenia';
@@ -59,7 +62,7 @@ function ShiftItemCard({ shift }: { shift: Shift }) {
                   {DAY_FULL_PL[new Date(shift.day).getDay() === 0 ? 6 : new Date(shift.day).getDay() - 1]},{' '}
                   {new Date(shift.day).getDate()} {MONTHS_PL[new Date(shift.day).getMonth()].slice(0,3)}.
                 </Text>
-                <Text style={cardStyles.shiftTime}>{shift.startTime} - {shift.endTime} • {shift.location}</Text>
+                <Text style={cardStyles.shiftTime}>{shift.start_time} - {shift.end_time} • {shift.location}</Text>
               </>
             )}
           </View>
@@ -153,8 +156,13 @@ const cardStyles = StyleSheet.create({
 export default function ScheduleScreen() {
   const { user } = useAuth();
   const rid = user?.restaurantId ?? '';
-  const allShifts = useMemo(() => store.getShifts(rid), [rid]);
+  const [allShifts, setAllShifts] = useState<DbShift[]>([]);
   const [weekOffset, setWeekOffset] = useState(0);
+
+  useEffect(() => {
+    if (!rid) return;
+    getShifts(rid).then(setAllShifts);
+  }, [rid]);
   const [selectedIdx, setSelectedIdx] = useState(() => {
     const d = new Date().getDay();
     return d === 0 ? 6 : d - 1;
@@ -220,7 +228,7 @@ export default function ScheduleScreen() {
         <View style={styles.body}>
           <Text style={styles.sectionTitle}>Zmiany w tym tygodniu</Text>
           {weekShifts.length > 0 ? (
-            weekShifts.map((s) => <ShiftItemCard key={s.id} shift={s} />)
+            weekShifts.map((s) => <ShiftItemCard key={s.id} shift={s} today={today} />)
           ) : (
             <View style={styles.empty}>
               <Ionicons name="calendar-outline" size={44} color={theme.colors.border} />

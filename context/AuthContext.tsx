@@ -1,5 +1,8 @@
-import React, { createContext, useContext, useState } from 'react';
-import { AppUser, Restaurant, store, UserRole } from '../data/store';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import type { DbProfile, DbRestaurant } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
+
+export type UserRole = 'owner' | 'employee';
 
 export type AuthUser = {
   id: string;
@@ -13,6 +16,17 @@ export type AuthUser = {
   avatarColor: string;
 };
 
+export type Restaurant = {
+  id: string;
+  name: string;
+  address: string;
+  phone: string;
+  ownerId: string | null;
+  plan: 'basic' | 'premium';
+  logoColor: string;
+  createdAt: string;
+};
+
 type AuthContextType = {
   user: AuthUser | null;
   restaurant: Restaurant | null;
@@ -20,39 +34,103 @@ type AuthContextType = {
   isOwner: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
-  joinWithCode: (code: string, data: { firstName: string; lastName: string; email: string; password: string }) => Promise<boolean>;
+  joinWithCode: (
+    code: string,
+    data: { firstName: string; lastName: string; email: string; password: string }
+  ) => Promise<boolean>;
   logout: () => void;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function toAuthUser(u: AppUser): AuthUser {
+function toAuthUser(profile: DbProfile, email: string): AuthUser {
+  const firstName = profile.first_name;
+  const lastName = profile.last_name;
+  const initials = `${firstName[0] ?? ''}${lastName[0] ?? ''}`.toUpperCase();
   return {
-    id: u.id,
-    name: u.name,
-    firstName: u.firstName,
-    initials: u.initials,
-    email: u.email,
-    role: u.role,
-    jobTitle: u.jobTitle,
-    restaurantId: u.restaurantId,
-    avatarColor: u.avatarColor,
+    id: profile.id,
+    name: `${firstName} ${lastName}`,
+    firstName,
+    initials,
+    email,
+    role: profile.role,
+    jobTitle: profile.job_title,
+    restaurantId: profile.restaurant_id,
+    avatarColor: profile.avatar_color,
+  };
+}
+
+function toRestaurant(r: DbRestaurant): Restaurant {
+  return {
+    id: r.id,
+    name: r.name,
+    address: r.address,
+    phone: r.phone,
+    ownerId: r.owner_id,
+    plan: r.plan,
+    logoColor: r.logo_color,
+    createdAt: r.created_at,
+  };
+}
+
+async function loadUserData(userId: string, email: string): Promise<{ user: AuthUser; restaurant: Restaurant } | null> {
+  const { data: profile, error: pErr } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .single();
+
+  if (pErr || !profile) return null;
+
+  const { data: restaurant, error: rErr } = await supabase
+    .from('restaurants')
+    .select('*')
+    .eq('id', profile.restaurant_id)
+    .single();
+
+  if (rErr || !restaurant) return null;
+
+  return {
+    user: toAuthUser(profile as DbProfile, email),
+    restaurant: toRestaurant(restaurant as DbRestaurant),
   };
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Restore session on mount
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const result = await loadUserData(session.user.id, session.user.email ?? '');
+        if (result) { setUser(result.user); setRestaurant(result.restaurant); }
+      }
+      setIsLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        setUser(null); setRestaurant(null);
+      } else if (session?.user) {
+        const result = await loadUserData(session.user.id, session.user.email ?? '');
+        if (result) { setUser(result.user); setRestaurant(result.restaurant); }
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    if (!email.trim() || !password.trim()) return false;
     setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 700));
-    const result = store.login(email, password);
+    const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (error || !data.user) { setIsLoading(false); return false; }
+    const result = await loadUserData(data.user.id, data.user.email ?? '');
     setIsLoading(false);
     if (!result) return false;
-    setUser(toAuthUser(result.user));
+    setUser(result.user);
     setRestaurant(result.restaurant);
     return true;
   };
@@ -62,16 +140,60 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     data: { firstName: string; lastName: string; email: string; password: string }
   ): Promise<boolean> => {
     setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 700));
-    const result = store.acceptInvitation(code, data);
+
+    // 1. Validate invitation code via RPC
+    const { data: invData, error: invError } = await supabase
+      .rpc('accept_invitation', { p_code: code.toUpperCase() });
+
+    if (invError || invData?.error) { setIsLoading(false); return false; }
+
+    const { restaurant_id, job_title } = invData as {
+      invitation_id: string;
+      restaurant_id: string;
+      restaurant_name: string;
+      job_title: string;
+    };
+
+    // 2. Create Supabase Auth user
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: data.email.trim(),
+      password: data.password,
+    });
+
+    if (authError || !authData.user) { setIsLoading(false); return false; }
+
+    const userId = authData.user.id;
+
+    // 3. Create profile
+    const avatarColors = ['#2196C9','#22C55E','#F97316','#A855F7','#EAB308','#EF4444','#0F172A'];
+    const avatarColor = avatarColors[Math.floor(Math.random() * avatarColors.length)];
+
+    const { error: profileError } = await supabase.from('profiles').insert({
+      id: userId,
+      restaurant_id,
+      first_name: data.firstName.trim(),
+      last_name: data.lastName.trim(),
+      role: 'employee',
+      job_title,
+      avatar_color: avatarColor,
+    });
+
+    if (profileError) { setIsLoading(false); return false; }
+
+    // 4. Mark invitation as used
+    await supabase.rpc('mark_invitation_used', { p_code: code.toUpperCase(), p_user_id: userId });
+
+    // 5. Load user data
+    const result = await loadUserData(userId, data.email.trim());
     setIsLoading(false);
     if (!result) return false;
-    setUser(toAuthUser(result.user));
+    setUser(result.user);
     setRestaurant(result.restaurant);
     return true;
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
     setRestaurant(null);
   };

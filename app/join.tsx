@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../context/AlertContext';
 import { useAuth } from '../context/AuthContext';
-import { store } from '../data/store';
+import { supabase } from '../lib/supabase';
 import { theme } from '../styles/theme';
 
 type Step = 'code' | 'register';
@@ -38,20 +38,19 @@ export default function JoinScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleVerifyCode = () => {
+  const handleVerifyCode = async () => {
     const cleaned = code.trim().toUpperCase();
     if (cleaned.length < 4) {
       showAlert('Nieprawidłowy kod', 'Wpisz kod aktywacyjny otrzymany od pracodawcy.');
       return;
     }
-    const inv = store.findInvitation(cleaned);
-    if (!inv) {
-      showAlert('Kod nieważny', 'Kod nie istnieje lub wygasł. Poproś pracodawcę o nowy kod.');
+    const { data, error } = await supabase.rpc('accept_invitation', { p_code: cleaned });
+    if (error || !data || data.error) {
+      showAlert('Kod nieważny', data?.error ?? 'Kod nie istnieje lub wygasł. Poproś pracodawcę o nowy kod.');
       return;
     }
-    const rest = store.getRestaurant(inv.restaurantId);
-    setRestaurantName(rest?.name ?? '');
-    setJobTitle(inv.jobTitle);
+    setRestaurantName(data.restaurant_name ?? '');
+    setJobTitle(data.job_title ?? '');
     setStep('register');
   };
 

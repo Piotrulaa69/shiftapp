@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { store, Training } from '../../data/store';
+import { getTrainings } from '../../lib/db';
+import type { DbTraining } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
 type FilterKey = 'wszystkie' | 'dla_mnie' | 'obowiazkowe' | 'nowe';
@@ -20,7 +21,7 @@ const BADGES = [
   { icon: '😊', label: 'Obsługa\nKlienta', color: theme.colors.purple },
 ];
 
-function TrainingCard({ training }: { training: Training }) {
+function TrainingCard({ training }: { training: DbTraining }) {
   const cfg = STATUS_CONFIG[training.status];
 
   return (
@@ -48,22 +49,22 @@ function TrainingCard({ training }: { training: Training }) {
 
         <View style={tStyles.meta}>
           <Ionicons name="time-outline" size={13} color={theme.colors.textMuted} />
-          <Text style={tStyles.metaText}>{training.durationMin} min</Text>
-          {training.progressPercent > 0 && (
-            <Text style={tStyles.progress}>{training.progressPercent}% ukończono</Text>
+          <Text style={tStyles.metaText}>{training.duration_min} min</Text>
+          {training.progress_percent > 0 && (
+            <Text style={tStyles.progress}>{training.progress_percent}% ukończono</Text>
           )}
         </View>
 
-        {training.progressPercent > 0 && training.progressPercent < 100 && (
+        {training.progress_percent > 0 && training.progress_percent < 100 && (
           <View style={tStyles.progressBg}>
-            <View style={[tStyles.progressFill, { width: `${training.progressPercent}%` }]} />
+            <View style={[tStyles.progressFill, { width: `${training.progress_percent}%` }]} />
           </View>
         )}
 
         <TouchableOpacity style={tStyles.btn}>
           <Ionicons name="play" size={14} color={theme.colors.white} />
           <Text style={tStyles.btnText}>
-            {training.progressPercent === 0 ? 'Rozpocznij' : training.progressPercent === 100 ? 'Powtórz' : 'Kontynuuj'}
+            {training.progress_percent === 0 ? 'Rozpocznij' : training.progress_percent === 100 ? 'Powtórz' : 'Kontynuuj'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -133,8 +134,13 @@ const tStyles = StyleSheet.create({
 export default function SzkoleniaScreen() {
   const { user } = useAuth();
   const rid = user?.restaurantId ?? '';
-  const trainings = store.getTrainings(rid);
+  const [trainings, setTrainings] = useState<DbTraining[]>([]);
   const [activeFilter, setActiveFilter] = useState<FilterKey>('wszystkie');
+
+  useEffect(() => {
+    if (!rid) return;
+    getTrainings(rid).then(setTrainings);
+  }, [rid]);
   const requiredCount = trainings.filter((t) => t.required && t.status !== 'ukonczone').length;
 
   const filtered = activeFilter === 'obowiazkowe'

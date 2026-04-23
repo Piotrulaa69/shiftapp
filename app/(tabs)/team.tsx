@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     ScrollView,
     StyleSheet,
@@ -11,22 +11,29 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import EmployeeCard from '../../components/EmployeeCard';
 import { useAuth } from '../../context/AuthContext';
-import { store } from '../../data/store';
+import { getEmployees } from '../../lib/db';
+import type { DbProfile } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
 export default function TeamScreen() {
   const { user } = useAuth();
   const rid = user?.restaurantId ?? '';
-  const employees = store.getEmployees(rid);
+  const [employees, setEmployees] = useState<DbProfile[]>([]);
   const [search, setSearch] = useState('');
 
+  useEffect(() => {
+    if (!rid) return;
+    getEmployees(rid).then(setEmployees);
+  }, [rid]);
+
   const filtered = employees.filter(
-    (e) =>
-      e.name.toLowerCase().includes(search.toLowerCase()) ||
-      e.jobTitle.toLowerCase().includes(search.toLowerCase())
+    (e) => {
+      const fullName = `${e.first_name} ${e.last_name}`.toLowerCase();
+      return fullName.includes(search.toLowerCase()) || e.job_title.toLowerCase().includes(search.toLowerCase());
+    }
   );
 
-  const roleGroups = Array.from(new Set(employees.map((e) => e.jobTitle)));
+  const roleGroups = Array.from(new Set(employees.map((e) => e.job_title)));
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -90,10 +97,10 @@ export default function TeamScreen() {
             filtered.map((employee) => (
               <EmployeeCard
                 key={employee.id}
-                name={employee.name}
-                role={employee.jobTitle}
-                initials={employee.initials}
-                avatarColor={employee.avatarColor}
+                name={`${employee.first_name} ${employee.last_name}`}
+                role={employee.job_title}
+                initials={`${employee.first_name[0] ?? ''}${employee.last_name[0] ?? ''}`.toUpperCase()}
+                avatarColor={employee.avatar_color}
               />
             ))
           ) : (

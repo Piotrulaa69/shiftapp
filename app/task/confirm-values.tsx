@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     Platform,
     ScrollView,
@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../../context/AlertContext';
-import { store } from '../../data/store';
+import type { DbTask } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
 type CheckItem = {
@@ -55,10 +56,19 @@ export default function ConfirmValuesScreen() {
   const { taskId } = useLocalSearchParams<{ taskId: string }>();
   const router = useRouter();
   const { showAlert, showSuccess, showConfirm } = useAlert();
-  const task = store.tasks.find((t) => t.id === taskId) ?? store.tasks[2];
+  const [task, setTask] = useState<DbTask | null>(null);
   const [items, setItems] = useState<CheckItem[]>(TEMP_ITEMS);
+
+  useEffect(() => {
+    if (!taskId) return;
+    supabase.from('tasks').select('*').eq('id', taskId).single()
+      .then(({ data }) => { if (data) setTask(data as DbTask); });
+  }, [taskId]);
+
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
+
+  if (!task) return null;
 
   const filled = items.filter((i) => i.value.trim() !== '');
   const allOk = filled.length === items.length && filled.every((i) => getStatus(i) === 'ok');
@@ -121,11 +131,11 @@ export default function ConfirmValuesScreen() {
           <View style={s.taskMeta}>
             <View style={s.taskMetaItem}>
               <Ionicons name="time-outline" size={13} color={theme.colors.textMuted} />
-              <Text style={s.taskMetaText}>{task.assignedTime}</Text>
+              <Text style={s.taskMetaText}>{task.assigned_time}</Text>
             </View>
             <View style={s.taskMetaItem}>
               <Ionicons name="timer-outline" size={13} color={theme.colors.textMuted} />
-              <Text style={s.taskMetaText}>{task.durationMin} min</Text>
+              <Text style={s.taskMetaText}>{task.duration_min} min</Text>
             </View>
           </View>
         </View>

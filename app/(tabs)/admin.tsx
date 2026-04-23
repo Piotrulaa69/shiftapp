@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     Platform,
     ScrollView,
@@ -13,7 +13,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
-import { AppUser, Invitation, store } from '../../data/store';
+import { generateInvitation, getEmployees, getInvitations, removeEmployee } from '../../lib/db';
+import type { DbInvitation, DbProfile } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
 const JOB_OPTIONS = ['Kelner', 'Kucharz', 'Barista', 'Lider zmiany', 'Hostessa', 'Pizzaiolo', 'Sprzątanie'];
@@ -25,27 +26,29 @@ export default function AdminScreen() {
   const { showAlert, showConfirm } = useAlert();
   const rid = user?.restaurantId ?? '';
 
-  const [employees, setEmployees] = useState<AppUser[]>(store.getEmployees(rid));
-  const [invitations, setInvitations] = useState<Invitation[]>(store.getInvitations(rid));
+  const [employees, setEmployees] = useState<DbProfile[]>([]);
+  const [invitations, setInvitations] = useState<DbInvitation[]>([]);
   const [showInvite, setShowInvite] = useState(false);
   const [jobTitle, setJobTitle] = useState('Kelner');
   const [lastCode, setLastCode] = useState<string | null>(null);
   const [tab, setTab] = useState<'team' | 'invites' | 'settings'>('team');
 
   const refresh = () => {
-    setEmployees(store.getEmployees(rid));
-    setInvitations(store.getInvitations(rid));
+    if (!rid) return;
+    getEmployees(rid).then(setEmployees);
+    getInvitations(rid).then(setInvitations);
   };
 
-  const generateInvite = () => {
-    const inv = store.generateInvitation(rid, user!.id, jobTitle);
-    setLastCode(inv.code);
-    setShowInvite(false);
-    refresh();
+  useEffect(() => { refresh(); }, [rid]);
+
+  const generateInvite = async () => {
+    if (!user) return;
+    const inv = await generateInvitation(rid, user.id, jobTitle);
+    if (inv) { setLastCode(inv.code); setShowInvite(false); refresh(); }
   };
 
   const shareCode = async (code: string) => {
-    const msg = `Dołącz do ${restaurant?.name} w ShiftApp!\n\nTwój kod aktywacyjny: ${code}\n\nPobierz aplikację i wpisz kod w sekcji "Dołącz do restauracji".`;
+    const msg = `Dołącz do ${restaurant?.name} w ShiftApp!\n\nTwój kod aktywacyjny: ${code}\n\nPobierz aplikację i wpisz kod w sekcji „Dołącz do restauracji”.`;
     try {
       await Share.share({ message: msg });
     } catch {
@@ -57,14 +60,14 @@ export default function AdminScreen() {
     showConfirm(
       'Usuń pracownika',
       `Czy na pewno chcesz usunąć ${empName} z zespołu?`,
-      () => { store.removeEmployee(rid, empId); refresh(); },
+      async () => { await removeEmployee(empId); refresh(); },
       'Usuń'
     );
   };
 
   const owners = employees.filter((e) => e.role === 'owner');
   const staff = employees.filter((e) => e.role === 'employee');
-  const activeInvites = invitations.filter((i) => !i.used && new Date(i.expiresAt) > new Date());
+  const activeInvites = invitations.filter((i) => !i.used && new Date(i.expires_at) > new Date());
   const usedInvites = invitations.filter((i) => i.used);
 
   return (
@@ -182,12 +185,12 @@ export default function AdminScreen() {
               <Text style={s.sectionTitle}>Właściciele</Text>
               {owners.map((emp) => (
                 <View key={emp.id} style={s.empRow}>
-                  <View style={[s.empAvatar, { backgroundColor: emp.avatarColor }]}>
-                    <Text style={s.empInitials}>{emp.initials}</Text>
+                  <View style={[s.empAvatar, { backgroundColor: emp.avatar_color }]}>
+                    <Text style={s.empInitials}>{`${emp.first_name[0] ?? ''}${emp.last_name[0] ?? ''}`.toUpperCase()}</Text>
                   </View>
                   <View style={s.empInfo}>
-                    <Text style={s.empName}>{emp.name}</Text>
-                    <Text style={s.empRole}>{emp.jobTitle}</Text>
+                    <Text style={s.empName}>{emp.first_name} {emp.last_name}</Text>
+                    <Text style={s.empRole}>{emp.job_title}</Text>
                   </View>
                   <View style={s.ownerBadge}>
                     <Ionicons name="shield-checkmark" size={12} color={theme.colors.primary} />
@@ -208,16 +211,16 @@ export default function AdminScreen() {
               ) : (
                 staff.map((emp) => (
                   <View key={emp.id} style={s.empRow}>
-                    <View style={[s.empAvatar, { backgroundColor: emp.avatarColor }]}>
-                      <Text style={s.empInitials}>{emp.initials}</Text>
+                    <View style={[s.empAvatar, { backgroundColor: emp.avatar_color }]}>
+                      <Text style={s.empInitials}>{`${emp.first_name[0] ?? ''}${emp.last_name[0] ?? ''}`.toUpperCase()}</Text>
                     </View>
                     <View style={s.empInfo}>
-                      <Text style={s.empName}>{emp.name}</Text>
-                      <Text style={s.empRole}>{emp.jobTitle} · {emp.email}</Text>
+                      <Text style={s.empName}>{emp.first_name} {emp.last_name}</Text>
+                      <Text style={s.empRole}>{emp.job_title}</Text>
                     </View>
                     <TouchableOpacity
                       style={s.removeBtn}
-                      onPress={() => removeEmp(emp.id, emp.name)}
+                      onPress={() => removeEmp(emp.id, `${emp.first_name} ${emp.last_name}`)}
                       activeOpacity={0.7}
                     >
                       <Ionicons name="person-remove-outline" size={16} color={theme.colors.error} />
@@ -248,8 +251,8 @@ export default function AdminScreen() {
                       <Text style={s.invCode}>{inv.code}</Text>
                     </View>
                     <View style={s.invInfo}>
-                      <Text style={s.invJob}>{inv.jobTitle}</Text>
-                      <Text style={s.invExpiry}>Wygasa: {new Date(inv.expiresAt).toLocaleDateString('pl-PL')}</Text>
+                      <Text style={s.invJob}>{inv.job_title}</Text>
+                      <Text style={s.invExpiry}>Wygasa: {new Date(inv.expires_at).toLocaleDateString('pl-PL')}</Text>
                     </View>
                     <TouchableOpacity onPress={() => shareCode(inv.code)} style={s.invShareBtn}>
                       <Ionicons name="share-social-outline" size={18} color={theme.colors.primary} />
@@ -267,7 +270,7 @@ export default function AdminScreen() {
                     <Text style={[s.invCode, { color: theme.colors.green }]}>{inv.code}</Text>
                   </View>
                   <View style={s.invInfo}>
-                    <Text style={s.invJob}>{inv.jobTitle}</Text>
+                    <Text style={s.invJob}>{inv.job_title}</Text>
                     <Text style={[s.invExpiry, { color: theme.colors.green }]}>✓ Użyty</Text>
                   </View>
                   <Ionicons name="checkmark-circle" size={20} color={theme.colors.green} />
@@ -304,7 +307,7 @@ export default function AdminScreen() {
               </View>
               <View style={s.settingRow}>
                 <Text style={s.settingLabel}>Data utworzenia</Text>
-                <Text style={s.settingValue}>{restaurant?.createdAt}</Text>
+                <Text style={s.settingValue}>{restaurant?.createdAt?.slice(0,10)}</Text>
               </View>
             </View>
 
@@ -320,11 +323,11 @@ export default function AdminScreen() {
               </View>
               <View style={s.settingRow}>
                 <Text style={s.settingLabel}>Zmiany w tym tygodniu</Text>
-                <Text style={s.settingValue}>{store.getShifts(rid).length}</Text>
+                <Text style={s.settingValue}>—</Text>
               </View>
               <View style={s.settingRow}>
                 <Text style={s.settingLabel}>Zadania aktywne</Text>
-                <Text style={s.settingValue}>{store.getTasks(rid).filter((t) => !t.completed).length}</Text>
+                <Text style={s.settingValue}>—</Text>
               </View>
             </View>
           </>
