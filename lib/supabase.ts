@@ -6,12 +6,15 @@ import 'react-native-url-polyfill/auto';
 const SUPABASE_URL = 'https://ugecoqbfvvkvaadtxtiu.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_8joyS8Hfw80T9J6U-mqleg_0esf67nm';
 
-// On web use localStorage, on native use AsyncStorage
+// On web use localStorage (with SSR guard), on native use AsyncStorage
 const storage = Platform.OS === 'web'
   ? {
-      getItem: (key: string) => Promise.resolve(localStorage.getItem(key)),
-      setItem: (key: string, value: string) => Promise.resolve(localStorage.setItem(key, value)),
-      removeItem: (key: string) => Promise.resolve(localStorage.removeItem(key)),
+      getItem: (key: string) =>
+        typeof localStorage !== 'undefined' ? Promise.resolve(localStorage.getItem(key)) : Promise.resolve(null),
+      setItem: (key: string, value: string) =>
+        typeof localStorage !== 'undefined' ? Promise.resolve(localStorage.setItem(key, value)) : Promise.resolve(),
+      removeItem: (key: string) =>
+        typeof localStorage !== 'undefined' ? Promise.resolve(localStorage.removeItem(key)) : Promise.resolve(),
     }
   : AsyncStorage;
 
