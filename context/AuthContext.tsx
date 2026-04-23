@@ -76,19 +76,14 @@ function toRestaurant(r: DbRestaurant): Restaurant {
 async function loadUserData(userId: string, email: string): Promise<{ user: AuthUser; restaurant: Restaurant } | null> {
   const { data: profile, error: pErr } = await supabase
     .from('profiles')
-    .select('*')
+    .select('*, restaurants(*)')
     .eq('id', userId)
     .single();
 
   if (pErr || !profile) return null;
 
-  const { data: restaurant, error: rErr } = await supabase
-    .from('restaurants')
-    .select('*')
-    .eq('id', profile.restaurant_id)
-    .single();
-
-  if (rErr || !restaurant) return null;
+  const restaurant = (profile as any).restaurants;
+  if (!restaurant) return null;
 
   return {
     user: toAuthUser(profile as DbProfile, email),
@@ -100,27 +95,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<AuthUser | null>(null);
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasSession, setHasSession] = useState(false);
 
   // Restore session on mount
   useEffect(() => {
-    // Fallback: force loading=false after 8s so app never stays stuck
-    const fallback = setTimeout(() => setIsLoading(false), 8000);
+    // Fallback: force loading=false after 4s so app never stays stuck
+    const fallback = setTimeout(() => setIsLoading(false), 4000);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      clearTimeout(fallback);
       if (event === 'SIGNED_OUT' || !session) {
         setUser(null);
         setRestaurant(null);
+        setHasSession(false);
         setIsLoading(false);
       } else if (session?.user) {
-        const result = await loadUserData(session.user.id, session.user.email ?? '');
-        if (result) {
-          setUser(result.user);
-          setRestaurant(result.restaurant);
-        } else {
-          setUser(null);
-          setRestaurant(null);
-        }
+        // Session is known — unblock navigation immediately, load profile in background
+        setHasSession(true);
         setIsLoading(false);
+        loadUserData(session.user.id, session.user.email ?? '').then((result) => {
+          if (result) {
+            setUser(result.user);
+            setRestaurant(result.restaurant);
+          } else {
+            // Profile missing — sign out
+            supabase.auth.signOut();
+          }
+        });
       }
     });
 
@@ -131,9 +132,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     if (error || !data.user) { setIsLoading(false); return false; }
-    const result = await loadUserData(data.user.id, data.user.email ?? '');
+    setHasSession(true);
     setIsLoading(false);
-    if (!result) return false;
+    const result = await loadUserData(data.user.id, data.user.email ?? '');
+    if (!result) { supabase.auth.signOut(); return false; }
     setUser(result.user);
     setRestaurant(result.restaurant);
     return true;
@@ -206,7 +208,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   return (
     <AuthContext.Provider
-      value={{ user, restaurant, isAuthenticated: !!user, isOwner, isLoading, login, joinWithCode, logout }}
+      value={{ user, restaurant, isAuthenticated: hasSession, isOwner, isLoading, login, joinWithCode, logout }}
     >
       {children}
     </AuthContext.Provider>
