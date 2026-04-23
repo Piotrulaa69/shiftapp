@@ -257,10 +257,24 @@ export default function SzkoleniaScreen() {
           </View>
         )}
 
+        {/* Demo mode banner */}
+        <View style={styles.demoBanner}>
+          <Ionicons name="information-circle-outline" size={18} color={theme.colors.primary} />
+          <View style={styles.demoBannerText}>
+            <Text style={styles.demoBannerTitle}>Szkolenia dopasowane do Twojej firmy</Text>
+            <Text style={styles.demoBannerSub}>W trybie demo wyświetlamy ogólne moduły. Po wdrożeniu aplikacji właściciel dodaje szkolenia specyficzne dla swojego lokalu.</Text>
+          </View>
+        </View>
+
         {/* Training list */}
         <View style={styles.body}>
           <Text style={styles.sectionTitle}>Polecane dla Ciebie</Text>
-          {filtered.map((t) => (
+          {filtered.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="book-outline" size={40} color={theme.colors.border} />
+              <Text style={styles.emptyText}>Brak szkoleń w tej kategorii</Text>
+            </View>
+          ) : filtered.map((t) => (
             <TrainingCard key={t.id} training={t} />
           ))}
         </View>
@@ -396,4 +410,17 @@ const styles = StyleSheet.create({
 
   body: { padding: 16, paddingTop: 14 },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: theme.colors.text, marginBottom: 12 },
+  demoBanner: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    marginHorizontal: 16, marginTop: 16,
+    backgroundColor: theme.colors.primaryLight,
+    borderRadius: theme.borderRadius.md,
+    padding: 12,
+    borderWidth: 1, borderColor: theme.colors.primary + '30',
+  },
+  demoBannerText: { flex: 1 },
+  demoBannerTitle: { fontSize: 13, fontWeight: '700', color: theme.colors.primary, marginBottom: 3 },
+  demoBannerSub: { fontSize: 12, color: theme.colors.primary, lineHeight: 17, opacity: 0.85 },
+  emptyState: { alignItems: 'center', paddingVertical: 32, gap: 10 },
+  emptyText: { fontSize: 14, color: theme.colors.textMuted },
 });
