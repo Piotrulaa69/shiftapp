@@ -103,24 +103,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Restore session on mount
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        const result = await loadUserData(session.user.id, session.user.email ?? '');
-        if (result) { setUser(result.user); setRestaurant(result.restaurant); }
-      }
-      setIsLoading(false);
-    });
+    // Fallback: force loading=false after 8s so app never stays stuck
+    const fallback = setTimeout(() => setIsLoading(false), 8000);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT' || !session) {
-        setUser(null); setRestaurant(null);
+        setUser(null);
+        setRestaurant(null);
+        setIsLoading(false);
       } else if (session?.user) {
         const result = await loadUserData(session.user.id, session.user.email ?? '');
-        if (result) { setUser(result.user); setRestaurant(result.restaurant); }
+        if (result) {
+          setUser(result.user);
+          setRestaurant(result.restaurant);
+        } else {
+          setUser(null);
+          setRestaurant(null);
+        }
+        setIsLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => { subscription.unsubscribe(); clearTimeout(fallback); };
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
