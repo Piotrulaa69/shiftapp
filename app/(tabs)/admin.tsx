@@ -385,6 +385,7 @@ const s = StyleSheet.create({
   headerBadgeText: { fontSize: 12, fontWeight: '700', color: theme.colors.primary },
 
   tabsScroll: {
+    flexGrow: 0,
     backgroundColor: theme.colors.card,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
