@@ -22,8 +22,19 @@ const BADGES = [
   { icon: '😊', label: 'Obsługa\nKlienta', color: theme.colors.purple },
 ];
 
+const CAT_CONFIG: Record<string, { icon: string; color: string; bg: string }> = {
+  'BHP': { icon: 'shield-checkmark-outline', color: '#EF4444', bg: '#FEF2F2' },
+  'Barista': { icon: 'cafe-outline', color: '#F97316', bg: '#FFF7ED' },
+  'Obsługa': { icon: 'people-outline', color: '#8B5CF6', bg: '#FAF5FF' },
+  'Procedury': { icon: 'document-text-outline', color: '#2563EB', bg: '#EFF6FF' },
+  'Kuchnia': { icon: 'restaurant-outline', color: '#22C55E', bg: '#F0FDF4' },
+  'Sprzedaż': { icon: 'trending-up-outline', color: '#06B6D4', bg: '#ECFEFF' },
+};
+const DEFAULT_CAT = { icon: 'book-outline', color: theme.colors.primary, bg: theme.colors.primaryLight };
+
 function TrainingCard({ training }: { training: DbTraining }) {
   const cfg = STATUS_CONFIG[training.status];
+  const cat = CAT_CONFIG[training.category] ?? DEFAULT_CAT;
   const router = useRouter();
 
   const handleStart = () => {
@@ -33,111 +44,109 @@ function TrainingCard({ training }: { training: DbTraining }) {
     });
   };
 
+  const isCompleted = training.status === 'ukonczone';
+  const inProgress = training.progress_percent > 0 && training.progress_percent < 100;
+
   return (
-    <View style={tStyles.card}>
-      {/* Image placeholder */}
-      <View style={[tStyles.imagePlaceholder, { backgroundColor: training.category === 'BHP' ? '#1E3A5F' : '#2D4A3E' }]}>
-        <Ionicons
-          name={training.category === 'BHP' ? 'shield-checkmark-outline' : training.category === 'Barista' ? 'cafe-outline' : 'book-outline'}
-          size={32}
-          color="rgba(255,255,255,0.6)"
-        />
-        <View style={[tStyles.statusOverlay, { backgroundColor: cfg.color }]}>
-          <Text style={tStyles.statusOverlayText}>{cfg.label}</Text>
-        </View>
-        <View style={tStyles.categoryBadge}>
-          <Text style={tStyles.categoryText}>{training.category}</Text>
-        </View>
-      </View>
-
+    <TouchableOpacity style={tStyles.card} onPress={handleStart} activeOpacity={0.85}>
+      <View style={[tStyles.accent, { backgroundColor: cat.color }]} />
       <View style={tStyles.body}>
-        <Text style={tStyles.title} numberOfLines={2}>{training.title}</Text>
-        <Text style={tStyles.desc} numberOfLines={2}>
-          Odśwież wiedzę na temat procedur i wymagań dla tej kategorii szkolenia.
-        </Text>
-
-        <View style={tStyles.meta}>
-          <Ionicons name="time-outline" size={13} color={theme.colors.textMuted} />
-          <Text style={tStyles.metaText}>{training.duration_min} min</Text>
-          {training.progress_percent > 0 && (
-            <Text style={tStyles.progress}>{training.progress_percent}% ukończono</Text>
-          )}
+        <View style={tStyles.topRow}>
+          <View style={[tStyles.iconCircle, { backgroundColor: cat.bg }]}>
+            <Ionicons name={cat.icon as any} size={22} color={cat.color} />
+          </View>
+          <View style={tStyles.titleGroup}>
+            <Text style={tStyles.title} numberOfLines={2}>{training.title}</Text>
+            <View style={tStyles.metaRow}>
+              <Ionicons name="time-outline" size={12} color={theme.colors.textMuted} />
+              <Text style={tStyles.metaText}>{training.duration_min} min</Text>
+              <View style={[tStyles.catPill, { backgroundColor: cat.bg }]}>
+                <Text style={[tStyles.catText, { color: cat.color }]}>{training.category}</Text>
+              </View>
+            </View>
+          </View>
+          <View style={[tStyles.statusBadge, { backgroundColor: cfg.bg }]}>
+            <Text style={[tStyles.statusText, { color: cfg.color }]}>{cfg.label}</Text>
+          </View>
         </View>
 
-        {training.progress_percent > 0 && training.progress_percent < 100 && (
-          <View style={tStyles.progressBg}>
-            <View style={[tStyles.progressFill, { width: `${training.progress_percent}%` }]} />
+        {inProgress && (
+          <View style={tStyles.progressGroup}>
+            <View style={tStyles.progressBg}>
+              <View style={[tStyles.progressFill, { width: `${training.progress_percent}%` }]} />
+            </View>
+            <Text style={tStyles.progressPct}>{training.progress_percent}%</Text>
           </View>
         )}
 
-        <TouchableOpacity style={tStyles.btn} onPress={handleStart} activeOpacity={0.85}>
-          <Ionicons name="play" size={14} color={theme.colors.white} />
-          <Text style={tStyles.btnText}>
-            {training.progress_percent === 0 ? 'Rozpocznij' : training.progress_percent === 100 ? 'Powtórz' : 'Kontynuuj'}
-          </Text>
-        </TouchableOpacity>
+        <View style={tStyles.footer}>
+          {training.required && (
+            <View style={tStyles.requiredTag}>
+              <Ionicons name="alert-circle-outline" size={12} color={theme.colors.orange} />
+              <Text style={tStyles.requiredTagText}>Obowiązkowe</Text>
+            </View>
+          )}
+          <TouchableOpacity
+            style={[tStyles.btn, isCompleted && tStyles.btnDone]}
+            onPress={handleStart}
+            activeOpacity={0.85}
+          >
+            <Ionicons
+              name={isCompleted ? 'refresh-outline' : inProgress ? 'play-forward-outline' : 'play-outline'}
+              size={14}
+              color={isCompleted ? theme.colors.textSecondary : theme.colors.white}
+            />
+            <Text style={[tStyles.btnText, isCompleted && tStyles.btnTextDone]}>
+              {training.progress_percent === 0 ? 'Rozpocznij' : isCompleted ? 'Powtórz' : 'Kontynuuj'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
 const tStyles = StyleSheet.create({
   card: {
+    flexDirection: 'row',
     backgroundColor: theme.colors.card,
     borderRadius: theme.borderRadius.lg,
-    marginBottom: 14,
+    marginBottom: 10,
     overflow: 'hidden',
     ...theme.shadows.card,
   },
-  imagePlaceholder: {
-    height: 130,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
+  accent: { width: 4 },
+  body: { flex: 1, padding: 14 },
+  topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 10 },
+  iconCircle: {
+    width: 44, height: 44, borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
   },
-  statusOverlay: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: theme.borderRadius.full,
-  },
-  statusOverlayText: { fontSize: 9, fontWeight: '800', color: theme.colors.white },
-  categoryBadge: {
-    position: 'absolute',
-    bottom: 10,
-    left: 10,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: theme.borderRadius.full,
-  },
-  categoryText: { fontSize: 10, fontWeight: '700', color: theme.colors.white },
-  body: { padding: 14 },
-  title: { fontSize: 15, fontWeight: '700', color: theme.colors.text, marginBottom: 4 },
-  desc: { ...theme.typography.caption, color: theme.colors.textSecondary, lineHeight: 16, marginBottom: 8 },
-  meta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8 },
-  metaText: { ...theme.typography.caption, color: theme.colors.textMuted },
-  progress: { ...theme.typography.caption, color: theme.colors.primary, fontWeight: '600', marginLeft: 8 },
-  progressBg: {
-    height: 5,
-    backgroundColor: theme.colors.background,
-    borderRadius: 3,
-    overflow: 'hidden',
-    marginBottom: 10,
-  },
+  titleGroup: { flex: 1 },
+  title: { fontSize: 14, fontWeight: '700', color: theme.colors.text, marginBottom: 4 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaText: { fontSize: 11, color: theme.colors.textMuted },
+  catPill: { borderRadius: theme.borderRadius.full, paddingHorizontal: 6, paddingVertical: 2 },
+  catText: { fontSize: 10, fontWeight: '700' },
+  statusBadge: { borderRadius: theme.borderRadius.full, paddingHorizontal: 8, paddingVertical: 4, alignSelf: 'flex-start' },
+  statusText: { fontSize: 9, fontWeight: '800' },
+  progressGroup: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  progressBg: { flex: 1, height: 6, backgroundColor: theme.colors.surface, borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: theme.colors.primary, borderRadius: 3 },
+  progressPct: { fontSize: 11, fontWeight: '700', color: theme.colors.primary, width: 30, textAlign: 'right' },
+  footer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  requiredTag: { flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 },
+  requiredTagText: { fontSize: 11, fontWeight: '600', color: theme.colors.orange },
   btn: {
-    flexDirection: 'row',
+    flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: theme.colors.primary,
-    borderRadius: theme.borderRadius.md,
-    height: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
+    borderRadius: theme.borderRadius.full,
+    paddingHorizontal: 14, paddingVertical: 7,
   },
-  btnText: { fontSize: 14, fontWeight: '700', color: theme.colors.white },
+  btnDone: { backgroundColor: theme.colors.surface },
+  btnText: { fontSize: 12, fontWeight: '700', color: theme.colors.white },
+  btnTextDone: { color: theme.colors.textSecondary },
 });
 
 export default function SzkoleniaScreen() {

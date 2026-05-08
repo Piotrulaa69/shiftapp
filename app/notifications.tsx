@@ -1,10 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
 import { theme } from '../styles/theme';
 
 type Notification = {
@@ -67,13 +66,28 @@ export default function NotificationsScreen() {
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
+  const ROUTE_MAP: Record<string, string> = {
+    shift: '/(tabs)/schedule',
+    task: '/(tabs)/tasks',
+    leave: '/leave-requests',
+    swap: '/shift-swap',
+    message: '/chat',
+    system: '/(tabs)/dashboard',
+  };
+
+  const handleNotificationPress = (item: Notification) => {
+    setNotifications((prev) => prev.map((n) => n.id === item.id ? { ...n, read: true } : n));
+    const route = ROUTE_MAP[item.type] ?? '/(tabs)/dashboard';
+    router.push(route as any);
+  };
+
   const renderItem = ({ item }: { item: Notification }) => {
     const icon = ICON_MAP[item.type] ?? ICON_MAP.system;
     return (
       <TouchableOpacity
         style={[styles.item, !item.read && styles.itemUnread]}
         activeOpacity={0.8}
-        onPress={() => setNotifications((prev) => prev.map((n) => n.id === item.id ? { ...n, read: true } : n))}
+        onPress={() => handleNotificationPress(item)}
       >
         <View style={[styles.iconBox, { backgroundColor: icon.bg }]}>
           <Ionicons name={`${icon.name}-outline` as any} size={20} color={icon.color} />
@@ -86,6 +100,7 @@ export default function NotificationsScreen() {
           <Text style={styles.itemBody} numberOfLines={2}>{item.body}</Text>
           <Text style={styles.itemTime}>{timeAgo(item.created_at)}</Text>
         </View>
+        <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
       </TouchableOpacity>
     );
   };

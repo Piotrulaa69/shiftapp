@@ -4,8 +4,8 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { createTask, deleteTask as dbDeleteTask, toggleTask as dbToggleTask, getTasks } from '../../lib/db';
-import type { DbTask } from '../../lib/supabase';
+import { createTask, deleteTask as dbDeleteTask, toggleTask as dbToggleTask, getEmployees, getTasks } from '../../lib/db';
+import type { DbProfile, DbTask } from '../../lib/supabase';
 import { supabase } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
@@ -33,13 +33,13 @@ const TABS_EMPLOYEE: { key: string; label: string }[] = [
 
 const TAB_APPROVAL = { key: 'czeka_na_zatwierdzenie', label: 'Do zatwierdzenia' };
 
-function TaskCard({ task, onToggle, onDelete }: { task: DbTask; onToggle: () => void; onDelete?: () => void }) {
+function TaskCard({ task, onToggle, onDelete, onDetail }: { task: DbTask; onToggle: () => void; onDelete?: () => void; onDetail?: () => void }) {
   const p = PRIORITY_CONFIG[task.priority as TaskPriority] ?? PRIORITY_CONFIG.normalny;
   const router = useRouter();
   const confirmCfg = task.confirmation_type ? CONFIRM_CONFIG[task.confirmation_type as ConfirmationType] : null;
 
   return (
-    <TouchableOpacity style={tStyles.card} activeOpacity={0.85} onPress={onToggle}>
+    <TouchableOpacity style={tStyles.card} activeOpacity={0.85} onPress={onDetail ?? onToggle}>
       <View style={[tStyles.priorityAccent, { backgroundColor: p.color }]} />
       <View style={tStyles.body}>
         <View style={tStyles.topRow}>
@@ -69,6 +69,11 @@ function TaskCard({ task, onToggle, onDelete }: { task: DbTask; onToggle: () => 
             >
               <Ionicons name={confirmCfg.icon as any} size={13} color={confirmCfg.color} />
               <Text style={[tStyles.confirmBtnText, { color: confirmCfg.color }]}>Potwierdź</Text>
+            </TouchableOpacity>
+          )}
+          {onDetail && (
+            <TouchableOpacity onPress={(e) => { e.stopPropagation?.(); onDetail(); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
             </TouchableOpacity>
           )}
           <View style={[tStyles.checkbox, task.completed && tStyles.checkboxDone]}>
@@ -142,9 +147,12 @@ export default function TasksScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
   const [tasks, setTasks] = useState<DbTask[]>([]);
+  const [employees, setEmployees] = useState<DbProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<string>('all');
   const [showModal, setShowModal] = useState(false);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const [detailTask, setDetailTask] = useState<DbTask | null>(null);
 
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
@@ -157,7 +165,14 @@ export default function TasksScreen() {
   useEffect(() => {
     if (!rid) return;
     setLoading(true);
-    getTasks(rid).then((data) => { setTasks(data); setLoading(false); });
+    Promise.all([
+      getTasks(rid),
+      canApprove ? getEmployees(rid) : Promise.resolve([]),
+    ]).then(([taskData, empData]) => {
+      setTasks(taskData);
+      setEmployees(empData);
+      setLoading(false);
+    });
   }, [rid]);
 
   const toggleTask = async (id: string) => {
@@ -204,9 +219,13 @@ export default function TasksScreen() {
   const progress = totalCount > 0 ? completedCount / totalCount : 0;
   const todoCount = tasks.filter((t) => !t.completed).length;
 
+  const empFiltered = selectedEmployeeId
+    ? tasks.filter((t) => t.assigned_to === selectedEmployeeId)
+    : tasks;
+
   const filtered = activeTab === 'all'
-    ? tasks.filter((t) => (t.status as string) !== 'czeka_na_zatwierdzenie')
-    : tasks.filter((t) => (t.status as string) === activeTab);
+    ? empFiltered.filter((t) => (t.status as string) !== 'czeka_na_zatwierdzenie')
+    : empFiltered.filter((t) => (t.status as string) === activeTab);
 
   const doZrobienia = filtered.filter((t) => !t.completed && t.status === 'do_zrobienia');
   const wTrakcie = filtered.filter((t) => t.status === 'w_trakcie' && !t.completed);
@@ -266,6 +285,44 @@ export default function TasksScreen() {
           </View>
         </View>
 
+        {/* Employee filter (owners/managers only) */}
+        {canApprove && employees.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.empRow}>
+            <TouchableOpacity
+              style={[styles.empChip, selectedEmployeeId === null && styles.empChipActive]}
+              onPress={() => setSelectedEmployeeId(null)}
+              activeOpacity={0.75}
+            >
+              <View style={styles.empAvatar}><Text style={styles.empAvatarText}>Ws</Text></View>
+              <Text style={[styles.empName, selectedEmployeeId === null && styles.empNameActive]}>Wszyscy</Text>
+              <View style={styles.empCountBadge}>
+                <Text style={styles.empCountText}>{tasks.length}</Text>
+              </View>
+            </TouchableOpacity>
+            {employees.map((emp) => {
+              const empTaskCount = tasks.filter((t) => t.assigned_to === emp.id).length;
+              const initials = `${emp.first_name?.[0] ?? ''}${emp.last_name?.[0] ?? ''}`;
+              const isSelected = selectedEmployeeId === emp.id;
+              return (
+                <TouchableOpacity
+                  key={emp.id}
+                  style={[styles.empChip, isSelected && styles.empChipActive]}
+                  onPress={() => setSelectedEmployeeId(emp.id)}
+                  activeOpacity={0.75}
+                >
+                  <View style={[styles.empAvatar, isSelected && styles.empAvatarActive]}>
+                    <Text style={[styles.empAvatarText, isSelected && { color: theme.colors.white }]}>{initials}</Text>
+                  </View>
+                  <Text style={[styles.empName, isSelected && styles.empNameActive]} numberOfLines={1}>{emp.first_name}</Text>
+                  <View style={styles.empCountBadge}>
+                    <Text style={styles.empCountText}>{empTaskCount}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
+
         {/* Tab filter */}
         <View style={styles.tabBar}>
           {TABS.map((tab) => (
@@ -300,7 +357,7 @@ export default function TasksScreen() {
                 <Text style={styles.sectionCount}>{doZrobienia.length}</Text>
               </View>
               {doZrobienia.map((t) => (
-                <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} />
+                <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} />
               ))}
             </>
           )}
@@ -313,7 +370,7 @@ export default function TasksScreen() {
                 <Text style={styles.sectionCount}>{wTrakcie.length}</Text>
               </View>
               {wTrakcie.map((t) => (
-                <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} />
+                <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} />
               ))}
             </>
           )}
@@ -326,7 +383,7 @@ export default function TasksScreen() {
                 <Text style={styles.sectionCount}>{zamkniete.length}</Text>
               </View>
               {zamkniete.map((t) => (
-                <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} />
+                <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} />
               ))}
             </>
           )}
@@ -449,6 +506,70 @@ export default function TasksScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Task Detail Modal */}
+      <Modal visible={!!detailTask} animationType="slide" transparent onRequestClose={() => setDetailTask(null)}>
+        <View style={mStyles.overlay}>
+          <View style={[mStyles.sheet, isDesktop && mStyles.sheetDesktop]}>
+            {detailTask && (() => {
+              const p = PRIORITY_CONFIG[detailTask.priority as TaskPriority] ?? PRIORITY_CONFIG.normalny;
+              const confirmCfg = detailTask.confirmation_type ? CONFIRM_CONFIG[detailTask.confirmation_type as ConfirmationType] : null;
+              return (
+                <>
+                  <View style={mStyles.header}>
+                    <View style={[{ width: 12, height: 12, borderRadius: 6, backgroundColor: p.color }]} />
+                    <Text style={mStyles.headerTitle} numberOfLines={1}>{detailTask.title}</Text>
+                    <TouchableOpacity onPress={() => setDetailTask(null)}>
+                      <Ionicons name="close" size={24} color={theme.colors.text} />
+                    </TouchableOpacity>
+                  </View>
+                  <ScrollView contentContainerStyle={mStyles.body}>
+                    <View style={[mStyles.detailRow, { flexWrap: 'wrap', gap: 8 }]}>
+                      <View style={[mStyles.badge, { backgroundColor: p.bg }]}>
+                        <Text style={[mStyles.badgeText, { color: p.color }]}>{p.label}</Text>
+                      </View>
+                      {confirmCfg && (
+                        <View style={[mStyles.badge, { backgroundColor: confirmCfg.bg }]}>
+                          <Ionicons name={confirmCfg.icon as any} size={11} color={confirmCfg.color} />
+                          <Text style={[mStyles.badgeText, { color: confirmCfg.color }]}>{confirmCfg.label}</Text>
+                        </View>
+                      )}
+                    </View>
+                    {detailTask.description ? (
+                      <View style={mStyles.detailSection}>
+                        <Text style={mStyles.detailLabel}>Opis</Text>
+                        <Text style={mStyles.detailText}>{detailTask.description}</Text>
+                      </View>
+                    ) : null}
+                    <View style={mStyles.detailGrid}>
+                      <View style={mStyles.detailCell}>
+                        <Text style={mStyles.detailLabel}>Godzina</Text>
+                        <Text style={mStyles.detailValue}>{detailTask.assigned_time}</Text>
+                      </View>
+                      <View style={mStyles.detailCell}>
+                        <Text style={mStyles.detailLabel}>Czas trwania</Text>
+                        <Text style={mStyles.detailValue}>{detailTask.duration_min} min</Text>
+                      </View>
+                    </View>
+                  </ScrollView>
+                  <View style={mStyles.footer}>
+                    <TouchableOpacity style={mStyles.cancelBtn} onPress={() => setDetailTask(null)} activeOpacity={0.7}>
+                      <Text style={mStyles.cancelText}>Zamknij</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[mStyles.saveBtn, detailTask.completed && { backgroundColor: theme.colors.green }]}
+                      onPress={() => { toggleTask(detailTask.id); setDetailTask(null); }}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={mStyles.saveText}>{detailTask.completed ? 'Otwórz ponownie' : 'Oznacz jako zrobione'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -563,6 +684,31 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', paddingVertical: 48, gap: 12 },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: theme.colors.textMuted },
   emptySub: { fontSize: 13, color: theme.colors.textMuted, textAlign: 'center', paddingHorizontal: 32 },
+
+  empRow: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
+  empChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.borderRadius.full,
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderWidth: 1.5, borderColor: theme.colors.border,
+  },
+  empChipActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primaryLight },
+  empAvatar: {
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: theme.colors.surface,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  empAvatarActive: { backgroundColor: theme.colors.primary },
+  empAvatarText: { fontSize: 9, fontWeight: '800', color: theme.colors.textSecondary },
+  empName: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary, maxWidth: 70 },
+  empNameActive: { color: theme.colors.primary },
+  empCountBadge: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.full,
+    width: 18, height: 18, alignItems: 'center', justifyContent: 'center',
+  },
+  empCountText: { fontSize: 10, fontWeight: '700', color: theme.colors.textMuted },
 });
 
 const mStyles = StyleSheet.create({
@@ -579,6 +725,15 @@ const mStyles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
   },
   inputMulti: { height: 88, textAlignVertical: 'top' },
+  detailRow: { flexDirection: 'row', marginBottom: 16 },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: theme.borderRadius.full },
+  badgeText: { fontSize: 10, fontWeight: '800' },
+  detailSection: { marginBottom: 16 },
+  detailLabel: { fontSize: 11, fontWeight: '700', color: theme.colors.textMuted, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
+  detailText: { fontSize: 14, color: theme.colors.text, lineHeight: 20 },
+  detailGrid: { flexDirection: 'row', gap: 12, marginBottom: 12 },
+  detailCell: { flex: 1, backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.md, padding: 12 },
+  detailValue: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
   row: { flexDirection: 'row', gap: 12 },
   half: { flex: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

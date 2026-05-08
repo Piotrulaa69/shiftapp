@@ -112,7 +112,7 @@ const sideStyles = StyleSheet.create({
     borderBottomColor: theme.colors.border,
     alignItems: 'center',
   },
-  logo: { width: 200, height: 66 },
+  logo: { width: 220, height: 80 },
   navScroll: { flex: 1, paddingTop: 16 },
   navItem: {
     flexDirection: 'row',
