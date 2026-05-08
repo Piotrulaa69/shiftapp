@@ -101,7 +101,7 @@ export default function DashboardScreen() {
         </View>
 
         {/* Stat Cards Row — Reztro style */}
-        <View style={styles.statsRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statsRow}>
           {STAT_CARDS.map((card, i) => (
             <View key={card.label} style={styles.statCard}>
               <View style={[styles.statCardIconWrap, { backgroundColor: card.iconBg }]}>
@@ -111,7 +111,7 @@ export default function DashboardScreen() {
               <Text style={styles.statCardLabel}>{card.label}</Text>
             </View>
           ))}
-        </View>
+        </ScrollView>
 
         {/* Desktop: 2-column grid / Mobile: single column */}
         <View style={isDesktop ? styles.gridRow : undefined}>
@@ -270,10 +270,10 @@ const styles = StyleSheet.create({
   },
   avatarText: { fontSize: 13, fontWeight: '700', color: '#FFF' },
 
-  /* Stat cards — Reztro style horizontal row */
-  statsRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 10, marginTop: 16, marginBottom: 4 },
+  /* Stat cards — Reztro style horizontal scroll */
+  statsRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 10, marginTop: 16, marginBottom: 4, paddingBottom: 4 },
   statCard: {
-    flex: 1,
+    width: 130,
     backgroundColor: theme.colors.card,
     borderRadius: theme.borderRadius.lg,
     padding: 14,
@@ -287,7 +287,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 10,
   },
-  statCardValue: { fontSize: 18, fontWeight: '800', color: theme.colors.text, letterSpacing: -0.3 },
+  statCardValue: { fontSize: 17, fontWeight: '800', color: theme.colors.text, letterSpacing: -0.3 },
   statCardLabel: { fontSize: 11, color: theme.colors.textMuted, marginTop: 2 },
   statCardChange: { fontSize: 10, fontWeight: '600', marginTop: 4 },
 
@@ -365,8 +365,10 @@ const styles = StyleSheet.create({
   quickActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   quickAction: {
     alignItems: 'center',
-    gap: 8,
-    width: '30%',
+    gap: 6,
+    flexBasis: '30.5%',
+    flexGrow: 1,
+    maxWidth: '32%',
     paddingVertical: 14,
     backgroundColor: theme.colors.card,
     borderRadius: theme.borderRadius.md,

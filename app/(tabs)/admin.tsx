@@ -375,8 +375,8 @@ const s = StyleSheet.create({
     backgroundColor: theme.colors.card, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16,
     borderBottomWidth: 1, borderBottomColor: theme.colors.border,
   },
-  headerTitle: { fontSize: 20, fontWeight: '700', color: theme.colors.text },
-  headerSub: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.text, flexShrink: 1 },
+  headerSub: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 },
   headerBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: theme.colors.primaryLight, borderRadius: theme.borderRadius.full,

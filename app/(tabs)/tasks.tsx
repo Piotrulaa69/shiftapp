@@ -466,8 +466,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
-  title: { fontSize: 22, fontWeight: '700', color: theme.colors.text },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  title: { fontSize: 20, fontWeight: '700', color: theme.colors.text, flexShrink: 1 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
   xpBadge: {
     flexDirection: 'row',
     alignItems: 'center',

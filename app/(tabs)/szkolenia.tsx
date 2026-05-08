@@ -294,8 +294,8 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     backgroundColor: theme.colors.card,
   },
-  title: { fontSize: 22, fontWeight: '700', color: theme.colors.text },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  title: { fontSize: 20, fontWeight: '700', color: theme.colors.text, flexShrink: 1 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
   xpBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -364,7 +364,7 @@ const styles = StyleSheet.create({
     ...theme.shadows.card,
   },
   badgesTitle: { fontSize: 15, fontWeight: '700', color: theme.colors.text, marginBottom: 14 },
-  badgesRow: { flexDirection: 'row', gap: 20 },
+  badgesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
   badge: { alignItems: 'center', gap: 6 },
   badgeIcon: {
     width: 56,
@@ -391,8 +391,8 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
   },
   filterBtnActive: {
-    backgroundColor: theme.colors.navy,
-    borderColor: theme.colors.navy,
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
   },
   filterText: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary },
   filterTextActive: { color: theme.colors.white },
