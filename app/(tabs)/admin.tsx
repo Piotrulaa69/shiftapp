@@ -87,7 +87,7 @@ export default function AdminScreen() {
       </View>
 
       {/* Tabs */}
-      <View style={s.tabs}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabsScroll} contentContainerStyle={s.tabs}>
         {([
           { key: 'team', label: 'Zespół', icon: 'people' },
           { key: 'invites', label: 'Zaproszenia', icon: 'mail' },
@@ -108,7 +108,7 @@ export default function AdminScreen() {
             <Text style={[s.tabText, tab === t.key && s.tabTextActive]}>{t.label}</Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
 
       <ScrollView
         contentContainerStyle={[s.content, isDesktop && s.contentDesktop]}
@@ -384,14 +384,20 @@ const s = StyleSheet.create({
   },
   headerBadgeText: { fontSize: 12, fontWeight: '700', color: theme.colors.primary },
 
+  tabsScroll: {
+    backgroundColor: theme.colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
   tabs: {
-    flexDirection: 'row', backgroundColor: theme.colors.card,
-    paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border,
+    flexDirection: 'row',
+    paddingHorizontal: 8,
   },
   tab: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, paddingVertical: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 12, paddingHorizontal: 14,
     borderBottomWidth: 2, borderBottomColor: 'transparent',
+    minWidth: 90,
   },
   tabActive: { borderBottomColor: theme.colors.primary },
   tabText: { fontSize: 13, fontWeight: '600', color: theme.colors.textMuted },
