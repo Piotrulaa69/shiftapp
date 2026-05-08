@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { createTask, deleteTask as dbDeleteTask, toggleTask as dbToggleTask, getTasks } from '../../lib/db';
 import type { DbTask } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
 type ConfirmationType = 'photo' | 'values' | 'description';
@@ -24,11 +25,13 @@ const PRIORITY_CONFIG: Record<TaskPriority, { label: string; color: string; bg: 
   niski: { label: 'NISKI', color: theme.colors.green, bg: theme.colors.greenLight },
 };
 
-const TABS: { key: TaskStatus | 'all'; label: string }[] = [
+const TABS_EMPLOYEE: { key: string; label: string }[] = [
   { key: 'all', label: 'Start zmiany' },
   { key: 'w_trakcie', label: 'W trakcie' },
   { key: 'zamkniete', label: 'Zamknięte' },
 ];
+
+const TAB_APPROVAL = { key: 'czeka_na_zatwierdzenie', label: 'Do zatwierdzenia' };
 
 function TaskCard({ task, onToggle, onDelete }: { task: DbTask; onToggle: () => void; onDelete?: () => void }) {
   const p = PRIORITY_CONFIG[task.priority as TaskPriority] ?? PRIORITY_CONFIG.normalny;
@@ -85,7 +88,7 @@ function TaskCard({ task, onToggle, onDelete }: { task: DbTask; onToggle: () => 
 const tStyles = StyleSheet.create({
   card: {
     flexDirection: 'row',
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     borderRadius: theme.borderRadius.lg,
     marginBottom: 10,
     overflow: 'hidden',
@@ -132,13 +135,15 @@ const CONFIRM_TYPES: Array<{ value: 'photo' | 'values' | 'description' | null; l
 ];
 
 export default function TasksScreen() {
-  const { user, isOwner } = useAuth();
+  const { user, isOwner, isManager } = useAuth();
+  const canApprove = isOwner || isManager;
+  const TABS = canApprove ? [...TABS_EMPLOYEE, TAB_APPROVAL] : TABS_EMPLOYEE;
   const rid = user?.restaurantId ?? '';
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
   const [tasks, setTasks] = useState<DbTask[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<TaskStatus | 'all'>('all');
+  const [activeTab, setActiveTab] = useState<string>('all');
   const [showModal, setShowModal] = useState(false);
 
   const [newTitle, setNewTitle] = useState('');
@@ -187,9 +192,9 @@ export default function TasksScreen() {
   };
 
   if (loading) return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8FAFC' }} edges={['top']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }} edges={['top']}>
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" color="#2196C9" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     </SafeAreaView>
   );
@@ -200,12 +205,23 @@ export default function TasksScreen() {
   const todoCount = tasks.filter((t) => !t.completed).length;
 
   const filtered = activeTab === 'all'
-    ? tasks
-    : tasks.filter((t) => t.status === activeTab);
+    ? tasks.filter((t) => (t.status as string) !== 'czeka_na_zatwierdzenie')
+    : tasks.filter((t) => (t.status as string) === activeTab);
 
   const doZrobienia = filtered.filter((t) => !t.completed && t.status === 'do_zrobienia');
   const wTrakcie = filtered.filter((t) => t.status === 'w_trakcie' && !t.completed);
   const zamkniete = filtered.filter((t) => t.completed);
+  const pendingApproval = tasks.filter((t) => (t.status as string) === 'czeka_na_zatwierdzenie');
+
+  const approveTask = async (id: string) => {
+    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'zamkniete' as any, completed: true } : t));
+    await supabase.from('tasks').update({ status: 'zatwierdzone', completed: true }).eq('id', id);
+  };
+
+  const rejectTask = async (id: string) => {
+    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'do_zrobienia' as any } : t));
+    await supabase.from('tasks').update({ status: 'odrzucone' }).eq('id', id);
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -213,7 +229,7 @@ export default function TasksScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Moje Zadania</Text>
         <View style={styles.headerRight}>
-          {isOwner && (
+          {(isOwner || isManager) && (
             <TouchableOpacity style={styles.addBtn} onPress={() => setShowModal(true)} activeOpacity={0.8}>
               <Ionicons name="add" size={18} color={theme.colors.white} />
               <Text style={styles.addBtnText}>Nowe zadanie</Text>
@@ -314,6 +330,63 @@ export default function TasksScreen() {
               ))}
             </>
           )}
+
+          {/* Pending Approval — only on "Do zatwierdzenia" tab */}
+          {activeTab === 'czeka_na_zatwierdzenie' && canApprove && (
+            pendingApproval.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="checkmark-done-outline" size={48} color={theme.colors.border} />
+                <Text style={styles.emptyTitle}>Wszystko zatwierdzone!</Text>
+                <Text style={styles.emptySub}>Brak zadań oczekujących na zatwierdzenie</Text>
+              </View>
+            ) : (
+              <>
+                <View style={styles.sectionRow}>
+                  <View style={[styles.sectionDot, { backgroundColor: theme.colors.orange }]} />
+                  <Text style={styles.sectionLabel}>Oczekujące na zatwierdzenie</Text>
+                  <Text style={styles.sectionCount}>{pendingApproval.length}</Text>
+                </View>
+                {pendingApproval.map((t) => {
+                  const p = PRIORITY_CONFIG[t.priority as TaskPriority] ?? PRIORITY_CONFIG.normalny;
+                  return (
+                    <View key={t.id} style={[tStyles.card, { flexDirection: 'column' }]}>
+                      <View style={{ flexDirection: 'row' }}>
+                        <View style={[tStyles.priorityAccent, { backgroundColor: p.color }]} />
+                        <View style={[tStyles.body, { paddingBottom: 8 }]}>
+                          <View style={tStyles.topRow}>
+                            <View style={[tStyles.priorityBadge, { backgroundColor: p.bg }]}>
+                              <Text style={[tStyles.priorityText, { color: p.color }]}>{p.label}</Text>
+                            </View>
+                          </View>
+                          <Text style={tStyles.title}>{t.title}</Text>
+                          {t.description ? <Text style={tStyles.desc}>{t.description}</Text> : null}
+                          {(t as any).proof_comment && <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 4 }}>Komentarz: {(t as any).proof_comment}</Text>}
+                        </View>
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingBottom: 12 }}>
+                        <TouchableOpacity
+                          style={{ flex: 1, paddingVertical: 10, borderRadius: 8, backgroundColor: theme.colors.greenLight, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+                          onPress={() => approveTask(t.id)}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="checkmark-circle" size={16} color={theme.colors.green} />
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.green }}>Zatwierdź</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={{ flex: 1, paddingVertical: 10, borderRadius: 8, backgroundColor: theme.colors.errorLight, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+                          onPress={() => rejectTask(t.id)}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="close-circle" size={16} color={theme.colors.error} />
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.error }}>Odrzuć</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })}
+              </>
+            )
+          )}
         </View>
       </ScrollView>
 
@@ -389,7 +462,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 12,
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
   },
   title: { fontSize: 22, fontWeight: '700', color: theme.colors.text },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -405,7 +480,7 @@ const styles = StyleSheet.create({
   xpText: { fontSize: 13, fontWeight: '700', color: theme.colors.text },
 
   progressCard: {
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     marginHorizontal: 16,
     marginTop: 16,
     borderRadius: theme.borderRadius.lg,
@@ -441,7 +516,7 @@ const styles = StyleSheet.create({
 
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     marginHorizontal: 16,
     marginTop: 14,
     borderRadius: theme.borderRadius.full,
@@ -454,7 +529,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.full,
     alignItems: 'center',
   },
-  tabActive: { backgroundColor: theme.colors.text },
+  tabActive: { backgroundColor: theme.colors.primary },
   tabText: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary },
   tabTextActive: { color: theme.colors.white },
 
@@ -491,8 +566,8 @@ const styles = StyleSheet.create({
 });
 
 const mStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: theme.colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '92%' },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: theme.colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '92%' },
   sheetDesktop: { maxWidth: 560, alignSelf: 'center', width: '100%', borderRadius: 24, marginBottom: 40 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   headerTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
@@ -501,7 +576,7 @@ const mStyles = StyleSheet.create({
   input: {
     borderWidth: 1.5, borderColor: theme.colors.border, borderRadius: theme.borderRadius.md,
     paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: theme.colors.text,
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.surface,
   },
   inputMulti: { height: 88, textAlignVertical: 'top' },
   row: { flexDirection: 'row', gap: 12 },

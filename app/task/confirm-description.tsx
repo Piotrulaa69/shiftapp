@@ -230,7 +230,7 @@ const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: theme.colors.white, paddingHorizontal: 16, paddingVertical: 14,
+    backgroundColor: theme.colors.card, paddingHorizontal: 16, paddingVertical: 14,
     borderBottomWidth: 1, borderBottomColor: theme.colors.border,
   },
   backBtn: {
@@ -249,7 +249,7 @@ const s = StyleSheet.create({
   contentDesktop: { maxWidth: 680, alignSelf: 'center', width: '100%', paddingHorizontal: 32 },
 
   taskCard: {
-    backgroundColor: theme.colors.white, borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.lg,
     padding: 18, ...theme.shadows.card,
   },
   taskCardRow: { flexDirection: 'row', gap: 8, marginBottom: 12, flexWrap: 'wrap' },
@@ -271,7 +271,7 @@ const s = StyleSheet.create({
   taskMetaText: { fontSize: 12, color: theme.colors.textMuted },
 
   section: {
-    backgroundColor: theme.colors.white, borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.lg,
     padding: 18, ...theme.shadows.card,
   },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
@@ -312,14 +312,14 @@ const s = StyleSheet.create({
   checkbox: {
     width: 22, height: 22, borderRadius: 6, borderWidth: 2,
     borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
   },
   checkboxChecked: { backgroundColor: theme.colors.purple, borderColor: theme.colors.purple },
   checkLabel: { flex: 1, fontSize: 14, color: theme.colors.text },
   checkLabelDone: { textDecorationLine: 'line-through', color: theme.colors.textMuted },
 
   readinessCard: {
-    backgroundColor: theme.colors.white, borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.lg,
     padding: 16, borderWidth: 1.5, borderColor: theme.colors.border, gap: 10,
   },
   readinessCardOk: { borderColor: theme.colors.green, backgroundColor: theme.colors.greenLight },

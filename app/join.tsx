@@ -231,10 +231,10 @@ export default function JoinScreen() {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: theme.colors.white },
+  safe: { flex: 1, backgroundColor: theme.colors.card },
   desktopRoot: { flex: 1, backgroundColor: theme.colors.background, alignItems: 'center', justifyContent: 'center' },
   desktopInner: {
-    width: '100%', maxWidth: 520, backgroundColor: theme.colors.white,
+    width: '100%', maxWidth: 520, backgroundColor: theme.colors.card,
     borderRadius: theme.borderRadius.xl, overflow: 'hidden', ...theme.shadows.card,
   },
   scroll: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40, gap: 16 },

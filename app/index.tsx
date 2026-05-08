@@ -2,15 +2,18 @@ import { Redirect } from 'expo-router';
 import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { theme } from '../styles/theme';
 
 export default function Index() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   if (isLoading) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' }}>
-        <ActivityIndicator size="large" color="#2196C9" />
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.background }}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     );
   }
-  return isAuthenticated ? <Redirect href="/(tabs)/dashboard" /> : <Redirect href="/login" />;
+  if (!isAuthenticated) return <Redirect href="/login" />;
+  if (user && !user.onboardingDone) return <Redirect href="/onboarding" />;
+  return <Redirect href="/(tabs)/dashboard" />;
 }

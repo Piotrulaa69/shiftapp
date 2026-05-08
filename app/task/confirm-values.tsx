@@ -243,7 +243,7 @@ const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: theme.colors.white, paddingHorizontal: 16, paddingVertical: 14,
+    backgroundColor: theme.colors.card, paddingHorizontal: 16, paddingVertical: 14,
     borderBottomWidth: 1, borderBottomColor: theme.colors.border,
   },
   backBtn: {
@@ -262,7 +262,7 @@ const s = StyleSheet.create({
   contentDesktop: { maxWidth: 700, alignSelf: 'center', width: '100%', paddingHorizontal: 32 },
 
   taskCard: {
-    backgroundColor: theme.colors.white, borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.lg,
     padding: 18, ...theme.shadows.card,
   },
   taskCardRow: { flexDirection: 'row', gap: 8, marginBottom: 12, flexWrap: 'wrap' },
@@ -284,7 +284,7 @@ const s = StyleSheet.create({
   taskMetaText: { fontSize: 12, color: theme.colors.textMuted },
 
   progressCard: {
-    backgroundColor: theme.colors.white, borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.lg,
     padding: 16, gap: 8, ...theme.shadows.card,
   },
   progressRow: { flexDirection: 'row', justifyContent: 'space-between' },
@@ -308,7 +308,7 @@ const s = StyleSheet.create({
   okBannerText: { fontSize: 12, color: theme.colors.green, fontWeight: '600' },
 
   section: {
-    backgroundColor: theme.colors.white, borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.lg,
     padding: 18, ...theme.shadows.card,
   },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: theme.colors.text, marginBottom: 4 },
@@ -333,7 +333,7 @@ const s = StyleSheet.create({
     width: 56, height: 40, borderWidth: 1.5, borderColor: theme.colors.border,
     borderRadius: theme.borderRadius.sm, textAlign: 'center',
     fontSize: 15, fontWeight: '700', color: theme.colors.text,
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
   },
   measureInputOk: { borderColor: theme.colors.green, backgroundColor: theme.colors.greenLight },
   measureInputWarn: { borderColor: theme.colors.error, backgroundColor: '#FEF2F2' },
@@ -346,7 +346,7 @@ const s = StyleSheet.create({
   statusPillText: { fontSize: 11, fontWeight: '700' },
 
   legendCard: {
-    backgroundColor: theme.colors.white, borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.lg,
     padding: 14, borderWidth: 1, borderColor: theme.colors.border,
   },
   legendTitle: { fontSize: 12, fontWeight: '600', color: theme.colors.textMuted, marginBottom: 10 },

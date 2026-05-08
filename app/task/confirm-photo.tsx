@@ -217,7 +217,7 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
@@ -242,7 +242,7 @@ const s = StyleSheet.create({
   contentDesktop: { maxWidth: 680, alignSelf: 'center', width: '100%', paddingHorizontal: 32 },
 
   taskCard: {
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     borderRadius: theme.borderRadius.lg,
     padding: 18,
     ...theme.shadows.card,
@@ -272,7 +272,7 @@ const s = StyleSheet.create({
   taskMetaText: { fontSize: 12, color: theme.colors.textMuted },
 
   section: {
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     borderRadius: theme.borderRadius.lg,
     padding: 18,
     ...theme.shadows.card,
@@ -297,7 +297,7 @@ const s = StyleSheet.create({
   },
   photoAreaIcon: {
     width: 72, height: 72, borderRadius: 36,
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     alignItems: 'center', justifyContent: 'center',
     ...theme.shadows.card,
   },
@@ -324,7 +324,7 @@ const s = StyleSheet.create({
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 8, height: 44, borderRadius: theme.borderRadius.md,
     borderWidth: 1.5, borderColor: theme.colors.primary,
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
   },
   photoBtnText: { fontSize: 14, fontWeight: '600', color: theme.colors.primary },
 
@@ -340,7 +340,7 @@ const s = StyleSheet.create({
   charCountWarn: { color: theme.colors.orange },
 
   summaryCard: {
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     borderRadius: theme.borderRadius.lg,
     padding: 16, gap: 10,
     borderWidth: 1, borderColor: theme.colors.border,

@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
     gap: 12,
@@ -281,7 +281,7 @@ const styles = StyleSheet.create({
   body: { padding: 20, gap: 16, paddingBottom: 32 },
   desktopWrap: { maxWidth: 640, alignSelf: 'center', width: '100%' },
   questionCard: {
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     borderRadius: theme.borderRadius.lg,
     padding: 20,
     gap: 12,
@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
   optionsWrap: { gap: 10 },
   option: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     borderRadius: theme.borderRadius.md,
     padding: 14,
     borderWidth: 2, borderColor: theme.colors.border,
@@ -318,7 +318,7 @@ const styles = StyleSheet.create({
   optionTextDim: { color: theme.colors.textMuted },
   explanation: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 10,
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     borderRadius: theme.borderRadius.md,
     padding: 14,
     borderLeftWidth: 4,
@@ -327,7 +327,7 @@ const styles = StyleSheet.create({
   explanationText: { flex: 1, fontSize: 13, color: theme.colors.textSecondary, lineHeight: 19 },
   footer: {
     padding: 16,
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     borderTopWidth: 1, borderTopColor: theme.colors.border,
   },
   nextBtn: {
@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
   // Result screen
   resultScroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
   resultCard: {
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     borderRadius: theme.borderRadius.xl,
     padding: 28,
     alignItems: 'center',

@@ -105,7 +105,7 @@ export default function LoginScreen() {
           </View>
           <Text style={styles.rememberText}>Zapamiętaj mnie</Text>
         </TouchableOpacity>
-        <TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push('/forgot-password' as any)}>
           <Text style={styles.forgotText}>Nie pamiętam hasła?</Text>
         </TouchableOpacity>
       </View>
@@ -180,12 +180,12 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   /* ── Mobile ── */
-  safe: { flex: 1, backgroundColor: theme.colors.white },
+  safe: { flex: 1, backgroundColor: theme.colors.card },
   form: {
     paddingHorizontal: 28,
     paddingTop: 32,
     paddingBottom: 40,
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
   },
   formDesktop: {
     paddingHorizontal: 40,
@@ -209,12 +209,12 @@ const styles = StyleSheet.create({
   desktopInner: {
     width: '100%',
     maxWidth: 560,
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     borderRadius: theme.borderRadius.xl,
     overflow: 'hidden',
     alignSelf: 'center',
     marginVertical: 32,
-    ...theme.shadows.card,
+    ...theme.shadows.medium,
   },
   logoWeb: {
     width: 350,
@@ -239,29 +239,29 @@ const styles = StyleSheet.create({
   inputGroup: { marginBottom: 18 },
   inputLabel: {
     ...theme.typography.bodySmall,
-    color: theme.colors.text,
+    color: theme.colors.textSecondary,
     fontWeight: '500',
     marginBottom: 8,
   },
   input: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: theme.colors.border,
     borderRadius: theme.borderRadius.md,
     paddingHorizontal: 14,
     height: 48,
     fontSize: 15,
     color: theme.colors.text,
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
   },
   passwordRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: theme.colors.border,
     borderRadius: theme.borderRadius.md,
     paddingHorizontal: 14,
     height: 48,
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
   },
   passwordInput: { flex: 1, fontSize: 15, color: theme.colors.text },
   eyeBtn: { padding: 4 },
@@ -285,10 +285,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
     borderColor: theme.colors.primary,
   },
-  rememberText: { ...theme.typography.bodySmall, color: theme.colors.text },
+  rememberText: { ...theme.typography.bodySmall, color: theme.colors.textSecondary },
   forgotText: {
     ...theme.typography.bodySmall,
-    color: theme.colors.primary,
+    color: theme.colors.accent,
     fontWeight: '600',
   },
   loginButton: {
@@ -298,9 +298,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 28,
-    ...theme.shadows.medium,
   },
-  loginButtonText: { fontSize: 16, fontWeight: '700', color: theme.colors.white },
+  loginButtonText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -313,11 +312,12 @@ const styles = StyleSheet.create({
   socialBtn: {
     flex: 1,
     height: 48,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: theme.colors.border,
     borderRadius: theme.borderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: theme.colors.card,
   },
   socialBtnText: {
     ...theme.typography.bodySmall,
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.md,
     paddingHorizontal: 20, height: 44,
   },
-  joinBtnText: { fontSize: 14, fontWeight: '700', color: theme.colors.primary },
+  joinBtnText: { fontSize: 14, fontWeight: '700', color: theme.colors.accent },
 
   demoBox: {
     backgroundColor: theme.colors.background, borderRadius: theme.borderRadius.md,

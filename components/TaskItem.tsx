@@ -1,6 +1,6 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import React from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { theme } from '../styles/theme';
 
 type Priority = 'high' | 'medium' | 'low';
@@ -54,7 +54,8 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.lg,
     padding: theme.spacing.md,
     marginBottom: theme.spacing.sm,
-    ...theme.shadows.card,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   containerCompleted: {
     opacity: 0.65,

@@ -32,7 +32,7 @@ export default function TeamScreen() {
   if (loading) return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" color="#2196C9" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     </SafeAreaView>
   );
@@ -132,7 +132,7 @@ export default function TeamScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.gradientStart,
+    backgroundColor: theme.colors.primary,
   },
   header: {
     paddingHorizontal: theme.spacing.xl,
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
   searchWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     borderRadius: theme.borderRadius.md,
     paddingHorizontal: theme.spacing.md,
     height: 48,

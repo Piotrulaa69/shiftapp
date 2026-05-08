@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     Platform,
@@ -20,6 +21,7 @@ import { theme } from '../../styles/theme';
 const JOB_OPTIONS = ['Kelner', 'Kucharz', 'Barista', 'Lider zmiany', 'Hostessa', 'Pizzaiolo', 'Sprzątanie'];
 
 export default function AdminScreen() {
+  const router = useRouter();
   const { user, restaurant } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
@@ -31,7 +33,7 @@ export default function AdminScreen() {
   const [showInvite, setShowInvite] = useState(false);
   const [jobTitle, setJobTitle] = useState('Kelner');
   const [lastCode, setLastCode] = useState<string | null>(null);
-  const [tab, setTab] = useState<'team' | 'invites' | 'settings'>('team');
+  const [tab, setTab] = useState<'team' | 'invites' | 'settings' | 'tools'>('team');
 
   const refresh = () => {
     if (!rid) return;
@@ -89,6 +91,7 @@ export default function AdminScreen() {
         {([
           { key: 'team', label: 'Zespół', icon: 'people' },
           { key: 'invites', label: 'Zaproszenia', icon: 'mail' },
+          { key: 'tools', label: 'Narzędzia', icon: 'build' },
           { key: 'settings', label: 'Restauracja', icon: 'restaurant' },
         ] as const).map((t) => (
           <TouchableOpacity
@@ -332,6 +335,34 @@ export default function AdminScreen() {
             </View>
           </>
         )}
+
+        {/* ─── TOOLS TAB ─── */}
+        {tab === 'tools' && (
+          <View style={{ gap: 12 }}>
+            {[
+              { icon: 'calendar', label: 'Edytor grafiku', desc: 'Planuj zmiany dla zespołu', route: '/schedule-editor', color: theme.colors.primary },
+              { icon: 'bar-chart', label: 'Raporty', desc: 'Statystyki i analizy', route: '/reports', color: '#22C55E' },
+              { icon: 'document-text', label: 'Urlopy', desc: 'Zarządzaj wnioskami urlopowymi', route: '/leave-requests', color: '#F97316' },
+              { icon: 'swap-horizontal', label: 'Wymiany zmian', desc: 'Zatwierdź wymiany zmian', route: '/shift-swap', color: '#A855F7' },
+            ].map((tool) => (
+              <TouchableOpacity
+                key={tool.label}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: theme.colors.card, borderRadius: 14, padding: 16 }}
+                onPress={() => router.push(tool.route as any)}
+                activeOpacity={0.8}
+              >
+                <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: tool.color + '18', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name={`${tool.icon}-outline` as any} size={22} color={tool.color} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '600', color: theme.colors.text }}>{tool.label}</Text>
+                  <Text style={{ fontSize: 12, color: theme.colors.textMuted }}>{tool.desc}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -341,7 +372,7 @@ const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: theme.colors.white, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16,
+    backgroundColor: theme.colors.card, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16,
     borderBottomWidth: 1, borderBottomColor: theme.colors.border,
   },
   headerTitle: { fontSize: 20, fontWeight: '700', color: theme.colors.text },
@@ -354,7 +385,7 @@ const s = StyleSheet.create({
   headerBadgeText: { fontSize: 12, fontWeight: '700', color: theme.colors.primary },
 
   tabs: {
-    flexDirection: 'row', backgroundColor: theme.colors.white,
+    flexDirection: 'row', backgroundColor: theme.colors.card,
     paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border,
   },
   tab: {
@@ -371,16 +402,16 @@ const s = StyleSheet.create({
 
   statsRow: { flexDirection: 'row', gap: 10 },
   statCard: {
-    flex: 1, backgroundColor: theme.colors.white, borderRadius: theme.borderRadius.lg,
+    flex: 1, backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.lg,
     padding: 16, alignItems: 'center', ...theme.shadows.card,
   },
   statNum: { fontSize: 24, fontWeight: '800', color: theme.colors.text },
   statLabel: { fontSize: 11, color: theme.colors.textMuted, marginTop: 4 },
 
   inviteBtn: {
-    backgroundColor: theme.colors.navy, borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.md,
     height: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, ...theme.shadows.medium,
+    gap: 8,
   },
   inviteBtnText: { fontSize: 15, fontWeight: '700', color: theme.colors.white },
 
@@ -391,19 +422,19 @@ const s = StyleSheet.create({
   codeCardTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   codeCardTitle: { fontSize: 13, fontWeight: '600', color: theme.colors.primary },
   codeValue: {
-    fontSize: 32, fontWeight: '800', color: theme.colors.navy, textAlign: 'center',
+    fontSize: 32, fontWeight: '800', color: theme.colors.accent, textAlign: 'center',
     letterSpacing: 6, paddingVertical: 8,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   shareBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    backgroundColor: theme.colors.white, borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.md,
     height: 40, borderWidth: 1, borderColor: theme.colors.primary,
   },
   shareBtnText: { fontSize: 13, fontWeight: '700', color: theme.colors.primary },
 
   inviteModal: {
-    backgroundColor: theme.colors.white, borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.lg,
     padding: 20, ...theme.shadows.card, gap: 12,
   },
   inviteModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -424,7 +455,7 @@ const s = StyleSheet.create({
   generateBtnText: { fontSize: 14, fontWeight: '700', color: theme.colors.white },
 
   section: {
-    backgroundColor: theme.colors.white, borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.lg,
     padding: 18, ...theme.shadows.card,
   },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: theme.colors.text, marginBottom: 14 },

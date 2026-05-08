@@ -83,7 +83,7 @@ function TrainingCard({ training }: { training: DbTraining }) {
 
 const tStyles = StyleSheet.create({
   card: {
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     borderRadius: theme.borderRadius.lg,
     marginBottom: 14,
     overflow: 'hidden',
@@ -154,9 +154,9 @@ export default function SzkoleniaScreen() {
   }, [rid]);
 
   if (loading) return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8FAFC' }} edges={['top']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }} edges={['top']}>
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" color="#2196C9" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     </SafeAreaView>
   );
@@ -292,7 +292,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 12,
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
   },
   title: { fontSize: 22, fontWeight: '700', color: theme.colors.text },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
   xpText: { fontSize: 13, fontWeight: '700', color: theme.colors.text },
 
   progressCard: {
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     marginHorizontal: 16,
     marginTop: 16,
     borderRadius: theme.borderRadius.lg,
@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
   levelHint: { ...theme.typography.caption, color: theme.colors.primary },
 
   badgesCard: {
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     marginHorizontal: 16,
     marginTop: 14,
     borderRadius: theme.borderRadius.lg,
@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     borderWidth: 1,
     borderColor: theme.colors.border,
   },

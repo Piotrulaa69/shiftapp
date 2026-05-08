@@ -1,29 +1,42 @@
 export const theme = {
   colors: {
-    primary: '#4A7CF7',
-    primaryLight: '#EEF2FF',
-    navy: '#1E293B',
-    orange: '#F97316',
+    // Core brand — blue
+    primary: '#2563EB',
+    primaryLight: '#EFF6FF',
+    navy: '#1E3A5F',
+    accent: '#3B82F6',
+
+    // Semantic
+    orange: '#EA580C',
     orangeLight: '#FFF7ED',
-    green: '#22C55E',
+    green: '#16A34A',
     greenLight: '#F0FDF4',
-    purple: '#A855F7',
-    purpleLight: '#FAF5FF',
-    yellow: '#EAB308',
+    purple: '#7C3AED',
+    purpleLight: '#F5F3FF',
+    yellow: '#CA8A04',
     yellowLight: '#FEFCE8',
-    background: '#F1F5F9',
+
+    // Surfaces — warm light
+    background: '#F5F4EF',
     card: '#FFFFFF',
-    text: '#0F172A',
-    textSecondary: '#64748B',
-    textMuted: '#94A3B8',
-    border: '#E2E8F0',
+    surface: '#F0EEE9',
+
+    // Text
+    text: '#111827',
+    textSecondary: '#6B7280',
+    textMuted: '#9CA3AF',
+
+    // Utility
+    border: '#E8E4DC',
     white: '#FFFFFF',
-    error: '#EF4444',
+    error: '#DC2626',
     errorLight: '#FEF2F2',
-    success: '#22C55E',
-    warning: '#F97316',
-    gradientStart: '#2196C9',
-    gradientEnd: '#5BC8F5',
+    success: '#16A34A',
+    warning: '#CA8A04',
+
+    // Gradient
+    gradientStart: '#2563EB',
+    gradientEnd: '#60A5FA',
   },
   spacing: {
     xs: 4,
@@ -41,10 +54,10 @@ export const theme = {
     full: 999,
   },
   typography: {
-    h1: { fontSize: 30, fontWeight: '700' as const },
-    h2: { fontSize: 24, fontWeight: '700' as const },
-    h3: { fontSize: 20, fontWeight: '600' as const },
-    h4: { fontSize: 17, fontWeight: '600' as const },
+    h1: { fontSize: 28, fontWeight: '800' as const, letterSpacing: -0.5 },
+    h2: { fontSize: 22, fontWeight: '700' as const, letterSpacing: -0.3 },
+    h3: { fontSize: 18, fontWeight: '600' as const },
+    h4: { fontSize: 16, fontWeight: '600' as const },
     body: { fontSize: 15, fontWeight: '400' as const },
     bodyMedium: { fontSize: 15, fontWeight: '500' as const },
     bodySmall: { fontSize: 13, fontWeight: '400' as const },
@@ -53,25 +66,25 @@ export const theme = {
   },
   shadows: {
     card: {
-      shadowColor: '#0F172A',
+      shadowColor: '#1A1D23',
       shadowOffset: { width: 0, height: 1 },
       shadowOpacity: 0.06,
       shadowRadius: 6,
       elevation: 2,
     },
     medium: {
-      shadowColor: '#0F172A',
+      shadowColor: '#1A1D23',
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.1,
-      shadowRadius: 12,
+      shadowRadius: 16,
       elevation: 5,
     },
     fab: {
-      shadowColor: '#4A7CF7',
-      shadowOffset: { width: 0, height: 6 },
+      shadowColor: '#2563EB',
+      shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.35,
       shadowRadius: 10,
-      elevation: 10,
+      elevation: 8,
     },
   },
 };

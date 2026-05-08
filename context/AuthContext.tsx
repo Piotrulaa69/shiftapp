@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { DbProfile, DbRestaurant } from '../lib/supabase';
 import { supabase } from '../lib/supabase';
 
-export type UserRole = 'owner' | 'employee';
+export type UserRole = 'owner' | 'manager' | 'employee';
 
 export type AuthUser = {
   id: string;
@@ -14,6 +14,7 @@ export type AuthUser = {
   jobTitle: string;
   restaurantId: string;
   avatarColor: string;
+  onboardingDone: boolean;
 };
 
 export type Restaurant = {
@@ -32,6 +33,7 @@ type AuthContextType = {
   restaurant: Restaurant | null;
   isAuthenticated: boolean;
   isOwner: boolean;
+  isManager: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   joinWithCode: (
@@ -53,10 +55,11 @@ function toAuthUser(profile: DbProfile, email: string): AuthUser {
     firstName,
     initials,
     email,
-    role: profile.role,
+    role: profile.role as UserRole,
     jobTitle: profile.job_title,
     restaurantId: profile.restaurant_id,
     avatarColor: profile.avatar_color,
+    onboardingDone: profile.onboarding_done ?? true,
   };
 }
 
@@ -205,10 +208,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const isOwner = user?.role === 'owner';
+  const isManager = user?.role === 'manager';
 
   return (
     <AuthContext.Provider
-      value={{ user, restaurant, isAuthenticated: hasSession, isOwner, isLoading, login, joinWithCode, logout }}
+      value={{ user, restaurant, isAuthenticated: hasSession, isOwner, isManager, isLoading, login, joinWithCode, logout }}
     >
       {children}
     </AuthContext.Provider>

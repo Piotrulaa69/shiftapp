@@ -38,8 +38,8 @@ const NAV_ITEM_ADMIN = { key: 'admin', route: '/(tabs)/admin' as const };
 function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
-  const { logout, isOwner, restaurant, user } = useAuth();
-  const NAV_ITEMS = isOwner ? [...NAV_ITEMS_BASE, NAV_ITEM_ADMIN] : NAV_ITEMS_BASE;
+  const { logout, isOwner, isManager, restaurant, user } = useAuth();
+  const NAV_ITEMS = (isOwner || isManager) ? [...NAV_ITEMS_BASE, NAV_ITEM_ADMIN] : NAV_ITEMS_BASE;
 
   return (
     <View style={sideStyles.sidebar}>
@@ -66,7 +66,7 @@ function Sidebar() {
                 <Ionicons
                   name={(isActive ? cfg.icon : `${cfg.icon}-outline`) as any}
                   size={20}
-                  color={isActive ? theme.colors.white : theme.colors.textSecondary}
+                  color={isActive ? theme.colors.primary : theme.colors.textSecondary}
                 />
               </View>
               <Text style={[sideStyles.navLabel, isActive && sideStyles.navLabelActive]}>
@@ -98,8 +98,8 @@ function Sidebar() {
 
 const sideStyles = StyleSheet.create({
   sidebar: {
-    width: 280,
-    backgroundColor: theme.colors.white,
+    width: 260,
+    backgroundColor: theme.colors.card,
     borderRightWidth: 1,
     borderRightColor: theme.colors.border,
     flexDirection: 'column',
@@ -112,8 +112,8 @@ const sideStyles = StyleSheet.create({
     borderBottomColor: theme.colors.border,
     alignItems: 'center',
   },
-  logo: { width: 240, height: 80 },
-  navScroll: { flex: 1, paddingTop: 12 },
+  logo: { width: 200, height: 66 },
+  navScroll: { flex: 1, paddingTop: 16 },
   navItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -123,18 +123,18 @@ const sideStyles = StyleSheet.create({
     padding: 12,
     gap: 12,
   },
-  navItemActive: { backgroundColor: theme.colors.navy },
+  navItemActive: { backgroundColor: theme.colors.primaryLight },
   navIcon: {
-    width: 36,
-    height: 36,
+    width: 34,
+    height: 34,
     borderRadius: 10,
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  navIconActive: { backgroundColor: 'rgba(255,255,255,0.15)' },
+  navIconActive: { backgroundColor: theme.colors.primaryLight },
   navLabel: { fontSize: 14, fontWeight: '600', color: theme.colors.textSecondary },
-  navLabelActive: { color: theme.colors.white },
+  navLabelActive: { color: theme.colors.primary },
   bottom: {
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
@@ -167,6 +167,7 @@ const sideStyles = StyleSheet.create({
 /* ─────────────── MOBILE TAB BAR ─────────────── */
 function MobileTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const visibleRoutes = state.routes.filter((r) => r.name in TAB_CONFIG);
   const leftRoutes = visibleRoutes.slice(0, 2);
   const rightRoutes = visibleRoutes.slice(2);
@@ -195,8 +196,12 @@ function MobileTabBar({ state, navigation }: BottomTabBarProps) {
   return (
     <View style={[tabStyles.container, { paddingBottom: insets.bottom || 8 }]}>
       {leftRoutes.map((r) => renderTab(r))}
-      <TouchableOpacity style={tabStyles.fab} activeOpacity={0.85}>
-        <Ionicons name="add" size={30} color={theme.colors.white} />
+      <TouchableOpacity
+        style={tabStyles.fab}
+        activeOpacity={0.85}
+        onPress={() => router.push('/shift-detail' as any)}
+      >
+        <Ionicons name="finger-print" size={28} color={theme.colors.white} />
       </TouchableOpacity>
       {rightRoutes.map((r) => renderTab(r))}
     </View>
@@ -207,11 +212,12 @@ const tabStyles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
-    paddingTop: 10,
+    paddingTop: 8,
     paddingHorizontal: 8,
+    ...theme.shadows.medium,
   },
   tab: {
     flex: 1,
@@ -235,14 +241,15 @@ const tabStyles = StyleSheet.create({
 
 /* ─────────────── ROOT ─────────────── */
 export default function TabLayout() {
-  const { isAuthenticated, isOwner, isLoading } = useAuth();
+  const { isAuthenticated, isOwner, isManager, isLoading } = useAuth();
+  const showAdmin = isOwner || isManager;
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' }}>
-        <ActivityIndicator size="large" color="#2196C9" />
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.background }}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     );
   }
@@ -261,7 +268,7 @@ export default function TabLayout() {
             <Tabs.Screen name="schedule" />
             <Tabs.Screen name="tasks" />
             <Tabs.Screen name="szkolenia" />
-            <Tabs.Screen name="admin" options={{ href: isOwner ? undefined : null }} />
+            <Tabs.Screen name="admin" options={{ href: showAdmin ? undefined : null }} />
             <Tabs.Screen name="team" options={{ href: null }} />
           </Tabs>
         </View>
@@ -278,7 +285,7 @@ export default function TabLayout() {
       <Tabs.Screen name="schedule" />
       <Tabs.Screen name="tasks" />
       <Tabs.Screen name="szkolenia" />
-      <Tabs.Screen name="admin" options={{ href: isOwner ? undefined : null }} />
+      <Tabs.Screen name="admin" options={{ href: showAdmin ? undefined : null }} />
       <Tabs.Screen name="team" options={{ href: null }} />
     </Tabs>
   );

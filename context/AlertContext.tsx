@@ -1,13 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { createContext, useCallback, useContext, useRef, useState } from 'react';
 import {
-  Animated,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Animated,
+    Modal,
+    Pressable,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { theme } from '../styles/theme';
 
@@ -192,7 +192,7 @@ export const useAlert = (): AlertContextType => {
 const s = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -203,14 +203,12 @@ const s = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 380,
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     borderRadius: 20,
     padding: 28,
     alignItems: 'center',
-    ...theme.shadows.card,
-    shadowRadius: 30,
-    shadowOpacity: 0.15,
-    elevation: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   iconWrap: {
     width: 64,
@@ -247,7 +245,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 20,
   },
   btnPrimary: {
-    backgroundColor: theme.colors.navy,
+    backgroundColor: theme.colors.primary,
   },
   btnCancel: {
     backgroundColor: theme.colors.background,

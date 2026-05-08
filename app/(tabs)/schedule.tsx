@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -37,12 +38,13 @@ const STATUS_CONFIG: Record<ShiftStatus, { label: string; color: string; bg: str
 };
 
 function ShiftItemCard({ shift, today, onDelete }: { shift: DbShift; today: string; onDelete?: () => void }) {
+  const router = useRouter();
   const cfg = STATUS_CONFIG[shift.status];
   const isUrlop = shift.status === 'urlop';
   const needsAction = shift.status === 'do_potwierdzenia';
 
   return (
-    <View style={cardStyles.card}>
+    <TouchableOpacity style={cardStyles.card} activeOpacity={0.85} onPress={() => router.push({ pathname: '/shift-detail', params: { shiftId: shift.id } } as any)}>
       <View style={[cardStyles.accent, { backgroundColor: cfg.color }]} />
       <View style={cardStyles.body}>
         <View style={cardStyles.topRow}>
@@ -95,14 +97,14 @@ function ShiftItemCard({ shift, today, onDelete }: { shift: DbShift; today: stri
           )}
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
 const cardStyles = StyleSheet.create({
   card: {
     flexDirection: 'row',
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     borderRadius: theme.borderRadius.lg,
     marginBottom: 12,
     overflow: 'hidden',
@@ -159,7 +161,7 @@ const cardStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  deleteBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#FEF2F2', alignItems: 'center', justifyContent: 'center' },
+  deleteBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: theme.colors.errorLight, alignItems: 'center', justifyContent: 'center' },
   detailsBtnText: { fontSize: 13, fontWeight: '600', color: theme.colors.text },
 });
 
@@ -218,9 +220,9 @@ export default function ScheduleScreen() {
   };
 
   if (loading) return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8FAFC' }} edges={['top']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }} edges={['top']}>
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" color="#2196C9" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     </SafeAreaView>
   );
@@ -361,11 +363,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 8,
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
   },
   title: { fontSize: 22, fontWeight: '700', color: theme.colors.text },
   calCard: {
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.card,
     marginHorizontal: 16,
     marginTop: 16,
     borderRadius: theme.borderRadius.lg,
@@ -384,7 +388,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -412,14 +416,14 @@ const styles = StyleSheet.create({
 });
 
 const mStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: theme.colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '92%' },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: theme.colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '92%' },
   sheetDesktop: { maxWidth: 560, alignSelf: 'center', width: '100%', borderRadius: 24, marginBottom: 40 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   headerTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
   body: { padding: 20, gap: 4 },
   label: { fontSize: 13, fontWeight: '700', color: theme.colors.textSecondary, marginTop: 12, marginBottom: 6 },
-  input: { borderWidth: 1.5, borderColor: theme.colors.border, borderRadius: theme.borderRadius.md, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: theme.colors.text, backgroundColor: theme.colors.white },
+  input: { borderWidth: 1.5, borderColor: theme.colors.border, borderRadius: theme.borderRadius.md, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: theme.colors.text, backgroundColor: theme.colors.surface },
   row: { flexDirection: 'row', gap: 12 },
   half: { flex: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

@@ -45,10 +45,12 @@ export type DbProfile = {
   restaurant_id: string;
   first_name: string;
   last_name: string;
-  role: 'owner' | 'employee';
+  role: 'owner' | 'manager' | 'employee';
   job_title: string;
   avatar_color: string;
   is_active: boolean;
+  onboarding_done: boolean;
+  phone: string | null;
   created_at: string;
 };
 
@@ -102,5 +104,150 @@ export type DbTraining = {
   progress_percent: number;
   required: boolean;
   status: 'w_toku' | 'ukonczone' | 'nierozpoczete';
+  points: number;
+  material_url: string | null;
+  material_type: 'pdf' | 'video' | null;
+  assigned_to: string | null;
+  assigned_role: string | null;
+  deadline: string | null;
+  created_at: string;
+};
+
+export type DbClockIn = {
+  id: string;
+  restaurant_id: string;
+  shift_id: string;
+  employee_id: string;
+  clock_in_at: string | null;
+  clock_out_at: string | null;
+  method: 'pin' | 'qr' | 'gps' | 'manual';
+  gps_lat: number | null;
+  gps_lng: number | null;
+  late_minutes: number;
+  overtime_min: number;
+  clock_out_note: string | null;
+  status: 'pending' | 'active' | 'completed' | 'auto_closed';
+  created_at: string;
+};
+
+export type DbAvailability = {
+  id: string;
+  restaurant_id: string;
+  employee_id: string;
+  day: string;
+  status: 'available' | 'unavailable' | 'partial';
+  slot1_start: string | null;
+  slot1_end: string | null;
+  slot2_start: string | null;
+  slot2_end: string | null;
+  created_at: string;
+};
+
+export type DbLeaveType = {
+  id: string;
+  restaurant_id: string;
+  name: string;
+  days_per_year: number;
+  requires_attachment: boolean;
+  requires_comment: boolean;
+  created_at: string;
+};
+
+export type DbLeaveRequest = {
+  id: string;
+  restaurant_id: string;
+  employee_id: string;
+  leave_type_id: string;
+  date_from: string;
+  date_to: string;
+  days_count: number;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  comment: string | null;
+  attachment_url: string | null;
+  reviewed_by: string | null;
+  review_comment: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+};
+
+export type DbAbsence = {
+  id: string;
+  restaurant_id: string;
+  shift_id: string;
+  employee_id: string;
+  absence_type: 'l4' | 'child_care' | 'force_majeure' | 'other';
+  description: string | null;
+  attachment_url: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewed_by: string | null;
+  created_at: string;
+};
+
+export type DbShiftSwap = {
+  id: string;
+  restaurant_id: string;
+  requester_id: string;
+  responder_id: string;
+  requester_shift: string;
+  responder_shift: string | null;
+  swap_type: 'swap' | 'give';
+  status: 'pending_responder' | 'pending_manager' | 'approved' | 'rejected_responder' | 'rejected_manager';
+  manager_id: string | null;
+  created_at: string;
+};
+
+export type DbDocument = {
+  id: string;
+  restaurant_id: string;
+  employee_id: string;
+  name: string;
+  doc_type: 'contract' | 'certificate' | 'attestation' | 'other';
+  file_url: string | null;
+  expires_at: string | null;
+  status: 'active' | 'expiring' | 'expired';
+  uploaded_by: string | null;
+  created_at: string;
+};
+
+export type DbConversation = {
+  id: string;
+  restaurant_id: string;
+  participant_a: string;
+  participant_b: string;
+  last_message_at: string | null;
+  created_at: string;
+};
+
+export type DbMessage = {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  body: string;
+  image_url: string | null;
+  read_at: string | null;
+  created_at: string;
+};
+
+export type DbPointsLedger = {
+  id: string;
+  restaurant_id: string;
+  employee_id: string;
+  points: number;
+  event_type: string;
+  reference_id: string | null;
+  description: string | null;
+  period_start: string | null;
+  created_at: string;
+};
+
+export type DbLocation = {
+  id: string;
+  restaurant_id: string;
+  name: string;
+  address: string;
+  gps_lat: number | null;
+  gps_lng: number | null;
+  gps_radius_m: number;
+  manager_id: string | null;
   created_at: string;
 };

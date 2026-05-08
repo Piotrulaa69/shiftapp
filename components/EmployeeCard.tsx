@@ -38,7 +38,8 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.lg,
     padding: theme.spacing.md,
     marginBottom: theme.spacing.sm,
-    ...theme.shadows.card,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   avatar: {
     width: 50,
