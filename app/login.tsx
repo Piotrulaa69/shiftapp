@@ -19,6 +19,16 @@ import { useAlert } from '../context/AlertContext';
 import { useAuth } from '../context/AuthContext';
 import { theme } from '../styles/theme';
 
+/* ── Feature highlights for desktop collage ── */
+const FEATURES = [
+  { icon: 'calendar', label: 'Grafik zmian', color: '#3B82F6' },
+  { icon: 'checkmark-done', label: 'Zadania', color: '#22C55E' },
+  { icon: 'people', label: 'Zarządzanie', color: '#8B5CF6' },
+  { icon: 'stats-chart', label: 'Raporty', color: '#F97316' },
+  { icon: 'school', label: 'Szkolenia', color: '#EC4899' },
+  { icon: 'chatbubbles', label: 'Komunikacja', color: '#06B6D4' },
+];
+
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,7 +38,7 @@ export default function LoginScreen() {
   const { showAlert } = useAlert();
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const isDesktop = Platform.OS === 'web' && width >= 768;
+  const isDesktop = Platform.OS === 'web' && width >= 900;
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -43,7 +53,8 @@ export default function LoginScreen() {
     }
   };
 
-  const form = (
+  /* ── Form (shared mobile + desktop left) ── */
+  const formContent = (
     <ScrollView
       contentContainerStyle={[styles.form, isDesktop && styles.formDesktop]}
       keyboardShouldPersistTaps="handled"
@@ -51,33 +62,39 @@ export default function LoginScreen() {
     >
       <Image
         source={require('../assets/images/logo.png')}
-        style={[styles.logoMobile, isDesktop && styles.logoWeb]}
+        style={styles.logo}
         resizeMode="contain"
       />
 
-      <Text style={styles.title}>Witaj ponownie</Text>
+      <Text style={styles.title}>Zaloguj się do konta</Text>
       <Text style={styles.subtitle}>
-        Wprowadź swój e-mail/telefon i hasło,{'\n'}aby uzyskać dostęp do konta.
+        Wprowadź swoje dane, aby uzyskać dostęp do panelu.
       </Text>
 
+      {/* Email */}
       <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>E-mail lub Telefon</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="jan.kowalski@firma.pl"
-          placeholderTextColor={theme.colors.textMuted}
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
+        <View style={styles.inputRow}>
+          <Ionicons name="mail-outline" size={18} color={theme.colors.textMuted} style={styles.inputIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="jan.kowalski@firma.pl"
+            placeholderTextColor={theme.colors.textMuted}
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+        </View>
       </View>
 
+      {/* Password */}
       <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>Hasło</Text>
-        <View style={styles.passwordRow}>
+        <View style={styles.inputRow}>
+          <Ionicons name="lock-closed-outline" size={18} color={theme.colors.textMuted} style={styles.inputIcon} />
           <TextInput
-            style={styles.passwordInput}
+            style={styles.input}
             placeholder="••••••••"
             placeholderTextColor={theme.colors.textMuted}
             value={password}
@@ -94,6 +111,7 @@ export default function LoginScreen() {
         </View>
       </View>
 
+      {/* Remember + Forgot */}
       <View style={styles.rememberRow}>
         <TouchableOpacity
           style={styles.checkboxRow}
@@ -106,10 +124,11 @@ export default function LoginScreen() {
           <Text style={styles.rememberText}>Zapamiętaj mnie</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => router.push('/forgot-password' as any)}>
-          <Text style={styles.forgotText}>Nie pamiętam hasła?</Text>
+          <Text style={styles.forgotText}>Nie pamiętam hasła</Text>
         </TouchableOpacity>
       </View>
 
+      {/* Login button */}
       <TouchableOpacity
         style={styles.loginButton}
         onPress={handleLogin}
@@ -119,24 +138,9 @@ export default function LoginScreen() {
         {isLoading ? (
           <ActivityIndicator color={theme.colors.white} />
         ) : (
-          <Text style={styles.loginButtonText}>Zaloguj</Text>
+          <Text style={styles.loginButtonText}>Zaloguj się</Text>
         )}
       </TouchableOpacity>
-
-      <View style={styles.dividerRow}>
-        <View style={styles.divider} />
-        <Text style={styles.dividerText}>Lub zaloguj przez</Text>
-        <View style={styles.divider} />
-      </View>
-
-      <View style={styles.socialRow}>
-        <TouchableOpacity style={styles.socialBtn}>
-          <Text style={styles.socialBtnText}>G  Google</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.socialBtn}>
-          <Text style={styles.socialBtnText}> Apple</Text>
-        </TouchableOpacity>
-      </View>
 
       {/* Join restaurant */}
       <View style={styles.joinSection}>
@@ -147,7 +151,8 @@ export default function LoginScreen() {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.footer}> 2025 ShiftApp. Wszelkie prawa zastrzeżone.</Text>
+      {/* Footer */}
+      <Text style={styles.footer}>© 2025 ShiftApp. Wszelkie prawa zastrzeżone.</Text>
       <View style={styles.footerLinks}>
         <TouchableOpacity><Text style={styles.footerLink}>Polityka prywatności</Text></TouchableOpacity>
         <Text style={styles.footerDot}>  ·  </Text>
@@ -156,23 +161,67 @@ export default function LoginScreen() {
     </ScrollView>
   );
 
+  /* ── Desktop: split layout ── */
   if (isDesktop) {
     return (
       <View style={styles.desktopRoot}>
-        <View style={styles.desktopInner}>
-          {form}
+        {/* Left — form */}
+        <View style={styles.desktopLeft}>
+          {formContent}
+        </View>
+
+        {/* Right — blue collage */}
+        <View style={styles.desktopRight}>
+          <View style={styles.collageInner}>
+            {/* Mock app window */}
+            <View style={styles.collageWindow}>
+              <View style={styles.collageWindowBar}>
+                <View style={[styles.collageDot, { backgroundColor: '#FF5F57' }]} />
+                <View style={[styles.collageDot, { backgroundColor: '#FEBC2E' }]} />
+                <View style={[styles.collageDot, { backgroundColor: '#28C840' }]} />
+              </View>
+              <View style={styles.collageWindowBody}>
+                <View style={styles.collageRow}>
+                  <View style={[styles.collageSkeleton, { width: '60%', height: 12 }]} />
+                </View>
+                <View style={styles.collageRow}>
+                  <View style={[styles.collageSkeleton, { width: '80%', height: 10 }]} />
+                </View>
+                <View style={styles.collageRow}>
+                  <View style={[styles.collageSkeleton, { width: '45%', height: 10 }]} />
+                </View>
+              </View>
+            </View>
+
+            {/* Feature badges floating around */}
+            <View style={styles.featureGrid}>
+              {FEATURES.map((f) => (
+                <View key={f.label} style={styles.featureBadge}>
+                  <View style={[styles.featureIcon, { backgroundColor: f.color + '22' }]}>  
+                    <Ionicons name={`${f.icon}-outline` as any} size={20} color={f.color} />
+                  </View>
+                  <Text style={styles.featureLabel}>{f.label}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Bottom text */}
+            <Text style={styles.collageTitle}>Wszystko w jednym miejscu.</Text>
+            <Text style={styles.collageSub}>Grafik, zadania, szkolenia i zarządzanie zespołem — dostępne z każdego urządzenia.</Text>
+          </View>
         </View>
       </View>
     );
   }
 
+  /* ── Mobile ── */
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {form}
+        {formContent}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -186,84 +235,151 @@ const styles = StyleSheet.create({
     paddingTop: 32,
     paddingBottom: 40,
     backgroundColor: theme.colors.card,
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   formDesktop: {
-    paddingHorizontal: 40,
-    paddingTop: 16,
+    paddingHorizontal: 48,
+    paddingVertical: 40,
   },
-  logoMobile: {
-    width: 260,
-    height: 86,
-    alignSelf: 'center',
-    marginBottom: 36,
-    marginTop: 16,
+  logo: {
+    width: 180,
+    height: 60,
+    marginBottom: 32,
   },
 
-  /* ── Desktop layout ── */
+  /* ── Desktop split ── */
   desktopRoot: {
     flex: 1,
+    flexDirection: 'row',
     backgroundColor: theme.colors.background,
+  },
+  desktopLeft: {
+    flex: 1,
+    maxWidth: 520,
+    backgroundColor: theme.colors.card,
+    justifyContent: 'center',
+  },
+  desktopRight: {
+    flex: 1,
+    backgroundColor: '#1E40AF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 48,
+  },
+
+  /* ── Collage ── */
+  collageInner: {
+    alignItems: 'center',
+    maxWidth: 420,
+  },
+  collageWindow: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 32,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  collageWindowBar: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: '#F9FAFB',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  collageDot: { width: 10, height: 10, borderRadius: 5 },
+  collageWindowBody: {
+    padding: 20,
+    gap: 12,
+  },
+  collageRow: {
+    flexDirection: 'row',
+  },
+  collageSkeleton: {
+    backgroundColor: '#E5E7EB',
+    borderRadius: 6,
+  },
+  featureGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 12,
+    marginBottom: 36,
+  },
+  featureBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 24,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  featureIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  desktopInner: {
-    width: '100%',
-    maxWidth: 560,
-    backgroundColor: theme.colors.card,
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    alignSelf: 'center',
-    marginVertical: 32,
-    ...theme.shadows.medium,
+  featureLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
-  logoWeb: {
-    width: 350,
-    height: 116,
-    marginBottom: 40,
-    marginTop: 32,
-  },
-
-  /* ── Form elements (shared) ── */
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: theme.colors.text,
-    marginBottom: 10,
-  },
-  subtitle: {
-    ...theme.typography.bodySmall,
-    color: theme.colors.textSecondary,
-    lineHeight: 20,
-    marginBottom: 32,
-  },
-  inputGroup: { marginBottom: 18 },
-  inputLabel: {
-    ...theme.typography.bodySmall,
-    color: theme.colors.textSecondary,
-    fontWeight: '500',
+  collageTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textAlign: 'center',
     marginBottom: 8,
   },
-  input: {
-    borderWidth: 1.5,
-    borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.md,
-    paddingHorizontal: 14,
-    height: 48,
-    fontSize: 15,
-    color: theme.colors.text,
-    backgroundColor: theme.colors.card,
+  collageSub: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.75)',
+    textAlign: 'center',
+    lineHeight: 20,
   },
-  passwordRow: {
+
+  /* ── Form elements ── */
+  title: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: theme.colors.text,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    lineHeight: 20,
+    marginBottom: 28,
+  },
+  inputGroup: { marginBottom: 16 },
+  inputLabel: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    fontWeight: '500',
+    marginBottom: 6,
+  },
+  inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1.5,
     borderColor: theme.colors.border,
     borderRadius: theme.borderRadius.md,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     height: 48,
-    backgroundColor: theme.colors.card,
+    backgroundColor: theme.colors.surface,
   },
-  passwordInput: { flex: 1, fontSize: 15, color: theme.colors.text },
+  inputIcon: { marginRight: 10 },
+  input: { flex: 1, fontSize: 15, color: theme.colors.text },
   eyeBtn: { padding: 4 },
   rememberRow: {
     flexDirection: 'row',
@@ -273,9 +389,9 @@ const styles = StyleSheet.create({
   },
   checkboxRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   checkbox: {
-    width: 16,
-    height: 16,
-    borderRadius: 3,
+    width: 18,
+    height: 18,
+    borderRadius: 4,
     borderWidth: 1.5,
     borderColor: theme.colors.border,
     alignItems: 'center',
@@ -285,10 +401,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
     borderColor: theme.colors.primary,
   },
-  rememberText: { ...theme.typography.bodySmall, color: theme.colors.textSecondary },
+  rememberText: { fontSize: 13, color: theme.colors.textSecondary },
   forgotText: {
-    ...theme.typography.bodySmall,
-    color: theme.colors.accent,
+    fontSize: 13,
+    color: theme.colors.primary,
     fontWeight: '600',
   },
   loginButton: {
@@ -297,55 +413,14 @@ const styles = StyleSheet.create({
     height: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 28,
+    marginBottom: 24,
   },
   loginButtonText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-    gap: 12,
-  },
-  divider: { flex: 1, height: 1, backgroundColor: theme.colors.border },
-  dividerText: { ...theme.typography.caption, color: theme.colors.textMuted },
-  socialRow: { flexDirection: 'row', gap: 12, marginBottom: 40 },
-  socialBtn: {
-    flex: 1,
-    height: 48,
-    borderWidth: 1.5,
-    borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.card,
-  },
-  socialBtnText: {
-    ...theme.typography.bodySmall,
-    fontWeight: '600',
-    color: theme.colors.text,
-  },
-  footer: {
-    ...theme.typography.caption,
-    color: theme.colors.textMuted,
-    textAlign: 'center',
-    marginBottom: 6,
-  },
-  footerLinks: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  footerLink: {
-    ...theme.typography.caption,
-    color: theme.colors.textMuted,
-    textDecorationLine: 'underline',
-  },
-  footerDot: { ...theme.typography.caption, color: theme.colors.textMuted },
 
   joinSection: {
     alignItems: 'center', gap: 8,
     borderTopWidth: 1, borderTopColor: theme.colors.border,
-    paddingTop: 20, marginTop: 4,
+    paddingTop: 20, marginBottom: 20,
   },
   joinTitle: { fontSize: 13, color: theme.colors.textSecondary },
   joinBtn: {
@@ -354,12 +429,23 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.md,
     paddingHorizontal: 20, height: 44,
   },
-  joinBtnText: { fontSize: 14, fontWeight: '700', color: theme.colors.accent },
+  joinBtnText: { fontSize: 14, fontWeight: '700', color: theme.colors.primary },
 
-  demoBox: {
-    backgroundColor: theme.colors.background, borderRadius: theme.borderRadius.md,
-    padding: 14, gap: 6, marginTop: 8,
+  footer: {
+    fontSize: 11,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    marginBottom: 4,
   },
-  demoTitle: { fontSize: 12, fontWeight: '700', color: theme.colors.textSecondary, marginBottom: 2 },
-  demoItem: { fontSize: 12, color: theme.colors.textMuted, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+  footerLinks: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  footerLink: {
+    fontSize: 11,
+    color: theme.colors.textMuted,
+    textDecorationLine: 'underline',
+  },
+  footerDot: { fontSize: 11, color: theme.colors.textMuted },
 });
