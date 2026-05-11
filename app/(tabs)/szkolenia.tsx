@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { getTrainings } from '../../lib/db';
@@ -178,6 +178,9 @@ export default function SzkoleniaScreen() {
     ? trainings.filter((t) => t.category === 'Procedury' || t.category === 'Obsługa')
     : trainings;
 
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width >= 768;
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header */}
@@ -194,7 +197,7 @@ export default function SzkoleniaScreen() {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, isDesktop && styles.scrollContentDesktop]}>
         {/* Progress card */}
         <View style={styles.progressCard}>
           <Text style={styles.progressCardTitle}>Twoje postępy</Text>
@@ -294,6 +297,8 @@ export default function SzkoleniaScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
+  scrollContent: { paddingBottom: 40 },
+  scrollContentDesktop: { maxWidth: 700, alignSelf: 'center' as const, width: '100%', paddingHorizontal: 32 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
