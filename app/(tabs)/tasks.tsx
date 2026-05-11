@@ -324,7 +324,12 @@ export default function TasksScreen() {
         )}
 
         {/* Tab filter */}
-        <View style={styles.tabBar}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.tabBarWrap}
+          contentContainerStyle={styles.tabBar}
+        >
           {TABS.map((tab) => (
             <TouchableOpacity
               key={tab.key}
@@ -332,12 +337,12 @@ export default function TasksScreen() {
               onPress={() => setActiveTab(tab.key)}
               activeOpacity={0.7}
             >
-              <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>
+              <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]} numberOfLines={1}>
                 {tab.label}
               </Text>
             </TouchableOpacity>
           ))}
-        </View>
+        </ScrollView>
 
         {/* Tasks */}
         <View style={styles.body}>
@@ -637,20 +642,24 @@ const styles = StyleSheet.create({
   statLabel: { flex: 1, ...theme.typography.caption, color: theme.colors.textSecondary, lineHeight: 14 },
   statNum: { fontSize: 22, fontWeight: '800', color: theme.colors.text },
 
+  tabBarWrap: {
+    marginHorizontal: 16,
+    marginTop: 14,
+  },
   tabBar: {
     flexDirection: 'row',
     backgroundColor: theme.colors.card,
-    marginHorizontal: 16,
-    marginTop: 14,
     borderRadius: theme.borderRadius.full,
     padding: 4,
     ...theme.shadows.card,
+    gap: 2,
   },
   tab: {
-    flex: 1,
     paddingVertical: 9,
+    paddingHorizontal: 16,
     borderRadius: theme.borderRadius.full,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   tabActive: { backgroundColor: theme.colors.primary },
   tabText: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary },

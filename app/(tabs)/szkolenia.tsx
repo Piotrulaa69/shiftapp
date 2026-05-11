@@ -191,9 +191,6 @@ export default function SzkoleniaScreen() {
             <Ionicons name="star" size={13} color={theme.colors.yellow} />
             <Text style={styles.xpText}>1250</Text>
           </View>
-          <TouchableOpacity>
-            <Ionicons name="notifications-outline" size={24} color={theme.colors.text} />
-          </TouchableOpacity>
         </View>
       </View>
 
