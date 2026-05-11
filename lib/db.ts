@@ -353,6 +353,18 @@ export async function getClockIns(restaurantId: string, date?: string): Promise<
 
 // ─── Availability ────────────────────────────────────────────────────────────
 
+export async function getAvailabilityAll(restaurantId: string, month: string): Promise<DbAvailability[]> {
+  const { data, error } = await supabase
+    .from('availability')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .gte('day', month + '-01')
+    .lte('day', month + '-31')
+    .order('day');
+  if (error) { console.error('getAvailabilityAll', error); return []; }
+  return data as DbAvailability[];
+}
+
 export async function getAvailability(restaurantId: string, employeeId: string, month: string): Promise<DbAvailability[]> {
   const startDate = month + '-01';
   const endDate = month + '-31';

@@ -1,71 +1,118 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
-import { getAvailability, setAvailability } from '../lib/db';
-import type { DbAvailability } from '../lib/supabase';
+import { getAvailability, getAvailabilityAll, getEmployees, setAvailability } from '../lib/db';
+import type { DbAvailability, DbProfile } from '../lib/supabase';
 import { theme } from '../styles/theme';
 
 const DAY_NAMES = ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'So', 'Nd'];
 const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
 
-const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
-  available: { bg: '#E8F8ED', text: '#22C55E', label: 'Dostępny' },
-  unavailable: { bg: '#F3F4F6', text: '#6B7280', label: 'Niedostępny' },
-  partial: { bg: '#FFF4E5', text: '#F97316', label: 'Częściowo' },
+const STATUS_COLORS: Record<string, { bg: string; border: string; text: string; label: string; icon: string }> = {
+  available:   { bg: '#E8F8ED', border: '#22C55E', text: '#22C55E', label: 'Dostępny',     icon: 'checkmark-circle' },
+  partial:     { bg: '#FFF4E5', border: '#F97316', text: '#F97316', label: 'Częściowo',    icon: 'time' },
+  unavailable: { bg: '#FFF0EF', border: '#EF4444', text: '#EF4444', label: 'Niedostępny', icon: 'close-circle' },
+  none:        { bg: theme.colors.card, border: theme.colors.border, text: theme.colors.textMuted, label: 'Nie zaznaczono', icon: 'ellipse-outline' },
 };
+
+type AvailStatus = 'available' | 'partial' | 'unavailable' | 'none';
+const STATUS_CYCLE: AvailStatus[] = ['available', 'partial', 'unavailable', 'none'];
+
+const fmt2 = (n: number) => String(n).padStart(2, '0');
 
 export default function AvailabilityScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isOwner, isManager } = useAuth();
+  const canManage = isOwner || isManager;
   const rid = user?.restaurantId ?? '';
+  const uid = user?.id ?? '';
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
 
   const [currentMonth, setCurrentMonth] = useState(() => {
     const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    return `${d.getFullYear()}-${fmt2(d.getMonth() + 1)}`;
   });
+  const [year, month] = currentMonth.split('-').map(Number);
+
+  // Employees & selected employee
+  const [employees, setEmployees] = useState<DbProfile[]>([]);
+  const [selEmpId, setSelEmpId] = useState(uid);
+
+  // Availability data
   const [data, setData] = useState<DbAvailability[]>([]);
+  const [allData, setAllData] = useState<DbAvailability[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [changes, setChanges] = useState<Record<string, 'available' | 'unavailable' | 'partial'>>({});
 
-  const [year, month] = currentMonth.split('-').map(Number);
+  // Pending changes: day -> status
+  const [changes, setChanges] = useState<Record<string, AvailStatus>>({});
+
+  // Slot modal for 'partial'
+  const [slotModal, setSlotModal] = useState<{ day: string } | null>(null);
+  const [slot1Start, setSlot1Start] = useState('');
+  const [slot1End, setSlot1End] = useState('');
+
+  // View mode
+  const [viewMode, setViewMode] = useState<'calendar' | 'team'>('calendar');
 
   const loadData = useCallback(async () => {
     if (!rid || !user) return;
     setLoading(true);
-    const avail = await getAvailability(rid, user.id, currentMonth);
+    const empId = canManage ? selEmpId : uid;
+    const [avail, emps, allAvail] = await Promise.all([
+      getAvailability(rid, empId, currentMonth),
+      canManage ? getEmployees(rid) : Promise.resolve([]),
+      canManage ? getAvailabilityAll(rid, currentMonth) : Promise.resolve([]),
+    ]);
     setData(avail);
+    if (canManage) { setEmployees(emps); setAllData(allAvail); }
     setChanges({});
     setLoading(false);
-  }, [rid, user, currentMonth]);
+  }, [rid, user, currentMonth, selEmpId]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
   const daysInMonth = new Date(year, month, 0).getDate();
-  const firstDayOfWeek = (new Date(year, month - 1, 1).getDay() + 6) % 7; // Mon=0
+  const firstDayOfWeek = (new Date(year, month - 1, 1).getDay() + 6) % 7;
 
-  const getStatus = (day: string): 'available' | 'unavailable' | 'partial' => {
-    if (changes[day]) return changes[day];
-    const found = data.find((d) => d.day === day);
-    return found?.status ?? 'available';
+  const getStatus = (day: string, empId?: string): AvailStatus => {
+    const src = empId ? allData : data;
+    const found = src.find((d) => d.day === day && (empId ? d.employee_id === empId : true));
+    if (!empId && changes[day]) return changes[day];
+    if (!found) return 'none';
+    return found.status as AvailStatus;
   };
 
-  const toggleDay = (day: string) => {
-    const current = getStatus(day);
-    const next = current === 'available' ? 'unavailable' : current === 'unavailable' ? 'partial' : 'available';
-    setChanges((prev) => ({ ...prev, [day]: next }));
+  const toggleDay = (dayStr: string) => {
+    const current = getStatus(dayStr);
+    const idx = STATUS_CYCLE.indexOf(current);
+    const next = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length];
+    if (next === 'partial') {
+      // open slot modal
+      const found = data.find((d) => d.day === dayStr);
+      setSlot1Start(found?.slot1_start ?? '08:00');
+      setSlot1End(found?.slot1_end ?? '16:00');
+      setSlotModal({ day: dayStr });
+    }
+    setChanges((prev) => ({ ...prev, [dayStr]: next }));
+  };
+
+  const savePartialSlots = () => {
+    if (!slotModal) return;
+    setSlotModal(null);
   };
 
   const handleSave = async () => {
     if (!user) return;
     setSaving(true);
+    const empId = canManage ? selEmpId : uid;
     for (const [day, status] of Object.entries(changes)) {
-      await setAvailability(rid, user.id, day, status);
+      const isPartial = status === 'partial';
+      await setAvailability(rid, empId, day, status === 'none' ? 'unavailable' : status, isPartial ? { slot1_start: slot1Start || undefined, slot1_end: slot1End || undefined } : undefined);
     }
     setSaving(false);
     loadData();
@@ -73,11 +120,11 @@ export default function AvailabilityScreen() {
 
   const prevMonth = () => {
     const d = new Date(year, month - 2, 1);
-    setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    setCurrentMonth(`${d.getFullYear()}-${fmt2(d.getMonth() + 1)}`);
   };
   const nextMonth = () => {
     const d = new Date(year, month, 1);
-    setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    setCurrentMonth(`${d.getFullYear()}-${fmt2(d.getMonth() + 1)}`);
   };
 
   const cells: (number | null)[] = [];
@@ -85,24 +132,71 @@ export default function AvailabilityScreen() {
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
   while (cells.length % 7 !== 0) cells.push(null);
 
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${fmt2(today.getMonth() + 1)}-${fmt2(today.getDate())}`;
+
+  const selectedEmp = employees.find((e) => e.id === selEmpId);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}><Ionicons name="arrow-back" size={22} color={theme.colors.text} /></TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Dyspozycyjność</Text>
         <View style={{ width: 32 }} />
       </View>
+
+      {/* Manager view toggle */}
+      {canManage && (
+        <View style={styles.modeRow}>
+          {(['calendar', 'team'] as const).map((m) => (
+            <TouchableOpacity key={m} style={[styles.modeBtn, viewMode === m && styles.modeBtnActive]} onPress={() => setViewMode(m)}>
+              <Ionicons name={m === 'calendar' ? 'calendar-outline' : 'people-outline'} size={14} color={viewMode === m ? theme.colors.primary : theme.colors.textSecondary} />
+              <Text style={[styles.modeBtnText, viewMode === m && styles.modeBtnTextActive]}>
+                {m === 'calendar' ? 'Edycja' : 'Zespół'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Employee picker for managers (calendar mode) */}
+      {canManage && viewMode === 'calendar' && employees.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.empScroll}>
+          {employees.map((e) => {
+            const active = selEmpId === e.id;
+            return (
+              <TouchableOpacity key={e.id} style={[styles.empChip, active && styles.empChipActive]} onPress={() => setSelEmpId(e.id)} activeOpacity={0.75}>
+                <View style={[styles.empAvatar, { backgroundColor: active ? theme.colors.primary : e.avatar_color }]}>
+                  <Text style={styles.empInitials}>{(e.first_name[0] + e.last_name[0]).toUpperCase()}</Text>
+                </View>
+                <View>
+                  <Text style={[styles.empName, active && { color: theme.colors.primary }]}>{e.first_name}</Text>
+                  <Text style={styles.empJob}>{e.job_title}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
+
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]} style={isDesktop ? { width: '100%' } : undefined}>
+
         {/* Month nav */}
         <View style={styles.monthNav}>
-          <TouchableOpacity onPress={prevMonth}><Ionicons name="chevron-back" size={22} color={theme.colors.primary} /></TouchableOpacity>
+          <TouchableOpacity onPress={prevMonth} style={styles.monthArrow}>
+            <Ionicons name="chevron-back" size={20} color={theme.colors.primary} />
+          </TouchableOpacity>
           <Text style={styles.monthLabel}>{MONTHS[month - 1]} {year}</Text>
-          <TouchableOpacity onPress={nextMonth}><Ionicons name="chevron-forward" size={22} color={theme.colors.primary} /></TouchableOpacity>
+          <TouchableOpacity onPress={nextMonth} style={styles.monthArrow}>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.primary} />
+          </TouchableOpacity>
         </View>
 
         {/* Legend */}
         <View style={styles.legend}>
-          {Object.entries(STATUS_COLORS).map(([key, val]) => (
+          {Object.entries(STATUS_COLORS).filter(([k]) => k !== 'none').map(([key, val]) => (
             <View key={key} style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: val.text }]} />
               <Text style={styles.legendText}>{val.label}</Text>
@@ -110,39 +204,133 @@ export default function AvailabilityScreen() {
           ))}
         </View>
 
-        {loading ? <ActivityIndicator style={{ marginTop: 40 }} size="large" color={theme.colors.primary} /> : (
+        {loading ? (
+          <ActivityIndicator style={{ marginTop: 40 }} size="large" color={theme.colors.primary} />
+        ) : viewMode === 'team' && canManage ? (
+          /* ── Team overview table ── */
+          <View>
+            {/* Header row */}
+            <View style={styles.teamHeaderRow}>
+              <View style={styles.teamNameCol} />
+              {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
+                const dayStr = `${year}-${fmt2(month)}-${fmt2(d)}`;
+                const isToday = dayStr === todayStr;
+                return (
+                  <View key={d} style={[styles.teamDayCol, isToday && styles.teamDayColToday]}>
+                    <Text style={[styles.teamDayNum, isToday && { color: theme.colors.primary }]}>{d}</Text>
+                  </View>
+                );
+              })}
+            </View>
+            {/* Employee rows */}
+            {employees.map((emp) => (
+              <View key={emp.id} style={styles.teamRow}>
+                <View style={styles.teamNameCol}>
+                  <View style={[styles.empAvatarSm, { backgroundColor: emp.avatar_color }]}>
+                    <Text style={styles.empInitialsSm}>{emp.first_name[0]}</Text>
+                  </View>
+                  <Text style={styles.teamEmpName} numberOfLines={1}>{emp.first_name}</Text>
+                </View>
+                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
+                  const dayStr = `${year}-${fmt2(month)}-${fmt2(d)}`;
+                  const st = getStatus(dayStr, emp.id);
+                  const c = STATUS_COLORS[st];
+                  return (
+                    <View key={d} style={[styles.teamDayCol, { backgroundColor: c.bg }]}>
+                      <View style={[styles.teamDot, { backgroundColor: c.text }]} />
+                    </View>
+                  );
+                })}
+              </View>
+            ))}
+            {employees.length === 0 && (
+              <Text style={{ color: theme.colors.textMuted, textAlign: 'center', marginTop: 30 }}>Brak pracowników</Text>
+            )}
+          </View>
+        ) : (
+          /* ── Calendar edit mode ── */
           <>
-            {/* Day headers */}
+            {canManage && selectedEmp && (
+              <View style={styles.editingBanner}>
+                <Ionicons name="person-circle-outline" size={16} color={theme.colors.primary} />
+                <Text style={styles.editingBannerText}>Edytujesz: {selectedEmp.first_name} {selectedEmp.last_name}</Text>
+              </View>
+            )}
             <View style={styles.weekRow}>
               {DAY_NAMES.map((d) => <Text key={d} style={styles.dayHeader}>{d}</Text>)}
             </View>
 
-            {/* Calendar grid */}
             {Array.from({ length: cells.length / 7 }, (_, week) => (
               <View key={week} style={styles.weekRow}>
                 {cells.slice(week * 7, week * 7 + 7).map((day, idx) => {
                   if (day === null) return <View key={idx} style={styles.dayCell} />;
-                  const dayStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                  const dayStr = `${year}-${fmt2(month)}-${fmt2(day)}`;
                   const st = getStatus(dayStr);
                   const colors = STATUS_COLORS[st];
+                  const isToday = dayStr === todayStr;
                   return (
-                    <TouchableOpacity key={idx} style={[styles.dayCell, { backgroundColor: colors.bg }]} onPress={() => toggleDay(dayStr)} activeOpacity={0.7}>
-                      <Text style={[styles.dayNum, { color: colors.text }]}>{day}</Text>
+                    <TouchableOpacity
+                      key={idx}
+                      style={[styles.dayCell, { backgroundColor: colors.bg, borderWidth: isToday ? 2 : 1, borderColor: isToday ? theme.colors.primary : colors.border }]}
+                      onPress={() => toggleDay(dayStr)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.dayNum, { color: colors.text }, isToday && { fontWeight: '800' }]}>{day}</Text>
+                      {st !== 'none' && (
+                        <View style={[styles.statusDot, { backgroundColor: colors.text }]} />
+                      )}
                     </TouchableOpacity>
                   );
                 })}
               </View>
             ))}
 
-            {/* Save button */}
+            <View style={styles.tapHint}>
+              <Ionicons name="information-circle-outline" size={13} color={theme.colors.textMuted} />
+              <Text style={styles.tapHintText}>Klikaj w dzień, aby cyklicznie zmieniać status</Text>
+            </View>
+
             {Object.keys(changes).length > 0 && (
               <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.85} disabled={saving}>
-                {saving ? <ActivityIndicator color={theme.colors.white} /> : <Text style={styles.saveBtnText}>Zapisz ({Object.keys(changes).length} zmian)</Text>}
+                {saving
+                  ? <ActivityIndicator color={theme.colors.white} />
+                  : <Text style={styles.saveBtnText}>Zapisz zmiany ({Object.keys(changes).length})</Text>
+                }
               </TouchableOpacity>
             )}
           </>
         )}
       </ScrollView>
+
+      {/* Slot modal for partial */}
+      <Modal visible={!!slotModal} animationType="fade" transparent onRequestClose={() => setSlotModal(null)}>
+        <View style={mStyles.overlay}>
+          <View style={mStyles.sheet}>
+            <View style={mStyles.mHeader}>
+              <Text style={mStyles.mTitle}>Dostępność częściowa</Text>
+              <TouchableOpacity onPress={() => setSlotModal(null)}>
+                <Ionicons name="close" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+            <View style={{ padding: 20, gap: 16 }}>
+              <Text style={{ fontSize: 13, color: theme.colors.textSecondary }}>{slotModal?.day}</Text>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={mStyles.label}>OD</Text>
+                  <TextInput style={mStyles.input} value={slot1Start} onChangeText={setSlot1Start} placeholder="08:00" placeholderTextColor={theme.colors.textMuted} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={mStyles.label}>DO</Text>
+                  <TextInput style={mStyles.input} value={slot1End} onChangeText={setSlot1End} placeholder="16:00" placeholderTextColor={theme.colors.textMuted} />
+                </View>
+              </View>
+              <TouchableOpacity style={mStyles.saveBtn} onPress={savePartialSlots}>
+                <Text style={mStyles.saveBtnText}>Zatwierdź godziny</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -152,18 +340,58 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
   backBtn: { padding: 4 },
   headerTitle: { fontSize: 17, fontWeight: '700', color: theme.colors.text },
-  content: { padding: 16 },
+  modeRow: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 4, gap: 8 },
+  modeBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
+  modeBtnActive: { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primary },
+  modeBtnText: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary },
+  modeBtnTextActive: { color: theme.colors.primary },
+  empScroll: { paddingHorizontal: 16, gap: 8, paddingVertical: 8 },
+  empChip: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: theme.colors.card, borderRadius: 10, padding: 8, borderWidth: 1.5, borderColor: theme.colors.border },
+  empChipActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primaryLight },
+  empAvatar: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  empInitials: { fontSize: 11, fontWeight: '700', color: theme.colors.white },
+  empName: { fontSize: 12, fontWeight: '600', color: theme.colors.text },
+  empJob: { fontSize: 10, color: theme.colors.textMuted },
+  content: { padding: 16, paddingBottom: 40 },
   contentDesktop: { maxWidth: 720, alignSelf: 'center' as const, width: '100%', paddingHorizontal: 32 },
-  monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  monthLabel: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
-  legend: { flexDirection: 'row', gap: 16, marginBottom: 16 },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendDot: { width: 10, height: 10, borderRadius: 5 },
-  legendText: { fontSize: 12, color: theme.colors.textSecondary },
+  monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.lg, padding: 12 },
+  monthArrow: { padding: 6 },
+  monthLabel: { fontSize: 17, fontWeight: '700', color: theme.colors.text },
+  legend: { flexDirection: 'row', gap: 14, marginBottom: 14, flexWrap: 'wrap' },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendDot: { width: 9, height: 9, borderRadius: 5 },
+  legendText: { fontSize: 11, color: theme.colors.textSecondary },
+  editingBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.colors.primaryLight, borderRadius: 8, padding: 10, marginBottom: 12 },
+  editingBannerText: { fontSize: 13, fontWeight: '600', color: theme.colors.primary },
   weekRow: { flexDirection: 'row', gap: 4, marginBottom: 4 },
-  dayHeader: { flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '700', color: theme.colors.textMuted, paddingVertical: 6 },
-  dayCell: { flex: 1, aspectRatio: 1, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  dayNum: { fontSize: 14, fontWeight: '600' },
-  saveBtn: { backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.md, paddingVertical: 14, alignItems: 'center', marginTop: 20 },
+  dayHeader: { flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '700', color: theme.colors.textMuted, paddingVertical: 4 },
+  dayCell: { flex: 1, aspectRatio: 1, borderRadius: 8, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  dayNum: { fontSize: 13, fontWeight: '600' },
+  statusDot: { width: 4, height: 4, borderRadius: 2 },
+  tapHint: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 12, marginBottom: 4 },
+  tapHintText: { fontSize: 11, color: theme.colors.textMuted },
+  saveBtn: { backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.md, paddingVertical: 14, alignItems: 'center', marginTop: 16 },
   saveBtnText: { color: theme.colors.white, fontSize: 15, fontWeight: '700' },
+  // Team view
+  teamHeaderRow: { flexDirection: 'row', marginBottom: 4 },
+  teamRow: { flexDirection: 'row', marginBottom: 3, alignItems: 'center' },
+  teamNameCol: { width: 60, flexDirection: 'row', alignItems: 'center', gap: 4, paddingRight: 4 },
+  teamDayCol: { flex: 1, height: 22, alignItems: 'center', justifyContent: 'center', borderRadius: 3, marginHorizontal: 1 },
+  teamDayColToday: { borderWidth: 1.5, borderColor: theme.colors.primary },
+  teamDayNum: { fontSize: 9, fontWeight: '700', color: theme.colors.textMuted },
+  teamDot: { width: 6, height: 6, borderRadius: 3 },
+  teamEmpName: { fontSize: 10, fontWeight: '600', color: theme.colors.text, flex: 1 },
+  empAvatarSm: { width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  empInitialsSm: { fontSize: 8, fontWeight: '700', color: theme.colors.white },
+});
+
+const mStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  sheet: { backgroundColor: theme.colors.card, borderRadius: 20, width: '100%', maxWidth: 400, overflow: 'hidden' },
+  mHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  mTitle: { fontSize: 17, fontWeight: '700', color: theme.colors.text },
+  label: { fontSize: 11, fontWeight: '700', color: theme.colors.textMuted, marginBottom: 6, letterSpacing: 0.5 },
+  input: { backgroundColor: theme.colors.background, borderRadius: theme.borderRadius.md, borderWidth: 1, borderColor: theme.colors.border, padding: 12, fontSize: 14, color: theme.colors.text },
+  saveBtn: { backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.md, paddingVertical: 13, alignItems: 'center' },
+  saveBtnText: { color: theme.colors.white, fontSize: 14, fontWeight: '700' },
 });
