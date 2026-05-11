@@ -195,6 +195,7 @@ export default function AdminScreen() {
       <ScrollView
         contentContainerStyle={[s.content, isDesktop && s.contentDesktop]}
         showsVerticalScrollIndicator={false}
+        style={isDesktop ? { width: '100%' } : undefined}
       >
         {/* ─── TEAM TAB ─── */}
         {tab === 'team' && (
@@ -654,7 +655,7 @@ const s = StyleSheet.create({
   tabTextActive: { color: theme.colors.primary },
 
   content: { padding: 16, gap: 14, paddingBottom: 40 },
-  contentDesktop: { maxWidth: 700, alignSelf: 'center', width: '100%', paddingHorizontal: 32 },
+  contentDesktop: { maxWidth: 720, alignSelf: 'center', width: '100%', paddingHorizontal: 32 },
 
   statsRow: { flexDirection: 'row', gap: 10 },
   statCard: {
