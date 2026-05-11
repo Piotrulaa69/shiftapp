@@ -27,25 +27,35 @@ const PRIORITY_CONFIG: Record<TaskPriority, { label: string; color: string; bg: 
 };
 
 const TABS_EMPLOYEE: { key: string; label: string }[] = [
-  { key: 'all', label: 'Start zmiany' },
-  { key: 'w_trakcie', label: 'W trakcie' },
+  { key: 'all', label: 'Zadania' },
   { key: 'zamkniete', label: 'Zamknięte' },
 ];
 
 const TAB_APPROVAL = { key: 'czeka_na_zatwierdzenie', label: 'Do zatwierdzenia' };
 
-function TaskCard({ task, onToggle, onDelete, onDetail }: { task: DbTask; onToggle: () => void; onDelete?: () => void; onDetail?: () => void }) {
+function TaskCard({ task, onToggle, onDelete, onDetail, onStart, onFinish }: {
+  task: DbTask;
+  onToggle: () => void;
+  onDelete?: () => void;
+  onDetail?: () => void;
+  onStart?: () => void;
+  onFinish?: () => void;
+}) {
   const p = PRIORITY_CONFIG[task.priority as TaskPriority] ?? PRIORITY_CONFIG.normalny;
   const router = useRouter();
   const confirmCfg = task.confirmation_type ? CONFIRM_CONFIG[task.confirmation_type as ConfirmationType] : null;
+  const inProgress = task.status === 'w_trakcie';
 
   return (
-    <TouchableOpacity style={tStyles.card} activeOpacity={0.85} onPress={onDetail ?? onToggle}>
-      <View style={[tStyles.priorityAccent, { backgroundColor: p.color }]} />
+    <TouchableOpacity style={[tStyles.card, inProgress && tStyles.cardInProgress]} activeOpacity={0.85} onPress={onDetail ?? onToggle}>
+      <View style={[tStyles.priorityAccent, { backgroundColor: inProgress ? theme.colors.primary : p.color }]} />
       <View style={tStyles.body}>
         <View style={tStyles.topRow}>
-          <View style={[tStyles.priorityBadge, { backgroundColor: p.bg }]}>
-            <Text style={[tStyles.priorityText, { color: p.color }]}>{p.label}</Text>
+          <View style={[tStyles.priorityBadge, { backgroundColor: inProgress ? theme.colors.primaryLight : p.bg }]}>
+            {inProgress
+              ? <Text style={[tStyles.priorityText, { color: theme.colors.primary }]}>W TRAKCIE</Text>
+              : <Text style={[tStyles.priorityText, { color: p.color }]}>{p.label}</Text>
+            }
           </View>
           <View style={tStyles.timeRow}>
             <Ionicons name="time-outline" size={12} color={theme.colors.textMuted} />
@@ -59,17 +69,34 @@ function TaskCard({ task, onToggle, onDelete, onDetail }: { task: DbTask; onTogg
             <Ionicons name="timer-outline" size={12} color={theme.colors.textMuted} />
             <Text style={tStyles.durationText}>{task.duration_min} min</Text>
           </View>
-          {task.status === 'w_trakcie' && (
-            <Text style={[tStyles.statusText, { color: theme.colors.primary }]}>• W toku</Text>
+          {!task.completed && onStart && !inProgress && (
+            <TouchableOpacity
+              style={[tStyles.actionBtn, { backgroundColor: theme.colors.primaryLight }]}
+              onPress={(e) => { e.stopPropagation?.(); onStart(); }}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="play" size={11} color={theme.colors.primary} />
+              <Text style={[tStyles.actionBtnText, { color: theme.colors.primary }]}>Rozpocznij</Text>
+            </TouchableOpacity>
+          )}
+          {!task.completed && onFinish && inProgress && (
+            <TouchableOpacity
+              style={[tStyles.actionBtn, { backgroundColor: theme.colors.greenLight }]}
+              onPress={(e) => { e.stopPropagation?.(); onFinish(); }}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="checkmark" size={11} color={theme.colors.green} />
+              <Text style={[tStyles.actionBtnText, { color: theme.colors.green }]}>Zakończ</Text>
+            </TouchableOpacity>
           )}
           {confirmCfg && !task.completed && (
             <TouchableOpacity
-              style={[tStyles.confirmBtn, { backgroundColor: confirmCfg.bg }]}
+              style={[tStyles.actionBtn, { backgroundColor: confirmCfg.bg }]}
               onPress={(e) => { e.stopPropagation?.(); router.push({ pathname: confirmCfg.route as any, params: { taskId: task.id } }); }}
               activeOpacity={0.75}
             >
-              <Ionicons name={confirmCfg.icon as any} size={13} color={confirmCfg.color} />
-              <Text style={[tStyles.confirmBtnText, { color: confirmCfg.color }]}>Potwierdź</Text>
+              <Ionicons name={confirmCfg.icon as any} size={11} color={confirmCfg.color} />
+              <Text style={[tStyles.actionBtnText, { color: confirmCfg.color }]}>Potwierdź</Text>
             </TouchableOpacity>
           )}
           {onDetail && (
@@ -114,6 +141,10 @@ const tStyles = StyleSheet.create({
   duration: { flexDirection: 'row', alignItems: 'center', gap: 3, flex: 1 },
   durationText: { ...theme.typography.caption, color: theme.colors.textMuted },
   statusText: { fontSize: 12, fontWeight: '600' },
+  cardInProgress: {
+    borderWidth: 1.5,
+    borderColor: theme.colors.primary,
+  },
   checkbox: {
     width: 24,
     height: 24,
@@ -124,12 +155,12 @@ const tStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkboxDone: { backgroundColor: theme.colors.green, borderColor: theme.colors.green },
-  confirmBtn: {
+  actionBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     borderRadius: theme.borderRadius.full,
     paddingHorizontal: 10, paddingVertical: 4,
   },
-  confirmBtnText: { fontSize: 12, fontWeight: '700' },
+  actionBtnText: { fontSize: 12, fontWeight: '700' },
 });
 
 const PRIORITIES: Array<'wysoki' | 'normalny' | 'niski'> = ['wysoki', 'normalny', 'niski'];
@@ -182,6 +213,16 @@ export default function TasksScreen() {
     const newCompleted = !task.completed;
     setTasks((prev) => prev.map((t) => t.id === id ? { ...t, completed: newCompleted, status: newCompleted ? 'zamkniete' : 'do_zrobienia' } : t));
     await dbToggleTask(id, newCompleted);
+  };
+
+  const startTask = async (id: string) => {
+    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'w_trakcie' as TaskStatus } : t));
+    await supabase.from('tasks').update({ status: 'w_trakcie' }).eq('id', id);
+  };
+
+  const finishTask = async (id: string) => {
+    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'zamkniete' as TaskStatus, completed: true } : t));
+    await dbToggleTask(id, true);
   };
 
   const deleteTask = async (id: string) => {
@@ -369,28 +410,28 @@ export default function TasksScreen() {
             </View>
           )}
 
-          {doZrobienia.length > 0 && (
+          {wTrakcie.length > 0 && (
             <>
               <View style={styles.sectionRow}>
+                <View style={[styles.sectionDot, { backgroundColor: theme.colors.primary }]} />
+                <Text style={styles.sectionLabel}>W trakcie</Text>
+                <Text style={styles.sectionCount}>{wTrakcie.length}</Text>
+              </View>
+              {wTrakcie.map((t) => (
+                <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} onFinish={() => finishTask(t.id)} />
+              ))}
+            </>
+          )}
+
+          {doZrobienia.length > 0 && (
+            <>
+              <View style={[styles.sectionRow, wTrakcie.length > 0 ? { marginTop: 8 } : {}]}>
                 <View style={[styles.sectionDot, { backgroundColor: theme.colors.textMuted }]} />
                 <Text style={styles.sectionLabel}>Do zrobienia</Text>
                 <Text style={styles.sectionCount}>{doZrobienia.length}</Text>
               </View>
               {doZrobienia.map((t) => (
-                <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} />
-              ))}
-            </>
-          )}
-
-          {wTrakcie.length > 0 && activeTab === 'all' && (
-            <>
-              <View style={[styles.sectionRow, { marginTop: 8 }]}>
-                <View style={[styles.sectionDot, { backgroundColor: theme.colors.primary }]} />
-                <Text style={styles.sectionLabel}>W toku</Text>
-                <Text style={styles.sectionCount}>{wTrakcie.length}</Text>
-              </View>
-              {wTrakcie.map((t) => (
-                <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} />
+                <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} onStart={() => startTask(t.id)} />
               ))}
             </>
           )}
