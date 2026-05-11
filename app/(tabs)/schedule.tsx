@@ -759,10 +759,11 @@ export default function ScheduleScreen() {
         <View style={{ flex: 1 }}>
           {/* Nav row */}
           <View style={styles.monthNavRow}>
-            <TouchableOpacity style={styles.todayBtn} onPress={() => setSelectedDate(today)} activeOpacity={0.8}>
-              <Text style={styles.todayBtnText}>Dziś</Text>
-            </TouchableOpacity>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Text style={styles.monthLabel}>{formatMonthLabel(curYear, curMonth)}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <TouchableOpacity style={styles.todayBtn} onPress={() => setSelectedDate(today)} activeOpacity={0.8}>
+                <Text style={styles.todayBtnText}>Dziś</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={styles.navBtn} onPress={() => navigateMonth(-1)} activeOpacity={0.7}>
                 <Ionicons name="chevron-back" size={18} color={theme.colors.text} />
               </TouchableOpacity>
@@ -770,7 +771,6 @@ export default function ScheduleScreen() {
                 <Ionicons name="chevron-forward" size={18} color={theme.colors.text} />
               </TouchableOpacity>
             </View>
-            <Text style={styles.monthLabel}>{formatMonthLabel(curYear, curMonth)}</Text>
           </View>
 
           {/* Day headers */}
@@ -780,14 +780,14 @@ export default function ScheduleScreen() {
             ))}
           </View>
 
-          {/* Grid */}
-          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+          {/* Grid – full height, no scroll, equal rows */}
+          <View style={{ flex: 1 }}>
             {monthGrid.map((week, wi) => (
               <View key={wi} style={cal.gridRow}>
                 {week.map((d, di) => renderMonthCell(d, `${wi}-${di}`))}
               </View>
             ))}
-          </ScrollView>
+          </View>
         </View>
       )}
 
@@ -1184,23 +1184,23 @@ const wv = StyleSheet.create({
 /* ── Month grid styles ── */
 const cal = StyleSheet.create({
   headerRow: { flexDirection: 'row', backgroundColor: theme.colors.card, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
-  headerCell: { flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '700', color: theme.colors.textMuted, paddingVertical: 8 },
+  headerCell: { flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '700', color: theme.colors.textMuted, paddingVertical: 9 },
   headerCellWeekend: { color: theme.colors.error },
-  gridRow: { flexDirection: 'row', flex: 1 },
-  emptyCell: { flex: 1, borderWidth: 0.5, borderColor: theme.colors.border, backgroundColor: '#FAFAF8' },
+  gridRow: { flex: 1, flexDirection: 'row' },
+  emptyCell: { flex: 1, borderRightWidth: 0.5, borderBottomWidth: 0.5, borderColor: theme.colors.border, backgroundColor: '#FAFAF8' },
   cell: {
     flex: 1,
-    minHeight: 100,
-    borderWidth: 0.5,
+    borderRightWidth: 0.5,
+    borderBottomWidth: 0.5,
     borderColor: theme.colors.border,
     padding: 5,
     overflow: 'hidden',
     backgroundColor: theme.colors.card,
   },
   cellSelected: { backgroundColor: theme.colors.primaryLight },
-  cellToday: { backgroundColor: '#F0F7FF' },
+  cellToday: { backgroundColor: '#EFF6FF' },
   cellDragOver: { backgroundColor: '#DBEAFE', borderColor: theme.colors.primary, borderWidth: 1.5 },
-  dayNumWrap: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', marginBottom: 3 },
+  dayNumWrap: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
   dayNumTodayWrap: { backgroundColor: theme.colors.primary },
   dayNum: { fontSize: 13, fontWeight: '700', color: theme.colors.text },
   dayNumOther: { color: theme.colors.textMuted, fontWeight: '400' },
@@ -1216,11 +1216,15 @@ const cal = StyleSheet.create({
   },
   eventDragging: { opacity: 0.4 },
   eventText: { fontSize: 10, color: '#FFF', fontWeight: '600' },
-  moreText: { fontSize: 10, color: theme.colors.primary, fontWeight: '700', marginTop: 2, paddingHorizontal: 3 },
+  moreText: { fontSize: 10, color: theme.colors.primary, fontWeight: '700', marginTop: 1, paddingHorizontal: 3 },
 });
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: theme.colors.background },
+  safe: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+    ...(Platform.OS === 'web' ? { height: '100vh' as any, overflow: 'hidden' as any } : {}),
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1275,8 +1279,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     backgroundColor: theme.colors.card,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,

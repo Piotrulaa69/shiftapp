@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>ShiftApp</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body, #root {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+      }
+      body {
+        background-color: #F5F4EF;
+      }
+      /* Make expo root fill screen */
+      [data-testid="router-slot"],
+      div[class*="ExpoRootViewContainer"],
+      div[class*="root"] {
+        height: 100% !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
