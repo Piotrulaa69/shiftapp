@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Redirect, Tabs, usePathname, useRouter } from 'expo-router';
-import React from 'react';
 import {
     ActivityIndicator,
     Image,
@@ -15,6 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
+import { useNotifications } from '../../context/NotificationsContext';
 import { theme } from '../../styles/theme';
 
 const TAB_CONFIG: Record<string, { label: string; icon: string }> = {
@@ -33,6 +33,53 @@ const NAV_ITEMS_BASE = [
 ];
 
 const NAV_ITEM_ADMIN = { key: 'admin', route: '/(tabs)/admin' as const };
+
+/* ─────────────── NOTIFICATION BELL ─────────────── */
+function NotificationBell() {
+  const router = useRouter();
+  const { unreadCount } = useNotifications();
+  return (
+    <TouchableOpacity
+      style={bellStyles.btn}
+      onPress={() => router.push('/notifications' as any)}
+      activeOpacity={0.7}
+    >
+      <Ionicons name="notifications-outline" size={20} color={theme.colors.textSecondary} />
+      {unreadCount > 0 && (
+        <View style={bellStyles.badge}>
+          <Text style={bellStyles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}
+
+const bellStyles = StyleSheet.create({
+  btn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: theme.colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 9,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: theme.colors.card,
+  },
+  badgeText: { fontSize: 9, fontWeight: '800', color: '#fff' },
+});
 
 /* ─────────────── DESKTOP SIDEBAR ─────────────── */
 function Sidebar() {
@@ -86,6 +133,7 @@ function Sidebar() {
             <Text style={sideStyles.userName} numberOfLines={1}>{user?.name}</Text>
             <Text style={sideStyles.userRole} numberOfLines={1}>{restaurant?.name ?? user?.jobTitle}</Text>
           </View>
+          <NotificationBell />
         </View>
         <TouchableOpacity style={sideStyles.logoutBtn} onPress={logout} activeOpacity={0.7}>
           <Ionicons name="log-out-outline" size={18} color={theme.colors.textMuted} />
@@ -172,6 +220,8 @@ function MobileTabBar({ state, navigation }: BottomTabBarProps) {
   const leftRoutes = visibleRoutes.slice(0, 2);
   const rightRoutes = visibleRoutes.slice(2);
 
+  const { unreadCount } = useNotifications();
+
   const renderTab = (route: (typeof state.routes)[0]) => {
     const cfg = TAB_CONFIG[route.name] ?? { label: route.name, icon: 'ellipse' };
     const focused = state.routes[state.index]?.name === route.name;
@@ -243,6 +293,19 @@ const tabStyles = StyleSheet.create({
   },
 });
 
+const topbarStyles = StyleSheet.create({
+  bar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: theme.colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    height: 52,
+  },
+});
+
 /* ─────────────── ROOT ─────────────── */
 export default function TabLayout() {
   const { isAuthenticated, isOwner, isManager, isLoading } = useAuth();
@@ -263,7 +326,13 @@ export default function TabLayout() {
     return (
       <View style={{ flex: 1, flexDirection: 'row', backgroundColor: theme.colors.background }}>
         <Sidebar />
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, flexDirection: 'column' }}>
+          {/* Desktop topbar with notification bell */}
+          <View style={topbarStyles.bar}>
+            <View style={{ flex: 1 }} />
+            <NotificationBell />
+          </View>
+          <View style={{ flex: 1 }}>
           <Tabs
             tabBar={() => null}
             screenOptions={{ headerShown: false }}
@@ -275,6 +344,7 @@ export default function TabLayout() {
             <Tabs.Screen name="admin" options={{ href: showAdmin ? undefined : null }} />
             <Tabs.Screen name="team" options={{ href: null }} />
           </Tabs>
+          </View>
         </View>
       </View>
     );

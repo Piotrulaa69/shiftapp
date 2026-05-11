@@ -1,11 +1,13 @@
 import { Stack } from 'expo-router';
 import { AlertProvider } from '../context/AlertContext';
 import { AuthProvider } from '../context/AuthContext';
+import { NotificationsProvider } from '../context/NotificationsContext';
 
 export default function RootLayout() {
   return (
     <AlertProvider>
       <AuthProvider>
+        <NotificationsProvider>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />
           <Stack.Screen name="login" />
@@ -29,6 +31,7 @@ export default function RootLayout() {
           <Stack.Screen name="task/confirm-description" />
           <Stack.Screen name="training/quiz" />
         </Stack>
+        </NotificationsProvider>
       </AuthProvider>
     </AlertProvider>
   );
