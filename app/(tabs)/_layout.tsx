@@ -216,7 +216,14 @@ const sideStyles = StyleSheet.create({
 function MobileTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const visibleRoutes = state.routes.filter((r) => r.name in TAB_CONFIG);
+  const { isOwner, isManager } = useAuth();
+  const isAdmin = isOwner || isManager;
+
+  // For admin: exclude 'admin' from regular tabs (it's in FAB), show 4 base tabs
+  // For employee: show 4 base tabs, FAB = shift-detail, admin tab hidden
+  const visibleRoutes = state.routes.filter((r) =>
+    r.name in TAB_CONFIG && !(isAdmin && r.name === 'admin')
+  );
   const leftRoutes = visibleRoutes.slice(0, 2);
   const rightRoutes = visibleRoutes.slice(2);
 
@@ -243,16 +250,29 @@ function MobileTabBar({ state, navigation }: BottomTabBarProps) {
     );
   };
 
+  const adminFocused = state.routes[state.index]?.name === 'admin';
+
   return (
     <View style={[tabStyles.container, { paddingBottom: insets.bottom || 8 }]}>
       {leftRoutes.map((r) => renderTab(r))}
-      <TouchableOpacity
-        style={tabStyles.fab}
-        activeOpacity={0.85}
-        onPress={() => router.push('/shift-detail' as any)}
-      >
-        <Ionicons name="finger-print" size={28} color={theme.colors.white} />
-      </TouchableOpacity>
+      {isAdmin ? (
+        <TouchableOpacity
+          style={[tabStyles.fab, adminFocused && tabStyles.fabActive]}
+          activeOpacity={0.85}
+          onPress={() => router.push('/(tabs)/admin' as any)}
+        >
+          <Ionicons name="settings" size={26} color={theme.colors.white} />
+          <Text style={tabStyles.fabLabel}>Zarządzanie</Text>
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity
+          style={tabStyles.fab}
+          activeOpacity={0.85}
+          onPress={() => router.push('/shift-detail' as any)}
+        >
+          <Ionicons name="finger-print" size={28} color={theme.colors.white} />
+        </TouchableOpacity>
+      )}
       {rightRoutes.map((r) => renderTab(r))}
     </View>
   );
@@ -290,6 +310,16 @@ const tabStyles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 12,
     ...theme.shadows.fab,
+  },
+  fabActive: {
+    backgroundColor: '#1a56db',
+  },
+  fabLabel: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: theme.colors.white,
+    marginTop: 2,
+    letterSpacing: 0.3,
   },
 });
 
