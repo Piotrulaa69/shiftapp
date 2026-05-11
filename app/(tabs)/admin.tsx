@@ -17,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileHeader from '../../components/MobileHeader';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
-import { createTraining, deleteTraining, generateInvitation, getEmployees, getInvitations, getTrainings, removeEmployee, updateTraining } from '../../lib/db';
+import { createTraining, deleteTraining, generateInvitation, getEmployees, getInvitations, getTrainings, removeEmployee, updateRestaurant, updateTraining } from '../../lib/db';
 import type { DbInvitation, DbProfile, DbTraining } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
@@ -25,7 +25,7 @@ const JOB_OPTIONS = ['Kelner', 'Kucharz', 'Barista', 'Lider zmiany', 'Hostessa',
 
 export default function AdminScreen() {
   const router = useRouter();
-  const { user, restaurant } = useAuth();
+  const { user, restaurant, refreshRestaurant } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
   const { showAlert, showConfirm } = useAlert();
@@ -38,6 +38,13 @@ export default function AdminScreen() {
   const [jobTitle, setJobTitle] = useState('Kelner');
   const [lastCode, setLastCode] = useState<string | null>(null);
   const [tab, setTab] = useState<'team' | 'invites' | 'settings' | 'tools' | 'trainings'>('team');
+
+  // Restaurant edit state
+  const [rName, setRName] = useState('');
+  const [rAddress, setRAddress] = useState('');
+  const [rPhone, setRPhone] = useState('');
+  const [rSaving, setRSaving] = useState(false);
+  const [rSaved, setRSaved] = useState(false);
 
   // Training modal state
   const EMPTY_TRAINING = { title: '', category: 'BHP', duration_min: '30', required: false, points: '50', material_url: '', material_type: null as 'pdf' | 'video' | null, assigned_role: '', deadline: '' };
@@ -53,6 +60,22 @@ export default function AdminScreen() {
   };
 
   useEffect(() => { refresh(); }, [rid]);
+
+  useEffect(() => {
+    if (restaurant) {
+      setRName(restaurant.name);
+      setRAddress(restaurant.address ?? '');
+      setRPhone(restaurant.phone ?? '');
+    }
+  }, [restaurant]);
+
+  const saveRestaurant = async () => {
+    if (!restaurant || !rName.trim()) return;
+    setRSaving(true);
+    const ok = await updateRestaurant(restaurant.id, { name: rName.trim(), address: rAddress.trim(), phone: rPhone.trim() });
+    if (ok) { await refreshRestaurant(); setRSaved(true); setTimeout(() => setRSaved(false), 2500); }
+    setRSaving(false);
+  };
 
   const generateInvite = async () => {
     if (!user) return;
@@ -371,18 +394,35 @@ export default function AdminScreen() {
           <>
             <View style={s.section}>
               <Text style={s.sectionTitle}>Dane restauracji</Text>
-              <View style={s.settingRow}>
-                <Text style={s.settingLabel}>Nazwa</Text>
-                <Text style={s.settingValue}>{restaurant?.name}</Text>
-              </View>
-              <View style={s.settingRow}>
-                <Text style={s.settingLabel}>Adres</Text>
-                <Text style={s.settingValue}>{restaurant?.address}</Text>
-              </View>
-              <View style={s.settingRow}>
-                <Text style={s.settingLabel}>Telefon</Text>
-                <Text style={s.settingValue}>{restaurant?.phone}</Text>
-              </View>
+
+              <Text style={s.mLabel}>Nazwa restauracji</Text>
+              <TextInput
+                style={s.mInput}
+                value={rName}
+                onChangeText={setRName}
+                placeholder="Nazwa restauracji"
+                placeholderTextColor={theme.colors.textMuted}
+              />
+
+              <Text style={s.mLabel}>Adres</Text>
+              <TextInput
+                style={s.mInput}
+                value={rAddress}
+                onChangeText={setRAddress}
+                placeholder="ul. Przykładowa 1, Warszawa"
+                placeholderTextColor={theme.colors.textMuted}
+              />
+
+              <Text style={s.mLabel}>Telefon</Text>
+              <TextInput
+                style={s.mInput}
+                value={rPhone}
+                onChangeText={setRPhone}
+                placeholder="+48 000 000 000"
+                placeholderTextColor={theme.colors.textMuted}
+                keyboardType="phone-pad"
+              />
+
               <View style={s.settingRow}>
                 <Text style={s.settingLabel}>Plan</Text>
                 <View style={[s.planBadge, restaurant?.plan === 'premium' && s.planPremium]}>
@@ -393,8 +433,29 @@ export default function AdminScreen() {
               </View>
               <View style={s.settingRow}>
                 <Text style={s.settingLabel}>Data utworzenia</Text>
-                <Text style={s.settingValue}>{restaurant?.createdAt?.slice(0,10)}</Text>
+                <Text style={s.settingValue}>{restaurant?.createdAt?.slice(0, 10)}</Text>
               </View>
+
+              <TouchableOpacity
+                style={[s.inviteBtn, { marginTop: 16 }, (!rName.trim() || rSaving) && { opacity: 0.6 }]}
+                onPress={saveRestaurant}
+                disabled={rSaving || !rName.trim()}
+                activeOpacity={0.85}
+              >
+                {rSaving ? (
+                  <Text style={s.inviteBtnText}>Zapisywanie...</Text>
+                ) : rSaved ? (
+                  <>
+                    <Ionicons name="checkmark-circle" size={18} color={theme.colors.white} />
+                    <Text style={s.inviteBtnText}>Zapisano!</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="save-outline" size={18} color={theme.colors.white} />
+                    <Text style={s.inviteBtnText}>Zapisz zmiany</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             </View>
 
             <View style={s.section}>
@@ -406,14 +467,6 @@ export default function AdminScreen() {
               <View style={s.settingRow}>
                 <Text style={s.settingLabel}>Aktywne zaproszenia</Text>
                 <Text style={s.settingValue}>{activeInvites.length}</Text>
-              </View>
-              <View style={s.settingRow}>
-                <Text style={s.settingLabel}>Zmiany w tym tygodniu</Text>
-                <Text style={s.settingValue}>—</Text>
-              </View>
-              <View style={s.settingRow}>
-                <Text style={s.settingLabel}>Zadania aktywne</Text>
-                <Text style={s.settingValue}>—</Text>
               </View>
             </View>
           </>

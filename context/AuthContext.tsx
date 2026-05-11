@@ -41,6 +41,7 @@ type AuthContextType = {
     data: { firstName: string; lastName: string; email: string; password: string }
   ) => Promise<boolean>;
   logout: () => void;
+  refreshRestaurant: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -207,12 +208,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setRestaurant(null);
   };
 
+  const refreshRestaurant = async () => {
+    if (!user) return;
+    const { data, error } = await supabase.from('restaurants').select('*').eq('id', user.restaurantId).single();
+    if (!error && data) setRestaurant(toRestaurant(data as any));
+  };
+
   const isOwner = user?.role === 'owner';
   const isManager = user?.role === 'manager';
 
   return (
     <AuthContext.Provider
-      value={{ user, restaurant, isAuthenticated: hasSession, isOwner, isManager, isLoading, login, joinWithCode, logout }}
+      value={{ user, restaurant, isAuthenticated: hasSession, isOwner, isManager, isLoading, login, joinWithCode, logout, refreshRestaurant }}
     >
       {children}
     </AuthContext.Provider>
