@@ -433,6 +433,19 @@ export async function reviewLeaveRequest(
   return !error;
 }
 
+export async function updateLeaveRequest(
+  id: string,
+  fields: { leave_type_id?: string; date_from?: string; date_to?: string; days_count?: number; comment?: string },
+): Promise<boolean> {
+  const { error } = await supabase.from('leave_requests').update(fields).eq('id', id);
+  return !error;
+}
+
+export async function deleteLeaveRequest(id: string): Promise<boolean> {
+  const { error } = await supabase.from('leave_requests').delete().eq('id', id);
+  return !error;
+}
+
 // ─── Absences ────────────────────────────────────────────────────────────────
 
 export async function createAbsence(
