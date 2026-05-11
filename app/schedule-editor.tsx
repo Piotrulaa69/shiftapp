@@ -1,17 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
@@ -20,6 +19,83 @@ import type { DbProfile, DbShift } from '../lib/supabase';
 import { theme } from '../styles/theme';
 
 const DAY_SHORT = ['Pon', 'Wto', 'Śro', 'Czw', 'Pt', 'Sob', 'Nie'];
+
+const TIMES: string[] = [];
+for (let h = 0; h < 24; h++) {
+  TIMES.push(`${String(h).padStart(2, '0')}:00`);
+  TIMES.push(`${String(h).padStart(2, '0')}:30`);
+}
+
+const LOCATIONS = ['Restauracja', 'Bar', 'Kuchnia', 'Sala', 'Taras', 'Recepcja'];
+const STATUSES: Array<{ value: string; label: string }> = [
+  { value: 'zaplanowana', label: 'ZAPLANOWANA' },
+  { value: 'do_potwierdzenia', label: 'DO POTWIERDZENIA' },
+  { value: 'potwierdzona', label: 'POTWIERDZONA' },
+  { value: 'ukonczona', label: 'UKOŃCZONA' },
+];
+
+const isWeb = Platform.OS === 'web';
+
+function ArrowScroller({ children, style }: { children: React.ReactNode; style?: object }) {
+  const scrollRef = useRef<ScrollView>(null);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(true);
+  const STEP = 160;
+
+  if (!isWeb) {
+    return (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingBottom: 4 }} style={style}>
+        {children}
+      </ScrollView>
+    );
+  }
+
+  return (
+    <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 4 }, style]}>
+      <TouchableOpacity
+        onPress={() => scrollRef.current?.scrollTo({ x: -STEP, animated: true })}
+        style={[arrowStyles.btn, !canLeft && arrowStyles.btnDisabled]}
+        disabled={!canLeft}
+      >
+        <Ionicons name="chevron-back" size={16} color={canLeft ? theme.colors.primary : theme.colors.border} />
+      </TouchableOpacity>
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ gap: 6, paddingVertical: 4 }}
+        onScroll={(e) => {
+          const x = e.nativeEvent.contentOffset.x;
+          const total = e.nativeEvent.contentSize.width - e.nativeEvent.layoutMeasurement.width;
+          setCanLeft(x > 2);
+          setCanRight(x < total - 2);
+        }}
+        scrollEventThrottle={16}
+      >
+        {children}
+      </ScrollView>
+      <TouchableOpacity
+        onPress={() => scrollRef.current?.scrollTo({ x: STEP, animated: true })}
+        style={[arrowStyles.btn, !canRight && arrowStyles.btnDisabled]}
+        disabled={!canRight}
+      >
+        <Ionicons name="chevron-forward" size={16} color={canRight ? theme.colors.primary : theme.colors.border} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const arrowStyles = StyleSheet.create({
+  btn: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: theme.colors.card,
+    borderWidth: 1, borderColor: theme.colors.border,
+    alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  },
+  btnDisabled: { opacity: 0.35 },
+});
 
 function getWeekDates(offset: number) {
   const d = new Date();
@@ -47,7 +123,8 @@ export default function ScheduleEditorScreen() {
   const [selEmployee, setSelEmployee] = useState('');
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('17:00');
-  const [location, setLocation] = useState('Sala główna');
+  const [location, setLocation] = useState('Restauracja');
+  const [shiftStatus, setShiftStatus] = useState('zaplanowana');
   const [saving, setSaving] = useState(false);
 
   const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
@@ -79,7 +156,7 @@ export default function ScheduleEditorScreen() {
       start_time: startTime,
       end_time: endTime,
       location,
-      status: 'zaplanowana',
+      status: shiftStatus as any,
     });
     if (created) setShifts((prev) => [...prev, created]);
     setSaving(false);
@@ -88,7 +165,7 @@ export default function ScheduleEditorScreen() {
   };
 
   const resetForm = () => {
-    setSelDay(''); setSelEmployee(''); setStartTime('09:00'); setEndTime('17:00'); setLocation('Sala główna');
+    setSelDay(''); setSelEmployee(''); setStartTime('09:00'); setEndTime('17:00'); setLocation('Restauracja'); setShiftStatus('zaplanowana');
   };
 
   const handleDelete = async (id: string) => {
@@ -188,45 +265,71 @@ export default function ScheduleEditorScreen() {
                 <Ionicons name="close" size={24} color={theme.colors.text} />
               </TouchableOpacity>
             </View>
-            <ScrollView style={mStyles.body}>
-              <Text style={mStyles.label}>Data</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingBottom: 8 }}>
+            <ScrollView style={mStyles.body} showsVerticalScrollIndicator={false}>
+              <Text style={mStyles.label}>PRACOWNIK</Text>
+              <ArrowScroller style={{ marginBottom: 4 }}>
+                {employees.map((e) => {
+                  const isActive = selEmployee === e.id;
+                  return (
+                    <TouchableOpacity key={e.id} style={[mStyles.empChip, isActive && mStyles.empChipActive]} onPress={() => setSelEmployee(e.id)} activeOpacity={0.75}>
+                      <View style={[mStyles.empAvatar, { backgroundColor: isActive ? theme.colors.primary : e.avatar_color }]}>
+                        <Text style={mStyles.empInitials}>{(e.first_name[0] + e.last_name[0]).toUpperCase()}</Text>
+                      </View>
+                      <View>
+                        <Text style={[mStyles.empChipName, isActive && { color: theme.colors.primary }]} numberOfLines={1}>{e.first_name}</Text>
+                        <Text style={mStyles.empChipJob} numberOfLines={1}>{e.job_title}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ArrowScroller>
+
+              <Text style={mStyles.label}>DATA</Text>
+              <ArrowScroller style={{ marginBottom: 4 }}>
                 {weekDates.map((d) => (
-                  <TouchableOpacity key={d} style={[mStyles.dateChip, selDay === d && mStyles.dateChipActive]} onPress={() => setSelDay(d)}>
-                    <Text style={[mStyles.dateChipText, selDay === d && mStyles.dateChipTextActive]}>{DAY_SHORT[weekDates.indexOf(d)]} {new Date(d).getDate()}</Text>
+                  <TouchableOpacity key={d} style={[mStyles.chip, selDay === d && mStyles.chipActive]} onPress={() => setSelDay(d)}>
+                    <Text style={[mStyles.chipText, selDay === d && mStyles.chipTextActive]}>{DAY_SHORT[weekDates.indexOf(d)]} {new Date(d).getDate()}</Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </ArrowScroller>
 
-              <Text style={mStyles.label}>Pracownik</Text>
-              {employees.map((e) => (
-                <TouchableOpacity key={e.id} style={[mStyles.empRow, selEmployee === e.id && mStyles.empRowActive]} onPress={() => setSelEmployee(e.id)}>
-                  <View style={[mStyles.empAvatar, { backgroundColor: e.avatar_color }]}>
-                    <Text style={mStyles.empInitials}>{(e.first_name[0] + e.last_name[0]).toUpperCase()}</Text>
-                  </View>
-                  <View>
-                    <Text style={[mStyles.empName, selEmployee === e.id && { fontWeight: '700' }]}>{e.first_name} {e.last_name}</Text>
-                    <Text style={mStyles.empJob}>{e.job_title}</Text>
-                  </View>
-                  {selEmployee === e.id && <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} style={{ marginLeft: 'auto' }} />}
-                </TouchableOpacity>
-              ))}
+              <Text style={mStyles.label}>GODZINA OD</Text>
+              <ArrowScroller style={{ marginBottom: 4 }}>
+                {TIMES.map((t) => (
+                  <TouchableOpacity key={t} style={[mStyles.chip, startTime === t && mStyles.chipActive]} onPress={() => setStartTime(t)}>
+                    <Text style={[mStyles.chipText, startTime === t && mStyles.chipTextActive]}>{t}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ArrowScroller>
 
-              <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={mStyles.label}>Od</Text>
-                  <TextInput style={mStyles.input} value={startTime} onChangeText={setStartTime} placeholder="09:00" placeholderTextColor={theme.colors.textMuted} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={mStyles.label}>Do</Text>
-                  <TextInput style={mStyles.input} value={endTime} onChangeText={setEndTime} placeholder="17:00" placeholderTextColor={theme.colors.textMuted} />
-                </View>
-              </View>
+              <Text style={mStyles.label}>GODZINA DO</Text>
+              <ArrowScroller style={{ marginBottom: 4 }}>
+                {TIMES.map((t) => (
+                  <TouchableOpacity key={t} style={[mStyles.chip, endTime === t && mStyles.chipActive]} onPress={() => setEndTime(t)}>
+                    <Text style={[mStyles.chipText, endTime === t && mStyles.chipTextActive]}>{t}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ArrowScroller>
 
-              <Text style={mStyles.label}>Lokalizacja</Text>
-              <TextInput style={mStyles.input} value={location} onChangeText={setLocation} placeholder="Sala główna" placeholderTextColor={theme.colors.textMuted} />
+              <Text style={mStyles.label}>LOKALIZACJA</Text>
+              <ArrowScroller style={{ marginBottom: 4 }}>
+                {LOCATIONS.map((loc) => (
+                  <TouchableOpacity key={loc} style={[mStyles.chip, location === loc && mStyles.chipActive]} onPress={() => setLocation(loc)}>
+                    <Text style={[mStyles.chipText, location === loc && mStyles.chipTextActive]}>{loc}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ArrowScroller>
 
-              <TouchableOpacity style={mStyles.saveBtn} onPress={handleCreate} activeOpacity={0.85} disabled={saving || !selDay || !selEmployee}>
+              <Text style={mStyles.label}>STATUS</Text>
+              <ArrowScroller style={{ marginBottom: 4 }}>
+                {STATUSES.map((s) => (
+                  <TouchableOpacity key={s.value} style={[mStyles.chip, shiftStatus === s.value && mStyles.chipActive]} onPress={() => setShiftStatus(s.value)}>
+                    <Text style={[mStyles.chipText, shiftStatus === s.value && mStyles.chipTextActive]}>{s.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ArrowScroller>
+
+              <TouchableOpacity style={[mStyles.saveBtn, (!selDay || !selEmployee) && { opacity: 0.5 }]} onPress={handleCreate} activeOpacity={0.85} disabled={saving || !selDay || !selEmployee}>
                 {saving ? <ActivityIndicator color={theme.colors.white} /> : <Text style={mStyles.saveBtnText}>Dodaj zmianę</Text>}
               </TouchableOpacity>
             </ScrollView>
@@ -281,4 +384,12 @@ const mStyles = StyleSheet.create({
   empJob: { fontSize: 11, color: theme.colors.textMuted },
   saveBtn: { backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.md, paddingVertical: 14, alignItems: 'center', marginTop: 20, marginBottom: 30 },
   saveBtnText: { color: theme.colors.white, fontSize: 15, fontWeight: '700' },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: theme.colors.background, borderWidth: 1, borderColor: theme.colors.border },
+  chipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  chipText: { fontSize: 12, fontWeight: '600', color: theme.colors.text },
+  chipTextActive: { color: theme.colors.white },
+  empChip: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: theme.colors.background, borderWidth: 1, borderColor: theme.colors.border, minWidth: 80 },
+  empChipActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primaryLight },
+  empChipName: { fontSize: 12, fontWeight: '700', color: theme.colors.text },
+  empChipJob: { fontSize: 10, color: theme.colors.textMuted },
 });
