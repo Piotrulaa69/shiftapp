@@ -122,6 +122,167 @@ const STATUS_CONFIG: Record<ShiftStatus, { label: string; color: string; bg: str
 };
 
 /* ── Shift Detail / Edit Modal ── */
+/* ── helpers ── */
+const TIME_SLOTS: string[] = [];
+for (let h = 0; h < 24; h++) {
+  TIME_SLOTS.push(`${String(h).padStart(2, '0')}:00`);
+  TIME_SLOTS.push(`${String(h).padStart(2, '0')}:30`);
+}
+
+const DEFAULT_LOCATIONS = ['Restauracja', 'Bar', 'Kuchnia', 'Sala', 'Taras', 'Recepcja', 'Magazyn', 'Biuro'];
+
+const FIXED_STATUSES: ShiftStatus[] = ['zaplanowana', 'do_potwierdzenia', 'potwierdzona', 'urlop'];
+
+/* ── tiny sub-components ── */
+function TimePickerRow({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <View style={{ flex: 1 }}>
+      <Text style={sm.label}>{label}</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={sm.timeScroll}
+        contentContainerStyle={{ gap: 6, paddingHorizontal: 2 }}
+      >
+        {TIME_SLOTS.map(t => (
+          <TouchableOpacity
+            key={t}
+            style={[sm.timeChip, value === t && sm.timeChipActive]}
+            onPress={() => onChange(t)}
+            activeOpacity={0.7}
+          >
+            <Text style={[sm.timeChipText, value === t && sm.timeChipTextActive]}>{t}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+function DatePickerField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  if (Platform.OS === 'web') {
+    return (
+      <View style={sm.dateFieldWrap}>
+        <Ionicons name="calendar-outline" size={16} color={theme.colors.textMuted} style={{ position: 'absolute', left: 12, zIndex: 1 }} />
+        <TextInput
+          style={[sm.input, { paddingLeft: 36, ...(Platform.OS === 'web' ? { cursor: 'pointer' } as any : {}) }]}
+          value={value}
+          onChangeText={onChange}
+          placeholder="RRRR-MM-DD"
+          placeholderTextColor={theme.colors.textMuted}
+          {...(Platform.OS === 'web' ? { type: 'date' } as any : {})}
+        />
+      </View>
+    );
+  }
+  return (
+    <View style={sm.dateFieldWrap}>
+      <Ionicons name="calendar-outline" size={16} color={theme.colors.textMuted} style={{ position: 'absolute', left: 12, zIndex: 1 }} />
+      <TextInput
+        style={[sm.input, { paddingLeft: 36 }]}
+        value={value}
+        onChangeText={onChange}
+        placeholder="RRRR-MM-DD"
+        placeholderTextColor={theme.colors.textMuted}
+      />
+    </View>
+  );
+}
+
+function LocationPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const isCustom = !DEFAULT_LOCATIONS.includes(value);
+  const [showCustom, setShowCustom] = useState(isCustom);
+  return (
+    <View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ marginBottom: 8 }}
+        contentContainerStyle={{ gap: 8, paddingHorizontal: 2 }}
+      >
+        {DEFAULT_LOCATIONS.map(loc => (
+          <TouchableOpacity
+            key={loc}
+            style={[sm.chip, value === loc && !showCustom && sm.chipActive]}
+            onPress={() => { onChange(loc); setShowCustom(false); }}
+            activeOpacity={0.7}
+          >
+            <Text style={[sm.chipText, value === loc && !showCustom && sm.chipTextActive]}>{loc}</Text>
+          </TouchableOpacity>
+        ))}
+        <TouchableOpacity
+          style={[sm.chip, showCustom && sm.chipActive]}
+          onPress={() => setShowCustom(true)}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="add" size={13} color={showCustom ? '#fff' : theme.colors.textSecondary} />
+          <Text style={[sm.chipText, showCustom && sm.chipTextActive]}>Inna</Text>
+        </TouchableOpacity>
+      </ScrollView>
+      {showCustom && (
+        <TextInput
+          style={sm.input}
+          value={isCustom || showCustom ? value : ''}
+          onChangeText={onChange}
+          placeholder="Wpisz lokalizację..."
+          placeholderTextColor={theme.colors.textMuted}
+          autoFocus
+        />
+      )}
+    </View>
+  );
+}
+
+function StatusPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [showCustom, setShowCustom] = useState(!FIXED_STATUSES.includes(value as ShiftStatus));
+  const [customVal, setCustomVal] = useState(FIXED_STATUSES.includes(value as ShiftStatus) ? '' : value);
+  return (
+    <View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ marginBottom: 8 }}
+        contentContainerStyle={{ gap: 8, paddingHorizontal: 2 }}
+      >
+        {FIXED_STATUSES.map(s => {
+          const cfg = STATUS_CONFIG[s];
+          const active = value === s && !showCustom;
+          return (
+            <TouchableOpacity
+              key={s}
+              style={[sm.chip, active && { backgroundColor: cfg.color, borderColor: cfg.color }]}
+              onPress={() => { onChange(s); setShowCustom(false); }}
+              activeOpacity={0.7}
+            >
+              {active && <View style={[sm.chipDot, { backgroundColor: '#fff' }]} />}
+              <Text style={[sm.chipText, active && { color: '#fff' }]}>{cfg.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+        <TouchableOpacity
+          style={[sm.chip, showCustom && sm.chipActive]}
+          onPress={() => setShowCustom(true)}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="add" size={13} color={showCustom ? '#fff' : theme.colors.textSecondary} />
+          <Text style={[sm.chipText, showCustom && sm.chipTextActive]}>Własny</Text>
+        </TouchableOpacity>
+      </ScrollView>
+      {showCustom && (
+        <TextInput
+          style={sm.input}
+          value={customVal}
+          onChangeText={v => { setCustomVal(v); onChange(v); }}
+          placeholder="Np. szkolenie, zastępstwo..."
+          placeholderTextColor={theme.colors.textMuted}
+          autoFocus
+        />
+      )}
+    </View>
+  );
+}
+
+/* ── main ShiftModal ── */
 function ShiftModal({
   shift,
   employees,
@@ -137,7 +298,7 @@ function ShiftModal({
   onDelete: (id: string) => Promise<void>;
   isOwner: boolean;
 }) {
-  const cfg = STATUS_CONFIG[shift.status];
+  const cfg = STATUS_CONFIG[shift.status as ShiftStatus] ?? { color: theme.colors.primary, bg: theme.colors.primaryLight, label: shift.status };
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -147,7 +308,7 @@ function ShiftModal({
   const [editStart, setEditStart] = useState(shift.start_time);
   const [editEnd, setEditEnd] = useState(shift.end_time);
   const [editLocation, setEditLocation] = useState(shift.location);
-  const [editStatus, setEditStatus] = useState<ShiftStatus>(shift.status);
+  const [editStatus, setEditStatus] = useState(shift.status as string);
   const [editEmployee, setEditEmployee] = useState(shift.employee_id);
 
   const dayObj = new Date(shift.day + 'T12:00:00');
@@ -161,7 +322,7 @@ function ShiftModal({
       start_time: editStart,
       end_time: editEnd,
       location: editLocation,
-      status: editStatus,
+      status: editStatus as ShiftStatus,
       employee_id: editEmployee,
       employee_name: emp ? `${emp.first_name} ${emp.last_name}` : shift.employee_name,
       job_title: emp?.job_title ?? shift.job_title,
@@ -179,6 +340,7 @@ function ShiftModal({
 
   return (
     <View style={sm.container}>
+      {/* Header */}
       <View style={sm.header}>
         <View style={[sm.statusDot, { backgroundColor: cfg.color }]} />
         <View style={{ flex: 1 }}>
@@ -195,9 +357,14 @@ function ShiftModal({
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={{ maxHeight: 480 }} contentContainerStyle={sm.body}>
+      {/* Body */}
+      <ScrollView style={{ maxHeight: 500 }} contentContainerStyle={sm.body} keyboardShouldPersistTaps="handled">
         {!editing ? (
           <>
+            <View style={sm.infoRow}>
+              <Ionicons name="person-outline" size={16} color={theme.colors.textMuted} />
+              <Text style={sm.infoText}>{shift.employee_name}</Text>
+            </View>
             <View style={sm.infoRow}>
               <Ionicons name="calendar-outline" size={16} color={theme.colors.textMuted} />
               <Text style={sm.infoText}>{dayLabel}</Text>
@@ -217,58 +384,51 @@ function ShiftModal({
           </>
         ) : (
           <>
+            {/* Pracownik */}
             <Text style={sm.label}>Pracownik</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                {employees.map(e => (
-                  <TouchableOpacity
-                    key={e.id}
-                    style={[sm.chip, editEmployee === e.id && sm.chipActive]}
-                    onPress={() => setEditEmployee(e.id)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[sm.chipText, editEmployee === e.id && sm.chipTextActive]}>
-                      {e.first_name} {e.last_name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
-
-            <Text style={sm.label}>Data (RRRR-MM-DD)</Text>
-            <TextInput style={sm.input} value={editDay} onChangeText={setEditDay} />
-
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={sm.label}>Od</Text>
-                <TextInput style={sm.input} value={editStart} onChangeText={setEditStart} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={sm.label}>Do</Text>
-                <TextInput style={sm.input} value={editEnd} onChangeText={setEditEnd} />
-              </View>
-            </View>
-
-            <Text style={sm.label}>Lokalizacja</Text>
-            <TextInput style={sm.input} value={editLocation} onChangeText={setEditLocation} />
-
-            <Text style={sm.label}>Status</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 }}>
-              {(Object.keys(STATUS_CONFIG) as ShiftStatus[]).map(s => (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={true}
+              style={sm.hScroll}
+              contentContainerStyle={{ gap: 8, paddingHorizontal: 2, paddingBottom: 4 }}
+            >
+              {employees.map(e => (
                 <TouchableOpacity
-                  key={s}
-                  style={[sm.chip, editStatus === s && { backgroundColor: STATUS_CONFIG[s].color, borderColor: STATUS_CONFIG[s].color }]}
-                  onPress={() => setEditStatus(s)}
+                  key={e.id}
+                  style={[sm.chip, editEmployee === e.id && sm.chipActive]}
+                  onPress={() => setEditEmployee(e.id)}
                   activeOpacity={0.7}
                 >
-                  <Text style={[sm.chipText, editStatus === s && { color: '#fff' }]}>{STATUS_CONFIG[s].label}</Text>
+                  <Text style={[sm.chipText, editEmployee === e.id && sm.chipTextActive]}>
+                    {e.first_name} {e.last_name}
+                  </Text>
                 </TouchableOpacity>
               ))}
-            </View>
+            </ScrollView>
+
+            {/* Data */}
+            <Text style={sm.label}>Data</Text>
+            <DatePickerField value={editDay} onChange={setEditDay} />
+
+            {/* Godziny */}
+            <Text style={sm.label}>Godzina od</Text>
+            <TimePickerRow label="" value={editStart} onChange={setEditStart} />
+
+            <Text style={sm.label}>Godzina do</Text>
+            <TimePickerRow label="" value={editEnd} onChange={setEditEnd} />
+
+            {/* Lokalizacja */}
+            <Text style={sm.label}>Lokalizacja</Text>
+            <LocationPicker value={editLocation} onChange={setEditLocation} />
+
+            {/* Status */}
+            <Text style={sm.label}>Status</Text>
+            <StatusPicker value={editStatus} onChange={setEditStatus} />
           </>
         )}
       </ScrollView>
 
+      {/* Footer */}
       {isOwner && (
         <View style={sm.footer}>
           {!editing ? (
@@ -280,9 +440,7 @@ function ShiftModal({
                     <Text style={sm.cancelSmallText}>Nie</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={sm.deleteBtn} onPress={handleDelete} disabled={deleting} activeOpacity={0.7}>
-                    {deleting
-                      ? <ActivityIndicator size="small" color="#fff" />
-                      : <Text style={sm.deleteBtnText}>Usuń</Text>}
+                    {deleting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={sm.deleteBtnText}>Usuń</Text>}
                   </TouchableOpacity>
                 </>
               ) : (
@@ -303,9 +461,7 @@ function ShiftModal({
                 <Text style={sm.cancelBtnText}>Anuluj</Text>
               </TouchableOpacity>
               <TouchableOpacity style={sm.saveBtn} onPress={handleSave} disabled={saving} activeOpacity={0.7}>
-                {saving
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <Text style={sm.saveBtnText}>Zapisz</Text>}
+                {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={sm.saveBtnText}>Zapisz</Text>}
               </TouchableOpacity>
             </>
           )}
@@ -326,22 +482,30 @@ const sm = StyleSheet.create({
   sub: { fontSize: 12, color: theme.colors.textMuted, marginTop: 1 },
   editBtn: { width: 34, height: 34, borderRadius: 10, backgroundColor: theme.colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
   closeBtn: { width: 34, height: 34, borderRadius: 10, backgroundColor: theme.colors.surface, alignItems: 'center', justifyContent: 'center' },
-  body: { padding: 18, gap: 4 },
-  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  body: { padding: 18, paddingTop: 14 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   infoText: { fontSize: 14, color: theme.colors.text, fontWeight: '500' },
-  badge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, marginTop: 12, alignSelf: 'flex-start' },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, marginTop: 14, alignSelf: 'flex-start' },
   badgeDot: { width: 8, height: 8, borderRadius: 4 },
   badgeText: { fontSize: 12, fontWeight: '700' },
-  label: { fontSize: 12, fontWeight: '700', color: theme.colors.textSecondary, marginTop: 10, marginBottom: 4 },
+  label: { fontSize: 11, fontWeight: '700', color: theme.colors.textSecondary, marginTop: 14, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
   input: {
     borderWidth: 1.5, borderColor: theme.colors.border, borderRadius: theme.borderRadius.md,
     paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: theme.colors.text,
     backgroundColor: theme.colors.surface,
   },
-  chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, borderColor: theme.colors.border },
+  dateFieldWrap: { position: 'relative', justifyContent: 'center' },
+  hScroll: { marginBottom: 4 },
+  timeScroll: { marginBottom: 4 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
   chipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  chipDot: { width: 6, height: 6, borderRadius: 3 },
   chipText: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary },
   chipTextActive: { color: '#fff' },
+  timeChip: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: theme.colors.border, backgroundColor: theme.colors.surface, minWidth: 54, alignItems: 'center' },
+  timeChipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  timeChipText: { fontSize: 12, fontWeight: '700', color: theme.colors.textSecondary },
+  timeChipTextActive: { color: '#fff' },
   footer: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     padding: 14, borderTopWidth: 1, borderTopColor: theme.colors.border,
