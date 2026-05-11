@@ -36,6 +36,100 @@ const STATUSES: Array<{ value: string; label: string }> = [
 
 const isWeb = Platform.OS === 'web';
 
+function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  if (isWeb) {
+    return (
+      <button
+        onClick={onPress}
+        style={{
+          flexShrink: 0,
+          padding: '8px 14px',
+          borderRadius: 10,
+          border: `1.5px solid ${active ? theme.colors.primary : theme.colors.border}`,
+          backgroundColor: active ? theme.colors.primary : theme.colors.background,
+          color: active ? '#fff' : theme.colors.text,
+          fontSize: 12,
+          fontWeight: 600,
+          cursor: 'pointer',
+          whiteSpace: 'nowrap',
+          outline: 'none',
+        }}
+      >
+        {label}
+      </button>
+    );
+  }
+  return (
+    <TouchableOpacity
+      style={[chipStyle.chip, active && chipStyle.chipActive]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <Text style={[chipStyle.chipText, active && chipStyle.chipTextActive]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+const chipStyle = StyleSheet.create({
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: theme.colors.background, borderWidth: 1.5, borderColor: theme.colors.border },
+  chipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  chipText: { fontSize: 12, fontWeight: '600', color: theme.colors.text },
+  chipTextActive: { color: theme.colors.white },
+});
+
+function EmpChip({ emp, active, onPress }: { emp: DbProfile; active: boolean; onPress: () => void }) {
+  const initials = (emp.first_name[0] + emp.last_name[0]).toUpperCase();
+  if (isWeb) {
+    return (
+      <button
+        onClick={onPress}
+        style={{
+          flexShrink: 0,
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+          padding: '8px 12px',
+          borderRadius: 12,
+          border: `1.5px solid ${active ? theme.colors.primary : theme.colors.border}`,
+          backgroundColor: active ? theme.colors.primaryLight : theme.colors.background,
+          cursor: 'pointer',
+          outline: 'none',
+          minWidth: 80,
+        }}
+      >
+        <span style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: active ? theme.colors.primary : emp.avatar_color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#fff' }}>{initials}</span>
+        </span>
+        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: active ? theme.colors.primary : theme.colors.text, whiteSpace: 'nowrap' }}>{emp.first_name}</span>
+          <span style={{ fontSize: 10, color: theme.colors.textMuted, whiteSpace: 'nowrap' }}>{emp.job_title}</span>
+        </span>
+      </button>
+    );
+  }
+  return (
+    <TouchableOpacity style={[empChipStyle.chip, active && empChipStyle.chipActive]} onPress={onPress} activeOpacity={0.75}>
+      <View style={[empChipStyle.avatar, { backgroundColor: active ? theme.colors.primary : emp.avatar_color }]}>
+        <Text style={empChipStyle.initials}>{initials}</Text>
+      </View>
+      <View>
+        <Text style={[empChipStyle.name, active && { color: theme.colors.primary }]} numberOfLines={1}>{emp.first_name}</Text>
+        <Text style={empChipStyle.job} numberOfLines={1}>{emp.job_title}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+const empChipStyle = StyleSheet.create({
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: theme.colors.background, borderWidth: 1.5, borderColor: theme.colors.border, minWidth: 80 },
+  chipActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primaryLight },
+  avatar: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  initials: { fontSize: 10, fontWeight: '700', color: theme.colors.white },
+  name: { fontSize: 12, fontWeight: '700', color: theme.colors.text },
+  job: { fontSize: 10, color: theme.colors.textMuted },
+});
+
 function ArrowScroller({ children, style }: { children: React.ReactNode; style?: object }) {
   const divRef = useRef<any>(null);
   const isDragging = useRef(false);
@@ -84,9 +178,10 @@ function ArrowScroller({ children, style }: { children: React.ReactNode; style?:
       style={{
         display: 'flex',
         flexDirection: 'row',
+        alignItems: 'center',
         gap: 6,
         overflowX: 'auto',
-        paddingBottom: 6,
+        paddingBottom: 8,
         paddingTop: 2,
         cursor: 'grab',
         scrollbarWidth: 'none',
@@ -269,65 +364,44 @@ export default function ScheduleEditorScreen() {
             </View>
             <ScrollView style={mStyles.body} showsVerticalScrollIndicator={false}>
               <Text style={mStyles.label}>PRACOWNIK</Text>
-              <ArrowScroller style={{ marginBottom: 4 }}>
-                {employees.map((e) => {
-                  const isActive = selEmployee === e.id;
-                  return (
-                    <TouchableOpacity key={e.id} style={[mStyles.empChip, isActive && mStyles.empChipActive]} onPress={() => setSelEmployee(e.id)} activeOpacity={0.75}>
-                      <View style={[mStyles.empAvatar, { backgroundColor: isActive ? theme.colors.primary : e.avatar_color }]}>
-                        <Text style={mStyles.empInitials}>{(e.first_name[0] + e.last_name[0]).toUpperCase()}</Text>
-                      </View>
-                      <View>
-                        <Text style={[mStyles.empChipName, isActive && { color: theme.colors.primary }]} numberOfLines={1}>{e.first_name}</Text>
-                        <Text style={mStyles.empChipJob} numberOfLines={1}>{e.job_title}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
+              <ArrowScroller>
+                {employees.map((e) => (
+                  <EmpChip key={e.id} emp={e} active={selEmployee === e.id} onPress={() => setSelEmployee(e.id)} />
+                ))}
               </ArrowScroller>
 
               <Text style={mStyles.label}>DATA</Text>
-              <ArrowScroller style={{ marginBottom: 4 }}>
+              <ArrowScroller>
                 {weekDates.map((d) => (
-                  <TouchableOpacity key={d} style={[mStyles.chip, selDay === d && mStyles.chipActive]} onPress={() => setSelDay(d)}>
-                    <Text style={[mStyles.chipText, selDay === d && mStyles.chipTextActive]}>{DAY_SHORT[weekDates.indexOf(d)]} {new Date(d).getDate()}</Text>
-                  </TouchableOpacity>
+                  <Chip key={d} label={`${DAY_SHORT[weekDates.indexOf(d)]} ${new Date(d).getDate()}`} active={selDay === d} onPress={() => setSelDay(d)} />
                 ))}
               </ArrowScroller>
 
               <Text style={mStyles.label}>GODZINA OD</Text>
-              <ArrowScroller style={{ marginBottom: 4 }}>
+              <ArrowScroller>
                 {TIMES.map((t) => (
-                  <TouchableOpacity key={t} style={[mStyles.chip, startTime === t && mStyles.chipActive]} onPress={() => setStartTime(t)}>
-                    <Text style={[mStyles.chipText, startTime === t && mStyles.chipTextActive]}>{t}</Text>
-                  </TouchableOpacity>
+                  <Chip key={t} label={t} active={startTime === t} onPress={() => setStartTime(t)} />
                 ))}
               </ArrowScroller>
 
               <Text style={mStyles.label}>GODZINA DO</Text>
-              <ArrowScroller style={{ marginBottom: 4 }}>
+              <ArrowScroller>
                 {TIMES.map((t) => (
-                  <TouchableOpacity key={t} style={[mStyles.chip, endTime === t && mStyles.chipActive]} onPress={() => setEndTime(t)}>
-                    <Text style={[mStyles.chipText, endTime === t && mStyles.chipTextActive]}>{t}</Text>
-                  </TouchableOpacity>
+                  <Chip key={t} label={t} active={endTime === t} onPress={() => setEndTime(t)} />
                 ))}
               </ArrowScroller>
 
               <Text style={mStyles.label}>LOKALIZACJA</Text>
-              <ArrowScroller style={{ marginBottom: 4 }}>
+              <ArrowScroller>
                 {LOCATIONS.map((loc) => (
-                  <TouchableOpacity key={loc} style={[mStyles.chip, location === loc && mStyles.chipActive]} onPress={() => setLocation(loc)}>
-                    <Text style={[mStyles.chipText, location === loc && mStyles.chipTextActive]}>{loc}</Text>
-                  </TouchableOpacity>
+                  <Chip key={loc} label={loc} active={location === loc} onPress={() => setLocation(loc)} />
                 ))}
               </ArrowScroller>
 
               <Text style={mStyles.label}>STATUS</Text>
-              <ArrowScroller style={{ marginBottom: 4 }}>
+              <ArrowScroller>
                 {STATUSES.map((s) => (
-                  <TouchableOpacity key={s.value} style={[mStyles.chip, shiftStatus === s.value && mStyles.chipActive]} onPress={() => setShiftStatus(s.value)}>
-                    <Text style={[mStyles.chipText, shiftStatus === s.value && mStyles.chipTextActive]}>{s.label}</Text>
-                  </TouchableOpacity>
+                  <Chip key={s.value} label={s.label} active={shiftStatus === s.value} onPress={() => setShiftStatus(s.value)} />
                 ))}
               </ArrowScroller>
 
