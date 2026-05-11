@@ -688,7 +688,7 @@ export default function ScheduleScreen() {
           isSelected && cal.cellSelected,
           isDragOver && cal.cellDragOver,
         ]}
-        onPress={() => { setSelectedDate(dateStr); }}
+        onPress={() => { setSelectedDate(dateStr); setCalView('day'); }}
         {...(webDropProps as any)}
       >
         <View style={cal.cellHeader}>
