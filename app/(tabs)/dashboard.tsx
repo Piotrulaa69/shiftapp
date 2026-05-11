@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Platform,
@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { getTasks, getTodayShift } from '../../lib/db';
+import { getPointsForEmployee, getTasks, getTodayShift } from '../../lib/db';
 import type { DbShift, DbTask } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
@@ -21,7 +21,6 @@ const QUICK_ACTIONS = [
   { icon: 'list-outline', label: 'Zadania', route: '/(tabs)/tasks' as const },
   { icon: 'calendar-outline', label: 'Grafik', route: '/(tabs)/schedule' as const },
   { icon: 'school-outline', label: 'Szkolenia', route: '/(tabs)/szkolenia' as const },
-  { icon: 'trophy-outline', label: 'Punkty', route: '/earnings' as const },
   { icon: 'document-text-outline', label: 'Urlopy', route: '/leave-requests' as const },
   { icon: 'chatbubble-outline', label: 'Czat', route: '/chat' as const },
 ];
@@ -42,11 +41,13 @@ export default function DashboardScreen() {
 
   const [tasks, setTasks] = useState<DbTask[]>([]);
   const [todayShift, setTodayShift] = useState<DbShift | null>(null);
+  const [totalPoints, setTotalPoints] = useState<number | null>(null);
 
   useEffect(() => {
     if (!rid) return;
     getTasks(rid).then(setTasks);
     getTodayShift(rid, user?.id ?? '').then(setTodayShift);
+    if (user?.id) getPointsForEmployee(rid, user.id).then((pts) => setTotalPoints(pts.reduce((s, p) => s + p.points, 0)));
   }, [rid, user?.id]);
 
   const completedTasks = tasks.filter((t) => t.completed);
@@ -63,7 +64,7 @@ export default function DashboardScreen() {
   const statValues = [
     todayShift ? `${todayShift.start_time}` : '--:--',
     `${completedTasks.length}/${tasks.length}`,
-    '128',
+    totalPoints !== null ? String(totalPoints) : '—',
     '5 dni',
   ];
 
@@ -103,13 +104,13 @@ export default function DashboardScreen() {
         {/* Stat Cards Row — Reztro style */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statsRow}>
           {STAT_CARDS.map((card, i) => (
-            <View key={card.label} style={styles.statCard}>
+            <TouchableOpacity key={card.label} style={styles.statCard} onPress={card.label === 'Punkty' ? () => router.push('/(tabs)/szkolenia' as any) : undefined} activeOpacity={card.label === 'Punkty' ? 0.7 : 1}>
               <View style={[styles.statCardIconWrap, { backgroundColor: card.iconBg }]}>
                 <Ionicons name={card.icon as any} size={18} color={card.iconColor} />
               </View>
               <Text style={styles.statCardValue}>{statValues[i]}</Text>
               <Text style={styles.statCardLabel}>{card.label}</Text>
-            </View>
+            </TouchableOpacity>
           ))}
         </ScrollView>
 

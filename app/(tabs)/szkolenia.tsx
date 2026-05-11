@@ -5,11 +5,19 @@ import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpa
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileHeader from '../../components/MobileHeader';
 import { useAuth } from '../../context/AuthContext';
-import { getTrainings } from '../../lib/db';
-import type { DbTraining } from '../../lib/supabase';
+import { getPointsForEmployee, getTeamPoints, getTrainings } from '../../lib/db';
+import type { DbPointsLedger, DbTraining } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
 type FilterKey = 'wszystkie' | 'dla_mnie' | 'obowiazkowe' | 'nowe';
+type TabKey = 'szkolenia' | 'punkty';
+
+const POINT_EVENT_LABELS: Record<string, { label: string; icon: string; color: string }> = {
+  clock_in_on_time: { label: 'Clock-in na czas', icon: 'time-outline', color: '#22C55E' },
+  task_completed: { label: 'Zadanie wykonane', icon: 'checkmark-circle-outline', color: theme.colors.primary },
+  training_completed: { label: 'Szkolenie ukończone', icon: 'school-outline', color: '#A855F7' },
+  quiz_score: { label: 'Wynik quizu', icon: 'trophy-outline', color: '#F97316' },
+};
 
 const STATUS_CONFIG = {
   w_toku: { label: 'W TOKU', color: theme.colors.primary, bg: theme.colors.primaryLight },
@@ -156,6 +164,10 @@ export default function SzkoleniaScreen() {
   const [trainings, setTrainings] = useState<DbTraining[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterKey>('wszystkie');
+  const [activeTab, setActiveTab] = useState<TabKey>('szkolenia');
+  const [points, setPoints] = useState<DbPointsLedger[]>([]);
+  const [ranking, setRanking] = useState<{ employee_id: string; total: number; name: string }[]>([]);
+  const [pointsLoading, setPointsLoading] = useState(false);
 
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
@@ -166,6 +178,20 @@ export default function SzkoleniaScreen() {
     getTrainings(rid).then((data) => { setTrainings(data); setLoading(false); });
   }, [rid]);
 
+  useEffect(() => {
+    if (!rid || !user || activeTab !== 'punkty') return;
+    setPointsLoading(true);
+    Promise.all([getPointsForEmployee(rid, user.id), getTeamPoints(rid)]).then(async ([myPts, teamPts]) => {
+      setPoints(myPts);
+      const { data: profiles } = await (await import('../../lib/supabase')).supabase
+        .from('profiles').select('id, first_name, last_name').eq('restaurant_id', rid);
+      const nameMap: Record<string, string> = {};
+      (profiles ?? []).forEach((p: any) => { nameMap[p.id] = `${p.first_name} ${p.last_name}`; });
+      setRanking(teamPts.map((r) => ({ ...r, name: nameMap[r.employee_id] ?? 'Nieznany' })));
+      setPointsLoading(false);
+    });
+  }, [rid, user, activeTab]);
+
   if (loading) return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }} edges={['top']}>
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
@@ -175,6 +201,7 @@ export default function SzkoleniaScreen() {
   );
 
   const requiredCount = trainings.filter((t) => t.required && t.status !== 'ukonczone').length;
+  const totalPoints = points.reduce((sum, p) => sum + p.points, 0);
 
   const filtered = activeFilter === 'obowiazkowe'
     ? trainings.filter((t) => t.category === 'BHP')
@@ -191,7 +218,7 @@ export default function SzkoleniaScreen() {
           <View style={styles.headerRight}>
             <View style={styles.xpBadge}>
               <Ionicons name="star" size={13} color={theme.colors.yellow} />
-              <Text style={styles.xpText}>1250</Text>
+              <Text style={styles.xpText}>{totalPoints}</Text>
             </View>
           </View>
         </View>
@@ -201,11 +228,21 @@ export default function SzkoleniaScreen() {
           center={
             <View style={styles.xpBadge}>
               <Ionicons name="star" size={13} color={theme.colors.yellow} />
-              <Text style={styles.xpText}>1250</Text>
+              <Text style={styles.xpText}>{totalPoints}</Text>
             </View>
           }
         />
       )}
+
+      {/* Tab bar */}
+      <View style={styles.tabBar}>
+        {([['szkolenia', 'Szkolenia', 'book-outline'], ['punkty', 'Punkty', 'star-outline']] as const).map(([key, label, icon]) => (
+          <TouchableOpacity key={key} style={[styles.tabBarBtn, activeTab === key && styles.tabBarBtnActive]} onPress={() => setActiveTab(key)} activeOpacity={0.7}>
+            <Ionicons name={icon as any} size={14} color={activeTab === key ? theme.colors.primary : theme.colors.textSecondary} />
+            <Text style={[styles.tabBarText, activeTab === key && styles.tabBarTextActive]}>{label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, isDesktop && styles.scrollContentDesktop]}>
         {/* Progress card */}
@@ -288,18 +325,90 @@ export default function SzkoleniaScreen() {
           </View>
         </View>
 
-        {/* Training list */}
-        <View style={styles.body}>
-          <Text style={styles.sectionTitle}>Polecane dla Ciebie</Text>
-          {filtered.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="book-outline" size={40} color={theme.colors.border} />
-              <Text style={styles.emptyText}>Brak szkoleń w tej kategorii</Text>
+        {activeTab === 'szkolenia' ? (
+          <>
+            {/* Training list */}
+            <View style={styles.body}>
+              <Text style={styles.sectionTitle}>Polecane dla Ciebie</Text>
+              {filtered.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Ionicons name="book-outline" size={40} color={theme.colors.border} />
+                  <Text style={styles.emptyText}>Brak szkoleń w tej kategorii</Text>
+                </View>
+              ) : filtered.map((t) => (
+                <TrainingCard key={t.id} training={t} />
+              ))}
             </View>
-          ) : filtered.map((t) => (
-            <TrainingCard key={t.id} training={t} />
-          ))}
-        </View>
+          </>
+        ) : (
+          /* ── Punkty tab ── */
+          <View style={styles.body}>
+            {pointsLoading ? (
+              <ActivityIndicator style={{ marginTop: 40 }} size="large" color={theme.colors.primary} />
+            ) : (
+              <>
+                {/* Summary */}
+                <View style={styles.pointsSummary}>
+                  <View style={styles.pointsSummaryCol}>
+                    <Text style={styles.pointsSummaryValue}>{totalPoints}</Text>
+                    <Text style={styles.pointsSummaryLabel}>Punktów łącznie</Text>
+                  </View>
+                  <View style={styles.pointsDivider} />
+                  <View style={styles.pointsSummaryCol}>
+                    <Text style={styles.pointsSummaryValue}>#{(ranking.findIndex((r) => r.employee_id === user?.id) + 1) || '—'}</Text>
+                    <Text style={styles.pointsSummaryLabel}>Ranking</Text>
+                  </View>
+                  <View style={styles.pointsDivider} />
+                  <View style={styles.pointsSummaryCol}>
+                    <Text style={styles.pointsSummaryValue}>{points.length}</Text>
+                    <Text style={styles.pointsSummaryLabel}>Zdarzeń</Text>
+                  </View>
+                </View>
+
+                {/* History */}
+                <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Historia punktów</Text>
+                {points.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="trophy-outline" size={40} color={theme.colors.border} />
+                    <Text style={styles.emptyText}>Brak punktów — ukończ szkolenie!</Text>
+                  </View>
+                ) : points.map((p) => {
+                  const ev = POINT_EVENT_LABELS[p.event_type] ?? { label: p.event_type, icon: 'star-outline', color: '#6B7280' };
+                  return (
+                    <View key={p.id} style={styles.pointRow}>
+                      <View style={[styles.pointIcon, { backgroundColor: ev.color + '18' }]}>
+                        <Ionicons name={ev.icon as any} size={18} color={ev.color} />
+                      </View>
+                      <View style={styles.pointInfo}>
+                        <Text style={styles.pointLabel}>{ev.label}</Text>
+                        <Text style={styles.pointDate}>{new Date(p.created_at).toLocaleDateString('pl-PL')}</Text>
+                      </View>
+                      <Text style={[styles.pointValue, { color: ev.color }]}>+{p.points}</Text>
+                    </View>
+                  );
+                })}
+
+                {/* Ranking */}
+                <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Ranking zespołu</Text>
+                {ranking.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="podium-outline" size={40} color={theme.colors.border} />
+                    <Text style={styles.emptyText}>Brak danych rankingowych</Text>
+                  </View>
+                ) : ranking.map((r, idx) => {
+                  const isMe = r.employee_id === user?.id;
+                  return (
+                    <View key={r.employee_id} style={[styles.rankRow, isMe && styles.rankRowMe]}>
+                      <Text style={[styles.rankPos, idx < 3 && { color: theme.colors.primary, fontWeight: '800' }]}>#{idx + 1}</Text>
+                      <Text style={[styles.rankName, isMe && { fontWeight: '700' }]}>{r.name}{isMe ? ' (Ty)' : ''}</Text>
+                      <Text style={styles.rankPoints}>{r.total} pkt</Text>
+                    </View>
+                  );
+                })}
+              </>
+            )}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -447,4 +556,29 @@ const styles = StyleSheet.create({
   demoBannerSub: { fontSize: 12, color: theme.colors.primary, lineHeight: 17, opacity: 0.85 },
   emptyState: { alignItems: 'center', paddingVertical: 32, gap: 10 },
   emptyText: { fontSize: 14, color: theme.colors.textMuted },
+
+  tabBar: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 4, marginTop: 8, gap: 8 },
+  tabBarBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
+  tabBarBtnActive: { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primary },
+  tabBarText: { fontSize: 12, fontWeight: '600' as const, color: theme.colors.textSecondary },
+  tabBarTextActive: { color: theme.colors.primary },
+
+  pointsSummary: { flexDirection: 'row', backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.lg, padding: 20, marginBottom: 16 },
+  pointsSummaryCol: { flex: 1, alignItems: 'center' as const },
+  pointsSummaryValue: { fontSize: 24, fontWeight: '800' as const, color: theme.colors.primary, marginBottom: 4 },
+  pointsSummaryLabel: { fontSize: 11, color: theme.colors.textMuted },
+  pointsDivider: { width: 1, backgroundColor: theme.colors.border, marginVertical: 4 },
+
+  pointRow: { flexDirection: 'row', alignItems: 'center' as const, gap: 12, backgroundColor: theme.colors.card, borderRadius: 12, padding: 12, marginBottom: 8 },
+  pointIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center' as const, justifyContent: 'center' as const },
+  pointInfo: { flex: 1 },
+  pointLabel: { fontSize: 13, fontWeight: '600' as const, color: theme.colors.text },
+  pointDate: { fontSize: 11, color: theme.colors.textMuted },
+  pointValue: { fontSize: 16, fontWeight: '800' as const },
+
+  rankRow: { flexDirection: 'row', alignItems: 'center' as const, gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  rankRowMe: { backgroundColor: theme.colors.primaryLight, borderRadius: 10, paddingHorizontal: 12 },
+  rankPos: { fontSize: 15, fontWeight: '700' as const, color: theme.colors.textSecondary, width: 36 },
+  rankName: { flex: 1, fontSize: 14, color: theme.colors.text },
+  rankPoints: { fontSize: 14, fontWeight: '700' as const, color: theme.colors.primary },
 });
