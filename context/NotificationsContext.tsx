@@ -15,6 +15,9 @@ type NotificationsContextType = {
   unreadCount: number;
   markAllRead: () => void;
   markRead: (id: string) => void;
+  markUnread: (id: string) => void;
+  deleteNotification: (id: string) => void;
+  restoreNotification: (n: AppNotification) => void;
   refresh: () => void;
 };
 
@@ -23,6 +26,9 @@ const NotificationsContext = createContext<NotificationsContextType>({
   unreadCount: 0,
   markAllRead: () => {},
   markRead: () => {},
+  markUnread: () => {},
+  deleteNotification: () => {},
+  restoreNotification: () => {},
   refresh: () => {},
 });
 
@@ -60,10 +66,25 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n));
   }, []);
 
+  const markUnread = useCallback((id: string) => {
+    setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: false } : n));
+  }, []);
+
+  const deleteNotification = useCallback((id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  }, []);
+
+  const restoreNotification = useCallback((n: AppNotification) => {
+    setNotifications((prev) => {
+      if (prev.find((x) => x.id === n.id)) return prev;
+      return [n, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    });
+  }, []);
+
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
-    <NotificationsContext.Provider value={{ notifications, unreadCount, markAllRead, markRead, refresh: load }}>
+    <NotificationsContext.Provider value={{ notifications, unreadCount, markAllRead, markRead, markUnread, deleteNotification, restoreNotification, refresh: load }}>
       {children}
     </NotificationsContext.Provider>
   );
