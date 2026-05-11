@@ -79,6 +79,29 @@ export async function deleteShift(shiftId: string): Promise<boolean> {
   return !error;
 }
 
+export async function updateShift(
+  shiftId: string,
+  fields: Partial<{
+    day: string;
+    start_time: string;
+    end_time: string;
+    location: string;
+    status: 'zaplanowana' | 'do_potwierdzenia' | 'potwierdzona' | 'urlop';
+    employee_id: string;
+    employee_name: string;
+    job_title: string;
+  }>
+): Promise<DbShift | null> {
+  const { data, error } = await supabase
+    .from('shifts')
+    .update(fields)
+    .eq('id', shiftId)
+    .select()
+    .single();
+  if (error) { console.error('updateShift', error); return null; }
+  return data as DbShift;
+}
+
 // ─── Tasks ────────────────────────────────────────────────────────────────────
 
 export async function getTasks(restaurantId: string): Promise<DbTask[]> {
