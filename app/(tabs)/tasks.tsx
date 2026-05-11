@@ -714,9 +714,9 @@ const styles = StyleSheet.create({
 });
 
 const mStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: theme.colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '92%' },
-  sheetDesktop: { maxWidth: 560, alignSelf: 'center', width: '100%', borderRadius: 24, marginBottom: 40 },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  sheet: { backgroundColor: theme.colors.card, borderRadius: 20, width: '100%', maxWidth: 560, maxHeight: '92%', overflow: 'hidden' },
+  sheetDesktop: { maxWidth: 560, width: '100%' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   headerTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
   body: { padding: 20, gap: 4 },
