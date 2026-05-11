@@ -37,10 +37,10 @@ const STATUSES: Array<{ value: string; label: string }> = [
 const isWeb = Platform.OS === 'web';
 
 function ArrowScroller({ children, style }: { children: React.ReactNode; style?: object }) {
-  const scrollRef = useRef<ScrollView>(null);
-  const [canLeft, setCanLeft] = useState(false);
-  const [canRight, setCanRight] = useState(true);
-  const STEP = 160;
+  const divRef = useRef<any>(null);
+  const isDragging = useRef(false);
+  const dragStartX = useRef(0);
+  const dragScrollLeft = useRef(0);
 
   if (!isWeb) {
     return (
@@ -50,52 +50,54 @@ function ArrowScroller({ children, style }: { children: React.ReactNode; style?:
     );
   }
 
+  const handleMouseDown = (e: any) => {
+    isDragging.current = true;
+    dragStartX.current = e.pageX - divRef.current.offsetLeft;
+    dragScrollLeft.current = divRef.current.scrollLeft;
+    divRef.current.style.cursor = 'grabbing';
+    divRef.current.style.userSelect = 'none';
+  };
+
+  const handleMouseMove = (e: any) => {
+    if (!isDragging.current) return;
+    e.preventDefault();
+    const x = e.pageX - divRef.current.offsetLeft;
+    const walk = x - dragStartX.current;
+    divRef.current.scrollLeft = dragScrollLeft.current - walk;
+  };
+
+  const stopDrag = () => {
+    isDragging.current = false;
+    if (divRef.current) {
+      divRef.current.style.cursor = 'grab';
+      divRef.current.style.userSelect = '';
+    }
+  };
+
   return (
-    <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 4 }, style]}>
-      <TouchableOpacity
-        onPress={() => scrollRef.current?.scrollTo({ x: -STEP, animated: true })}
-        style={[arrowStyles.btn, !canLeft && arrowStyles.btnDisabled]}
-        disabled={!canLeft}
-      >
-        <Ionicons name="chevron-back" size={16} color={canLeft ? theme.colors.primary : theme.colors.border} />
-      </TouchableOpacity>
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={{ flex: 1 }}
-        contentContainerStyle={{ gap: 6, paddingVertical: 4 }}
-        onScroll={(e) => {
-          const x = e.nativeEvent.contentOffset.x;
-          const total = e.nativeEvent.contentSize.width - e.nativeEvent.layoutMeasurement.width;
-          setCanLeft(x > 2);
-          setCanRight(x < total - 2);
-        }}
-        scrollEventThrottle={16}
-      >
-        {children}
-      </ScrollView>
-      <TouchableOpacity
-        onPress={() => scrollRef.current?.scrollTo({ x: STEP, animated: true })}
-        style={[arrowStyles.btn, !canRight && arrowStyles.btnDisabled]}
-        disabled={!canRight}
-      >
-        <Ionicons name="chevron-forward" size={16} color={canRight ? theme.colors.primary : theme.colors.border} />
-      </TouchableOpacity>
-    </View>
+    <div
+      ref={divRef}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={stopDrag}
+      onMouseLeave={stopDrag}
+      style={{
+        display: 'flex',
+        flexDirection: 'row',
+        gap: 6,
+        overflowX: 'auto',
+        paddingBottom: 6,
+        paddingTop: 2,
+        cursor: 'grab',
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none',
+        ...(style as any),
+      }}
+    >
+      {children}
+    </div>
   );
 }
-
-const arrowStyles = StyleSheet.create({
-  btn: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: theme.colors.card,
-    borderWidth: 1, borderColor: theme.colors.border,
-    alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0,
-  },
-  btnDisabled: { opacity: 0.35 },
-});
 
 function getWeekDates(offset: number) {
   const d = new Date();
