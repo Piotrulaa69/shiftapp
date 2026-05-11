@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, FlatList, Platform, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { theme } from '../styles/theme';
@@ -49,6 +49,8 @@ function timeAgo(dateStr: string): string {
 export default function NotificationsScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width >= 768;
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -122,7 +124,7 @@ export default function NotificationsScreen() {
       {loading ? (
         <ActivityIndicator style={{ marginTop: 40 }} size="large" color={theme.colors.primary} />
       ) : notifications.length === 0 ? (
-        <View style={styles.empty}>
+        <View style={[styles.empty, isDesktop && styles.desktopContainer]}>
           <Ionicons name="notifications-off-outline" size={48} color={theme.colors.border} />
           <Text style={styles.emptyTitle}>Brak powiadomień</Text>
           <Text style={styles.emptyBody}>Będziesz tu widzieć ważne informacje o zmianach, zadaniach i wiadomościach.</Text>
@@ -132,7 +134,7 @@ export default function NotificationsScreen() {
           data={notifications}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, isDesktop && styles.listDesktop]}
           showsVerticalScrollIndicator={false}
         />
       )}
@@ -146,7 +148,9 @@ const styles = StyleSheet.create({
   backBtn: { padding: 4 },
   headerTitle: { fontSize: 17, fontWeight: '700', color: theme.colors.text },
   markAllText: { fontSize: 12, fontWeight: '600', color: theme.colors.primary },
-  list: { padding: 16, gap: 8 },
+  list: { padding: 16, gap: 8, paddingBottom: 40 },
+  listDesktop: { maxWidth: 700, alignSelf: 'center' as const, width: '100%', paddingHorizontal: 32 },
+  desktopContainer: { maxWidth: 700, alignSelf: 'center' as const, width: '100%' },
   item: { flexDirection: 'row', gap: 12, backgroundColor: theme.colors.card, borderRadius: 14, padding: 14 },
   itemUnread: { backgroundColor: '#F0F7FF', borderWidth: 1, borderColor: theme.colors.primary + '30' },
   iconBox: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
