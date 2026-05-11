@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import MobileHeader from '../../components/MobileHeader';
 import { useAuth } from '../../context/AuthContext';
 import { createTask, deleteTask as dbDeleteTask, toggleTask as dbToggleTask, getEmployees, getTasks } from '../../lib/db';
 import type { DbProfile, DbTask } from '../../lib/supabase';
@@ -245,17 +246,31 @@ export default function TasksScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Moje Zadania</Text>
-        <View style={styles.headerRight}>
-          {(isOwner || isManager) && (
-            <TouchableOpacity style={styles.addBtn} onPress={() => setShowModal(true)} activeOpacity={0.8}>
-              <Ionicons name="add" size={18} color={theme.colors.white} />
-              <Text style={styles.addBtnText}>Nowe zadanie</Text>
-            </TouchableOpacity>
-          )}
+      {isDesktop ? (
+        <View style={styles.header}>
+          <Text style={styles.title}>Moje Zadania</Text>
+          <View style={styles.headerRight}>
+            {(isOwner || isManager) && (
+              <TouchableOpacity style={styles.addBtn} onPress={() => setShowModal(true)} activeOpacity={0.8}>
+                <Ionicons name="add" size={18} color={theme.colors.white} />
+                <Text style={styles.addBtnText}>Nowe zadanie</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
-      </View>
+      ) : (
+        <MobileHeader
+          left={<Text style={styles.title}>Moje Zadania</Text>}
+          center={
+            (isOwner || isManager) ? (
+              <TouchableOpacity style={styles.addBtn} onPress={() => setShowModal(true)} activeOpacity={0.8}>
+                <Ionicons name="add" size={18} color={theme.colors.white} />
+                <Text style={styles.addBtnText}>Nowe</Text>
+              </TouchableOpacity>
+            ) : undefined
+          }
+        />
+      )}
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, isDesktop && styles.scrollContentDesktop]}>
         {/* Progress card */}

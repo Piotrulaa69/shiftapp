@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import MobileHeader from '../../components/MobileHeader';
 import { useAuth } from '../../context/AuthContext';
 import { getTrainings } from '../../lib/db';
 import type { DbTraining } from '../../lib/supabase';
@@ -184,15 +185,27 @@ export default function SzkoleniaScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Centrum szkoleń</Text>
-        <View style={styles.headerRight}>
-          <View style={styles.xpBadge}>
-            <Ionicons name="star" size={13} color={theme.colors.yellow} />
-            <Text style={styles.xpText}>1250</Text>
+      {isDesktop ? (
+        <View style={styles.header}>
+          <Text style={styles.title}>Centrum szkoleń</Text>
+          <View style={styles.headerRight}>
+            <View style={styles.xpBadge}>
+              <Ionicons name="star" size={13} color={theme.colors.yellow} />
+              <Text style={styles.xpText}>1250</Text>
+            </View>
           </View>
         </View>
-      </View>
+      ) : (
+        <MobileHeader
+          left={<Text style={styles.title}>Centrum szkoleń</Text>}
+          center={
+            <View style={styles.xpBadge}>
+              <Ionicons name="star" size={13} color={theme.colors.yellow} />
+              <Text style={styles.xpText}>1250</Text>
+            </View>
+          }
+        />
+      )}
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, isDesktop && styles.scrollContentDesktop]}>
         {/* Progress card */}

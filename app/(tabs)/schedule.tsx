@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import MobileHeader from '../../components/MobileHeader';
 import { useAuth } from '../../context/AuthContext';
 import { createShift, deleteShift as dbDeleteShift, updateShift as dbUpdateShift, getEmployees, getShifts } from '../../lib/db';
 import type { DbShift } from '../../lib/supabase';
@@ -736,20 +737,39 @@ export default function ScheduleScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Mój Grafik</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <TouchableOpacity style={styles.legendBtn} onPress={() => setShowLegend(true)} activeOpacity={0.7}>
-            <Ionicons name="help-circle-outline" size={20} color={theme.colors.textSecondary} />
-          </TouchableOpacity>
-          {isOwner && (
-            <TouchableOpacity style={styles.addBtn} onPress={() => { setNewDay(selectedDate); setShowCreateModal(true); }} activeOpacity={0.8}>
-              <Ionicons name="add" size={16} color={theme.colors.white} />
-              <Text style={styles.addBtnText}>Dodaj zmianę</Text>
+      {isDesktop ? (
+        <View style={styles.header}>
+          <Text style={styles.title}>Mój Grafik</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TouchableOpacity style={styles.legendBtn} onPress={() => setShowLegend(true)} activeOpacity={0.7}>
+              <Ionicons name="help-circle-outline" size={20} color={theme.colors.textSecondary} />
             </TouchableOpacity>
-          )}
+            {isOwner && (
+              <TouchableOpacity style={styles.addBtn} onPress={() => { setNewDay(selectedDate); setShowCreateModal(true); }} activeOpacity={0.8}>
+                <Ionicons name="add" size={16} color={theme.colors.white} />
+                <Text style={styles.addBtnText}>Dodaj zmianę</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
-      </View>
+      ) : (
+        <MobileHeader
+          left={<Text style={styles.title}>Mój Grafik</Text>}
+          center={
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <TouchableOpacity style={styles.legendBtn} onPress={() => setShowLegend(true)} activeOpacity={0.7}>
+                <Ionicons name="help-circle-outline" size={20} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+              {isOwner && (
+                <TouchableOpacity style={styles.addBtn} onPress={() => { setNewDay(selectedDate); setShowCreateModal(true); }} activeOpacity={0.8}>
+                  <Ionicons name="add" size={16} color={theme.colors.white} />
+                  <Text style={styles.addBtnText}>Dodaj</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          }
+        />
+      )}
 
       {/* View toggle */}
       <View style={styles.viewToggle}>

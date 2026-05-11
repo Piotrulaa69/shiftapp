@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     Platform,
     ScrollView,
@@ -12,6 +12,7 @@ import {
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import MobileHeader from '../../components/MobileHeader';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
 import { generateInvitation, getEmployees, getInvitations, removeEmployee } from '../../lib/db';
@@ -75,16 +76,33 @@ export default function AdminScreen() {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       {/* Header */}
-      <View style={s.header}>
-        <View>
-          <Text style={s.headerTitle}>Zarządzanie</Text>
-          <Text style={s.headerSub}>{restaurant?.name}</Text>
+      {isDesktop ? (
+        <View style={s.header}>
+          <View>
+            <Text style={s.headerTitle}>Zarządzanie</Text>
+            <Text style={s.headerSub}>{restaurant?.name}</Text>
+          </View>
+          <View style={s.headerBadge}>
+            <Ionicons name="shield-checkmark" size={14} color={theme.colors.primary} />
+            <Text style={s.headerBadgeText}>Właściciel</Text>
+          </View>
         </View>
-        <View style={s.headerBadge}>
-          <Ionicons name="shield-checkmark" size={14} color={theme.colors.primary} />
-          <Text style={s.headerBadgeText}>Właściciel</Text>
-        </View>
-      </View>
+      ) : (
+        <MobileHeader
+          left={
+            <View>
+              <Text style={s.headerTitle}>Zarządzanie</Text>
+              <Text style={s.headerSub}>{restaurant?.name}</Text>
+            </View>
+          }
+          center={
+            <View style={s.headerBadge}>
+              <Ionicons name="shield-checkmark" size={14} color={theme.colors.primary} />
+              <Text style={s.headerBadgeText}>Właściciel</Text>
+            </View>
+          }
+        />
+      )}
 
       {/* Tabs */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabsScroll} contentContainerStyle={s.tabs}>
