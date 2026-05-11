@@ -160,6 +160,60 @@ export async function getTrainings(restaurantId: string): Promise<DbTraining[]> 
   return data as DbTraining[];
 }
 
+export async function createTraining(
+  restaurantId: string,
+  fields: {
+    title: string;
+    category: string;
+    duration_min: number;
+    required: boolean;
+    points: number;
+    material_url: string | null;
+    material_type: 'pdf' | 'video' | null;
+    assigned_role: string | null;
+    deadline: string | null;
+  }
+): Promise<DbTraining | null> {
+  const { data, error } = await supabase
+    .from('trainings')
+    .insert({
+      restaurant_id: restaurantId,
+      status: 'nierozpoczete',
+      progress_percent: 0,
+      assigned_to: null,
+      ...fields,
+    })
+    .select()
+    .single();
+  if (error) { console.error('createTraining', error); return null; }
+  return data as DbTraining;
+}
+
+export async function updateTraining(
+  trainingId: string,
+  fields: Partial<{
+    title: string;
+    category: string;
+    duration_min: number;
+    required: boolean;
+    points: number;
+    material_url: string | null;
+    material_type: 'pdf' | 'video' | null;
+    assigned_role: string | null;
+    deadline: string | null;
+  }>
+): Promise<boolean> {
+  const { error } = await supabase.from('trainings').update(fields).eq('id', trainingId);
+  if (error) { console.error('updateTraining', error); }
+  return !error;
+}
+
+export async function deleteTraining(trainingId: string): Promise<boolean> {
+  const { error } = await supabase.from('trainings').delete().eq('id', trainingId);
+  if (error) { console.error('deleteTraining', error); }
+  return !error;
+}
+
 // ─── Employees ────────────────────────────────────────────────────────────────
 
 export async function getEmployees(restaurantId: string): Promise<DbProfile[]> {
