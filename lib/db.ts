@@ -518,9 +518,38 @@ export async function createDocument(
   return data as DbDocument;
 }
 
+export async function updateDocument(
+  id: string,
+  fields: { name?: string; doc_type?: string; file_url?: string; expires_at?: string | null; status?: string },
+): Promise<boolean> {
+  const { error } = await supabase.from('documents').update(fields).eq('id', id);
+  return !error;
+}
+
 export async function deleteDocument(id: string): Promise<boolean> {
   const { error } = await supabase.from('documents').delete().eq('id', id);
   return !error;
+}
+
+export async function uploadDocumentFile(
+  restaurantId: string,
+  fileName: string,
+  fileUri: string,
+  mimeType: string,
+): Promise<string | null> {
+  try {
+    const ext = fileName.split('.').pop() ?? 'bin';
+    const path = `${restaurantId}/${Date.now()}_${fileName.replace(/\s+/g, '_')}`;
+    const response = await fetch(fileUri);
+    const blob = await response.blob();
+    const { error } = await supabase.storage.from('documents').upload(path, blob, { contentType: mimeType, upsert: false });
+    if (error) { console.error('uploadDocumentFile', error); return null; }
+    const { data } = supabase.storage.from('documents').getPublicUrl(path);
+    return data.publicUrl;
+  } catch (e) {
+    console.error('uploadDocumentFile', e);
+    return null;
+  }
 }
 
 // ─── Conversations + Messages ────────────────────────────────────────────────
