@@ -681,7 +681,7 @@ export default function ScheduleScreen() {
       <Pressable
         key={key}
         style={[
-          cal.cell,
+          isDesktop ? cal.cellDesktop : cal.cell,
           isWeekend && cal.cellWeekend,
           isOtherMonth && cal.cellOtherMonth,
           isToday && cal.cellToday,
@@ -793,14 +793,24 @@ export default function ScheduleScreen() {
             ))}
           </View>
 
-          {/* Grid – scrollable, compact rows */}
-          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-            {monthGrid.map((week, wi) => (
-              <View key={wi} style={cal.gridRow}>
-                {week.map((d, di) => renderMonthCell(d, `${wi}-${di}`))}
-              </View>
-            ))}
-          </ScrollView>
+          {/* Grid – full height on desktop, scrollable on mobile */}
+          {isDesktop ? (
+            <View style={{ flex: 1 }}>
+              {monthGrid.map((week, wi) => (
+                <View key={wi} style={cal.gridRowDesktop}>
+                  {week.map((d, di) => renderMonthCell(d, `${wi}-${di}`))}
+                </View>
+              ))}
+            </View>
+          ) : (
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+              {monthGrid.map((week, wi) => (
+                <View key={wi} style={cal.gridRow}>
+                  {week.map((d, di) => renderMonthCell(d, `${wi}-${di}`))}
+                </View>
+              ))}
+            </ScrollView>
+          )}
         </View>
       )}
 
@@ -1217,7 +1227,8 @@ const cal = StyleSheet.create({
     textTransform: 'uppercase' as const,
   },
   headerCellWeekend: { color: '#DC2626', opacity: 0.7 },
-  gridRow: { flexDirection: 'row', minHeight: 90 },
+  gridRow: { flexDirection: 'row', minHeight: 90, overflow: 'hidden' },
+  gridRowDesktop: { flexDirection: 'row', flex: 1, overflow: 'hidden' },
   emptyCell: {
     flex: 1,
     minHeight: 90,
@@ -1225,6 +1236,18 @@ const cal = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: theme.colors.border,
     backgroundColor: '#F8F7F3',
+  },
+  cellDesktop: {
+    flex: 1,
+    minHeight: 0,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: theme.colors.border,
+    paddingTop: 6,
+    paddingHorizontal: 5,
+    paddingBottom: 4,
+    overflow: 'hidden',
+    backgroundColor: theme.colors.card,
   },
   cell: {
     flex: 1,
