@@ -813,24 +813,14 @@ export default function ScheduleScreen() {
             ))}
           </View>
 
-          {/* Grid – full height on desktop, scrollable on mobile */}
-          {isDesktop ? (
-            <View style={{ flex: 1 }}>
-              {monthGrid.map((week, wi) => (
-                <View key={wi} style={cal.gridRowDesktop}>
-                  {week.map((d, di) => renderMonthCell(d, `${wi}-${di}`))}
-                </View>
-              ))}
-            </View>
-          ) : (
-            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-              {monthGrid.map((week, wi) => (
-                <View key={wi} style={cal.gridRow}>
-                  {week.map((d, di) => renderMonthCell(d, `${wi}-${di}`))}
-                </View>
-              ))}
-            </ScrollView>
-          )}
+          {/* Grid – full height on both desktop and mobile */}
+          <View style={{ flex: 1 }}>
+            {monthGrid.map((week, wi) => (
+              <View key={wi} style={isDesktop ? cal.gridRowDesktop : cal.gridRowMobile}>
+                {week.map((d, di) => renderMonthCell(d, `${wi}-${di}`))}
+              </View>
+            ))}
+          </View>
         </View>
       )}
 
@@ -1248,10 +1238,10 @@ const cal = StyleSheet.create({
   },
   headerCellWeekend: { color: '#DC2626', opacity: 0.7 },
   gridRow: { flexDirection: 'row', minHeight: 90, overflow: 'hidden' },
+  gridRowMobile: { flexDirection: 'row', flex: 1, overflow: 'hidden' },
   gridRowDesktop: { flexDirection: 'row', flex: 1, overflow: 'hidden' },
   emptyCell: {
     flex: 1,
-    minHeight: 90,
     borderRightWidth: 1,
     borderBottomWidth: 1,
     borderColor: theme.colors.border,
@@ -1271,7 +1261,6 @@ const cal = StyleSheet.create({
   },
   cell: {
     flex: 1,
-    minHeight: 90,
     borderRightWidth: 1,
     borderBottomWidth: 1,
     borderColor: theme.colors.border,
