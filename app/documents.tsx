@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
   alertBoxDesktop: { maxWidth: 720, alignSelf: 'center' as const, width: '100%', marginHorizontal: 0, paddingHorizontal: 32 },
   alertRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   alertText: { fontSize: 13, color: theme.colors.text },
-  filters: { paddingHorizontal: 16, gap: 8, paddingBottom: 8 },
+  filters: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 8, paddingBottom: 8 },
   filtersDesktop: { paddingHorizontal: 32 },
   filterBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
   filterActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },

@@ -376,7 +376,7 @@ const styles = StyleSheet.create({
   modeBtnActive: { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primary },
   modeBtnText: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary },
   modeBtnTextActive: { color: theme.colors.primary },
-  filters: { paddingHorizontal: 16, gap: 8, paddingBottom: 8 },
+  filters: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 8, paddingBottom: 8 },
   filtersDesktop: { paddingHorizontal: 32 },
   filterBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
   filterActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
