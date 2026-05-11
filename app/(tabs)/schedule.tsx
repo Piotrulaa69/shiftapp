@@ -140,8 +140,8 @@ function TimePickerRow({ label, value, onChange }: { label: string; value: strin
       <Text style={sm.label}>{label}</Text>
       <ScrollView
         horizontal
-        showsHorizontalScrollIndicator={false}
-        style={sm.timeScroll}
+        showsHorizontalScrollIndicator={Platform.OS !== 'web'}
+        style={[sm.timeScroll, Platform.OS === 'web' && { overflowX: 'auto' } as any]}
         contentContainerStyle={{ gap: 6, paddingHorizontal: 2 }}
       >
         {TIME_SLOTS.map(t => (
@@ -196,8 +196,8 @@ function LocationPicker({ value, onChange }: { value: string; onChange: (v: stri
     <View>
       <ScrollView
         horizontal
-        showsHorizontalScrollIndicator={false}
-        style={{ marginBottom: 8 }}
+        showsHorizontalScrollIndicator={Platform.OS !== 'web'}
+        style={[{ marginBottom: 8 }, Platform.OS === 'web' && { overflowX: 'auto' } as any]}
         contentContainerStyle={{ gap: 8, paddingHorizontal: 2 }}
       >
         {DEFAULT_LOCATIONS.map(loc => (
@@ -240,8 +240,8 @@ function StatusPicker({ value, onChange }: { value: string; onChange: (v: string
     <View>
       <ScrollView
         horizontal
-        showsHorizontalScrollIndicator={false}
-        style={{ marginBottom: 8 }}
+        showsHorizontalScrollIndicator={Platform.OS !== 'web'}
+        style={[{ marginBottom: 8 }, Platform.OS === 'web' && { overflowX: 'auto' } as any]}
         contentContainerStyle={{ gap: 8, paddingHorizontal: 2 }}
       >
         {FIXED_STATUSES.map(s => {
@@ -358,7 +358,7 @@ function ShiftModal({
       </View>
 
       {/* Body */}
-      <ScrollView style={{ maxHeight: 500 }} contentContainerStyle={sm.body} keyboardShouldPersistTaps="handled">
+      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={sm.body} keyboardShouldPersistTaps="handled">
         {!editing ? (
           <>
             <View style={sm.infoRow}>
@@ -388,8 +388,8 @@ function ShiftModal({
             <Text style={sm.label}>Pracownik</Text>
             <ScrollView
               horizontal
-              showsHorizontalScrollIndicator={true}
-              style={sm.hScroll}
+              showsHorizontalScrollIndicator={Platform.OS !== 'web'}
+              style={[sm.hScroll, Platform.OS === 'web' && { overflowX: 'auto' } as any]}
               contentContainerStyle={{ gap: 8, paddingHorizontal: 2, paddingBottom: 4 }}
             >
               {employees.map(e => (
@@ -495,8 +495,8 @@ const sm = StyleSheet.create({
     backgroundColor: theme.colors.surface,
   },
   dateFieldWrap: { position: 'relative', justifyContent: 'center' },
-  hScroll: { marginBottom: 4 },
-  timeScroll: { marginBottom: 4 },
+  hScroll: { marginBottom: 4, height: 40 },
+  timeScroll: { marginBottom: 4, height: 36 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
   chipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
   chipDot: { width: 6, height: 6, borderRadius: 3 },
