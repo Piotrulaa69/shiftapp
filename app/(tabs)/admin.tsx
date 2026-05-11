@@ -2,11 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
+    Modal,
     Platform,
     ScrollView,
     Share,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     useWindowDimensions,
     View
@@ -15,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileHeader from '../../components/MobileHeader';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
-import { generateInvitation, getEmployees, getInvitations, getTrainings, removeEmployee } from '../../lib/db';
+import { createTraining, deleteTraining, generateInvitation, getEmployees, getInvitations, getTrainings, removeEmployee, updateTraining } from '../../lib/db';
 import type { DbInvitation, DbProfile, DbTraining } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
