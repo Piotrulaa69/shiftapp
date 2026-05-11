@@ -356,11 +356,6 @@ export default function TabLayout() {
       <View style={{ flex: 1, flexDirection: 'row', backgroundColor: theme.colors.background }}>
         <Sidebar />
         <View style={{ flex: 1, flexDirection: 'column' }}>
-          {/* Desktop topbar with notification bell */}
-          <View style={topbarStyles.bar}>
-            <View style={{ flex: 1 }} />
-            <NotificationBell />
-          </View>
           <View style={{ flex: 1 }}>
           <Tabs
             tabBar={() => null}
