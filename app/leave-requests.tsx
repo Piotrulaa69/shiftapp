@@ -144,7 +144,7 @@ export default function LeaveRequestsScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.header}>
+      <View style={[styles.header, isDesktop && styles.headerDesktop]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
         </TouchableOpacity>
@@ -156,7 +156,7 @@ export default function LeaveRequestsScreen() {
       </View>
 
       {canManage && (
-        <View style={styles.modeRow}>
+        <View style={[styles.modeRow, isDesktop && styles.modeRowDesktop]}>
           {(['my', 'team'] as const).map((m) => (
             <TouchableOpacity key={m} style={[styles.modeBtn, viewMode === m && styles.modeBtnActive]} onPress={() => setViewMode(m)}>
               <Text style={[styles.modeBtnText, viewMode === m && styles.modeBtnTextActive]}>
@@ -167,7 +167,7 @@ export default function LeaveRequestsScreen() {
         </View>
       )}
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.filters, isDesktop && styles.filtersDesktop]}>
         {[{ key: 'all', label: 'Wszystkie' }, { key: 'pending', label: 'Oczekujące' }, { key: 'approved', label: 'Zatwierdzone' }, { key: 'rejected', label: 'Odrzucone' }].map((f) => (
           <TouchableOpacity key={f.key} style={[styles.filterBtn, filter === f.key && styles.filterActive]} onPress={() => setFilter(f.key)}>
             <Text style={[styles.filterText, filter === f.key && styles.filterTextActive]}>{f.label}</Text>
@@ -365,16 +365,19 @@ export default function LeaveRequestsScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
+  headerDesktop: { maxWidth: 720, alignSelf: 'center' as const, width: '100%', paddingHorizontal: 32 },
   backBtn: { padding: 4 },
   headerTitle: { fontSize: 17, fontWeight: '700', color: theme.colors.text },
   addBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.md, paddingHorizontal: 12, paddingVertical: 7 },
   addBtnText: { fontSize: 13, fontWeight: '700', color: theme.colors.white },
   modeRow: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 8, gap: 8 },
+  modeRowDesktop: { maxWidth: 720, alignSelf: 'center' as const, width: '100%', paddingHorizontal: 32, marginHorizontal: 0 },
   modeBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
   modeBtnActive: { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primary },
   modeBtnText: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary },
   modeBtnTextActive: { color: theme.colors.primary },
   filters: { paddingHorizontal: 16, gap: 8, paddingBottom: 8 },
+  filtersDesktop: { paddingHorizontal: 32 },
   filterBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
   filterActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
   filterText: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary },
