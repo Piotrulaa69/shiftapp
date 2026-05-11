@@ -262,7 +262,6 @@ function MobileTabBar({ state, navigation }: BottomTabBarProps) {
           onPress={() => router.push('/(tabs)/admin' as any)}
         >
           <Ionicons name="settings" size={26} color={theme.colors.white} />
-          <Text style={tabStyles.fabLabel}>Zarządzanie</Text>
         </TouchableOpacity>
       ) : (
         <TouchableOpacity
