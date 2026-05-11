@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { getAvailability, setAvailability } from '../lib/db';
@@ -21,6 +21,8 @@ export default function AvailabilityScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const rid = user?.restaurantId ?? '';
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width >= 768;
 
   const [currentMonth, setCurrentMonth] = useState(() => {
     const d = new Date();
@@ -90,7 +92,7 @@ export default function AvailabilityScreen() {
         <Text style={styles.headerTitle}>Dyspozycyjność</Text>
         <View style={{ width: 32 }} />
       </View>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]} style={isDesktop ? { width: '100%' } : undefined}>
         {/* Month nav */}
         <View style={styles.monthNav}>
           <TouchableOpacity onPress={prevMonth}><Ionicons name="chevron-back" size={22} color={theme.colors.primary} /></TouchableOpacity>
@@ -151,6 +153,7 @@ const styles = StyleSheet.create({
   backBtn: { padding: 4 },
   headerTitle: { fontSize: 17, fontWeight: '700', color: theme.colors.text },
   content: { padding: 16 },
+  contentDesktop: { maxWidth: 720, alignSelf: 'center' as const, width: '100%', paddingHorizontal: 32 },
   monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   monthLabel: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
   legend: { flexDirection: 'row', gap: 16, marginBottom: 16 },

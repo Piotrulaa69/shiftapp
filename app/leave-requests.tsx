@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { createLeaveRequest, getEmployees, getLeaveRequests, getLeaveTypes, reviewLeaveRequest } from '../lib/db';
@@ -20,6 +20,8 @@ export default function LeaveRequestsScreen() {
   const { user, isOwner, isManager } = useAuth();
   const canManage = isOwner || isManager;
   const rid = user?.restaurantId ?? '';
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width >= 768;
 
   const [requests, setRequests] = useState<DbLeaveRequest[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<DbLeaveType[]>([]);
@@ -114,7 +116,7 @@ export default function LeaveRequestsScreen() {
         ))}
       </ScrollView>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]} style={isDesktop ? { width: '100%' } : undefined}>
         {loading ? <ActivityIndicator style={{ marginTop: 40 }} size="large" color={theme.colors.primary} /> : (() => {
           const displayList = viewMode === 'team' ? (filter === 'all' ? teamRequests : teamRequests.filter((r) => r.status === filter)) : filtered;
           if (displayList.length === 0) return (
@@ -209,6 +211,7 @@ const styles = StyleSheet.create({
   filterText: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary },
   filterTextActive: { color: theme.colors.white },
   content: { padding: 16 },
+  contentDesktop: { maxWidth: 720, alignSelf: 'center' as const, width: '100%', paddingHorizontal: 32 },
   empty: { alignItems: 'center', paddingVertical: 40, gap: 10 },
   emptyText: { fontSize: 14, color: theme.colors.textMuted },
   card: { backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.lg, padding: 16, marginBottom: 12 },
