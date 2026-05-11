@@ -676,47 +676,59 @@ export default function ScheduleScreen() {
       onDragLeave: () => setDragOverDate(null),
     } : {};
 
+    const isWeekend = isSat || isSun;
     return (
       <Pressable
         key={key}
-        style={[cal.cell, isSelected && cal.cellSelected, isDragOver && cal.cellDragOver, isToday && cal.cellToday]}
+        style={[
+          cal.cell,
+          isWeekend && cal.cellWeekend,
+          isOtherMonth && cal.cellOtherMonth,
+          isToday && cal.cellToday,
+          isSelected && cal.cellSelected,
+          isDragOver && cal.cellDragOver,
+        ]}
         onPress={() => { setSelectedDate(dateStr); }}
         {...(webDropProps as any)}
       >
-        <View style={[cal.dayNumWrap, isToday && cal.dayNumTodayWrap]}>
-          <Text style={[
-            cal.dayNum,
-            isOtherMonth && cal.dayNumOther,
-            (isSat || isSun) && cal.dayNumWeekend,
-            isToday && cal.dayNumTodayText,
-          ]}>{d.getDate()}</Text>
+        <View style={cal.cellHeader}>
+          <View style={[cal.dayNumWrap, isToday && cal.dayNumTodayWrap]}>
+            <Text style={[
+              cal.dayNum,
+              isOtherMonth && cal.dayNumOther,
+              isWeekend && !isOtherMonth && cal.dayNumWeekend,
+              isToday && cal.dayNumTodayText,
+            ]}>{d.getDate()}</Text>
+          </View>
+          {holiday && (
+            <Text style={cal.holidayText} numberOfLines={1}>{holiday}</Text>
+          )}
         </View>
-        {holiday && (
-          <Text style={cal.holidayText} numberOfLines={1}>{holiday}</Text>
-        )}
-        {cellShifts.slice(0, 3).map((s) => {
-          const cfg = STATUS_CONFIG[s.status as ShiftStatus];
-          const webDragProps = Platform.OS === 'web' ? {
-            draggable: isOwner,
-            onDragStart: (e: any) => { e.stopPropagation(); handleDragStart(s.id); },
-          } : {};
-          const barColor = cfg?.color ?? theme.colors.primary;
-          return (
-            <Pressable
-              key={s.id}
-              style={[cal.eventBar, { borderLeftColor: barColor, backgroundColor: barColor + '1A' }, dragShiftId === s.id && cal.eventDragging]}
-              onPress={(e) => { (e as any).stopPropagation?.(); setSelectedShift(s); }}
-              {...(webDragProps as any)}
-            >
-              <Text style={[cal.eventText, { color: barColor }]} numberOfLines={1}>{s.start_time} {s.employee_name?.split(' ')[0]}</Text>
+        <View style={cal.eventsWrap}>
+          {cellShifts.slice(0, isDesktop ? 3 : 2).map((s) => {
+            const cfg = STATUS_CONFIG[s.status as ShiftStatus];
+            const webDragProps = Platform.OS === 'web' ? {
+              draggable: isOwner,
+              onDragStart: (e: any) => { e.stopPropagation(); handleDragStart(s.id); },
+            } : {};
+            const barColor = cfg?.color ?? theme.colors.primary;
+            return (
+              <Pressable
+                key={s.id}
+                style={[cal.eventBar, { borderLeftColor: barColor, backgroundColor: barColor + '18' }, dragShiftId === s.id && cal.eventDragging]}
+                onPress={(e) => { (e as any).stopPropagation?.(); setSelectedShift(s); }}
+                {...(webDragProps as any)}
+              >
+                <Text style={[cal.eventText, { color: barColor }]} numberOfLines={1}>{s.start_time} {s.employee_name?.split(' ')[0]}</Text>
+              </Pressable>
+            );
+          })}
+          {cellShifts.length > (isDesktop ? 3 : 2) && (
+            <Pressable onPress={() => { setSelectedDate(dateStr); setCalView('day'); }}>
+              <Text style={cal.moreText}>+{cellShifts.length - (isDesktop ? 3 : 2)}</Text>
             </Pressable>
-          );
-        })}
-        {cellShifts.length > 3 && (
-          <Pressable onPress={() => { setSelectedDate(dateStr); setCalView('day'); }}>
-            <Text style={cal.moreText}>+{cellShifts.length - 3} więcej</Text>
-          </Pressable>
-        )}
+          )}
+        </View>
       </Pressable>
     );
   };
@@ -781,14 +793,14 @@ export default function ScheduleScreen() {
             ))}
           </View>
 
-          {/* Grid – full height, no scroll, equal rows */}
-          <View style={{ flex: 1 }}>
+          {/* Grid – scrollable, compact rows */}
+          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
             {monthGrid.map((week, wi) => (
               <View key={wi} style={cal.gridRow}>
                 {week.map((d, di) => renderMonthCell(d, `${wi}-${di}`))}
               </View>
             ))}
-          </View>
+          </ScrollView>
         </View>
       )}
 
@@ -1187,41 +1199,92 @@ const wv = StyleSheet.create({
 
 /* ── Month grid styles ── */
 const cal = StyleSheet.create({
-  headerRow: { flexDirection: 'row', backgroundColor: theme.colors.card, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
-  headerCell: { flex: 1, textAlign: 'center', fontSize: 10, fontWeight: '600', color: theme.colors.textMuted, paddingVertical: 10, letterSpacing: 0.7, textTransform: 'uppercase' as const },
-  headerCellWeekend: { color: '#EF4444' },
-  gridRow: { flex: 1, flexDirection: 'row' },
-  emptyCell: { flex: 1, borderRightWidth: 1, borderBottomWidth: 1, borderColor: theme.colors.border, backgroundColor: '#F7F6F2' },
-  cell: {
+  headerRow: {
+    flexDirection: 'row',
+    backgroundColor: theme.colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    paddingVertical: 0,
+  },
+  headerCell: {
     flex: 1,
+    textAlign: 'center',
+    fontSize: 10,
+    fontWeight: '500',
+    color: theme.colors.textMuted,
+    paddingVertical: 8,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase' as const,
+  },
+  headerCellWeekend: { color: '#DC2626', opacity: 0.7 },
+  gridRow: { flexDirection: 'row', minHeight: 90 },
+  emptyCell: {
+    flex: 1,
+    minHeight: 90,
     borderRightWidth: 1,
     borderBottomWidth: 1,
     borderColor: theme.colors.border,
-    padding: 5,
+    backgroundColor: '#F8F7F3',
+  },
+  cell: {
+    flex: 1,
+    minHeight: 90,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: theme.colors.border,
+    paddingTop: 6,
+    paddingHorizontal: 5,
+    paddingBottom: 4,
     overflow: 'hidden',
     backgroundColor: theme.colors.card,
   },
+  cellWeekend: { backgroundColor: '#FAFAF8' },
+  cellOtherMonth: { backgroundColor: '#F8F7F3' },
   cellSelected: { backgroundColor: '#EFF6FF' },
-  cellToday: { backgroundColor: '#F5F9FF' },
+  cellToday: { backgroundColor: '#FAFCFF' },
   cellDragOver: { backgroundColor: '#EFF6FF' },
-  dayNumWrap: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 3, alignSelf: 'flex-start' },
+  cellHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  dayNumWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   dayNumTodayWrap: { backgroundColor: theme.colors.primary },
   dayNum: { fontSize: 11, fontWeight: '400', color: theme.colors.text },
-  dayNumOther: { color: theme.colors.textMuted },
+  dayNumOther: { color: theme.colors.textMuted, opacity: 0.5 },
   dayNumWeekend: { color: '#DC2626' },
   dayNumTodayText: { color: '#fff', fontWeight: '600' },
-  holidayText: { fontSize: 8, color: '#15803D', fontWeight: '500', marginBottom: 2, letterSpacing: 0.1 },
+  holidayText: {
+    fontSize: 8,
+    color: '#15803D',
+    fontWeight: '500',
+    flex: 1,
+  },
+  eventsWrap: { gap: 2 },
   eventBar: {
     borderRadius: 3,
-    borderLeftWidth: 2.5,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    marginBottom: 2,
+    borderLeftWidth: 2,
+    paddingLeft: 4,
+    paddingRight: 3,
+    paddingVertical: 1,
     cursor: 'grab' as any,
   },
-  eventDragging: { opacity: 0.35 },
-  eventText: { fontSize: 10, fontWeight: '600', letterSpacing: 0.05 },
-  moreText: { fontSize: 9, color: theme.colors.textSecondary, fontWeight: '500', marginTop: 2, paddingHorizontal: 2 },
+  eventDragging: { opacity: 0.3 },
+  eventText: { fontSize: 10, fontWeight: '500', letterSpacing: 0.05 },
+  moreText: {
+    fontSize: 9,
+    color: theme.colors.textMuted,
+    fontWeight: '400',
+    paddingLeft: 2,
+    marginTop: 1,
+  },
 });
 
 const styles = StyleSheet.create({
