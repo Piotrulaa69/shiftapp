@@ -156,6 +156,9 @@ export default function SzkoleniaScreen() {
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterKey>('wszystkie');
 
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width >= 768;
+
   useEffect(() => {
     if (!rid) return;
     setLoading(true);
@@ -177,9 +180,6 @@ export default function SzkoleniaScreen() {
     : activeFilter === 'dla_mnie'
     ? trainings.filter((t) => t.category === 'Procedury' || t.category === 'Obsługa')
     : trainings;
-
-  const { width } = useWindowDimensions();
-  const isDesktop = Platform.OS === 'web' && width >= 768;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
