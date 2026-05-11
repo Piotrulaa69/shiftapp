@@ -700,14 +700,15 @@ export default function ScheduleScreen() {
             draggable: isOwner,
             onDragStart: (e: any) => { e.stopPropagation(); handleDragStart(s.id); },
           } : {};
+          const barColor = cfg?.color ?? theme.colors.primary;
           return (
             <Pressable
               key={s.id}
-              style={[cal.eventBar, { backgroundColor: cfg?.color ?? theme.colors.primary }, dragShiftId === s.id && cal.eventDragging]}
+              style={[cal.eventBar, { borderLeftColor: barColor, backgroundColor: barColor + '1A' }, dragShiftId === s.id && cal.eventDragging]}
               onPress={(e) => { (e as any).stopPropagation?.(); setSelectedShift(s); }}
               {...(webDragProps as any)}
             >
-              <Text style={cal.eventText} numberOfLines={1}>{s.start_time} {s.employee_name?.split(' ')[0]}</Text>
+              <Text style={[cal.eventText, { color: barColor }]} numberOfLines={1}>{s.start_time} {s.employee_name?.split(' ')[0]}</Text>
             </Pressable>
           );
         })}
@@ -1190,36 +1191,37 @@ const cal = StyleSheet.create({
   headerCell: { flex: 1, textAlign: 'center', fontSize: 10, fontWeight: '600', color: theme.colors.textMuted, paddingVertical: 10, letterSpacing: 0.7, textTransform: 'uppercase' as const },
   headerCellWeekend: { color: '#EF4444' },
   gridRow: { flex: 1, flexDirection: 'row' },
-  emptyCell: { flex: 1, borderRightWidth: 1, borderBottomWidth: 1, borderColor: theme.colors.border, backgroundColor: '#FAFAF8' },
+  emptyCell: { flex: 1, borderRightWidth: 1, borderBottomWidth: 1, borderColor: theme.colors.border, backgroundColor: '#F7F6F2' },
   cell: {
     flex: 1,
     borderRightWidth: 1,
     borderBottomWidth: 1,
     borderColor: theme.colors.border,
-    padding: 6,
+    padding: 5,
     overflow: 'hidden',
     backgroundColor: theme.colors.card,
   },
   cellSelected: { backgroundColor: '#EFF6FF' },
-  cellToday: { backgroundColor: '#F8FAFF' },
-  cellDragOver: { backgroundColor: '#EFF6FF', borderColor: theme.colors.primary, borderWidth: 1 },
-  dayNumWrap: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', marginBottom: 3 },
+  cellToday: { backgroundColor: '#F5F9FF' },
+  cellDragOver: { backgroundColor: '#EFF6FF' },
+  dayNumWrap: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 3, alignSelf: 'flex-start' },
   dayNumTodayWrap: { backgroundColor: theme.colors.primary },
-  dayNum: { fontSize: 12, fontWeight: '500', color: theme.colors.text },
-  dayNumOther: { color: theme.colors.textMuted, fontWeight: '400' },
-  dayNumWeekend: { color: '#EF4444' },
-  dayNumTodayText: { color: '#fff' },
-  holidayText: { fontSize: 9, color: '#15803D', fontWeight: '500', marginBottom: 2 },
+  dayNum: { fontSize: 11, fontWeight: '400', color: theme.colors.text },
+  dayNumOther: { color: theme.colors.textMuted },
+  dayNumWeekend: { color: '#DC2626' },
+  dayNumTodayText: { color: '#fff', fontWeight: '600' },
+  holidayText: { fontSize: 8, color: '#15803D', fontWeight: '500', marginBottom: 2, letterSpacing: 0.1 },
   eventBar: {
-    borderRadius: 4,
+    borderRadius: 3,
+    borderLeftWidth: 2.5,
     paddingHorizontal: 5,
     paddingVertical: 2,
     marginBottom: 2,
     cursor: 'grab' as any,
   },
   eventDragging: { opacity: 0.35 },
-  eventText: { fontSize: 10, color: '#FFF', fontWeight: '500', letterSpacing: 0.1 },
-  moreText: { fontSize: 10, color: theme.colors.primary, fontWeight: '500', marginTop: 1, paddingHorizontal: 2 },
+  eventText: { fontSize: 10, fontWeight: '600', letterSpacing: 0.05 },
+  moreText: { fontSize: 9, color: theme.colors.textSecondary, fontWeight: '500', marginTop: 2, paddingHorizontal: 2 },
 });
 
 const styles = StyleSheet.create({
