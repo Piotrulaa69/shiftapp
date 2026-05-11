@@ -139,7 +139,7 @@ export default function AvailabilityScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.header}>
+      <View style={[styles.header, isDesktop && styles.headerDesktop]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
         </TouchableOpacity>
@@ -149,7 +149,7 @@ export default function AvailabilityScreen() {
 
       {/* Manager view toggle */}
       {canManage && (
-        <View style={styles.modeRow}>
+        <View style={[styles.modeRow, isDesktop && styles.modeRowDesktop]}>
           {(['calendar', 'team'] as const).map((m) => (
             <TouchableOpacity key={m} style={[styles.modeBtn, viewMode === m && styles.modeBtnActive]} onPress={() => setViewMode(m)}>
               <Ionicons name={m === 'calendar' ? 'calendar-outline' : 'people-outline'} size={14} color={viewMode === m ? theme.colors.primary : theme.colors.textSecondary} />
@@ -163,7 +163,7 @@ export default function AvailabilityScreen() {
 
       {/* Employee picker for managers (calendar mode) */}
       {canManage && viewMode === 'calendar' && employees.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.empScroll}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.empScroll, isDesktop && styles.empScrollDesktop]}>
           {employees.map((e) => {
             const active = selEmpId === e.id;
             return (
@@ -338,14 +338,17 @@ export default function AvailabilityScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
+  headerDesktop: { maxWidth: 720, alignSelf: 'center' as const, width: '100%', paddingHorizontal: 32 },
   backBtn: { padding: 4 },
   headerTitle: { fontSize: 17, fontWeight: '700', color: theme.colors.text },
   modeRow: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 4, gap: 8 },
+  modeRowDesktop: { maxWidth: 720, alignSelf: 'center' as const, width: '100%', paddingHorizontal: 32, marginHorizontal: 0 },
   modeBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
   modeBtnActive: { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primary },
   modeBtnText: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary },
   modeBtnTextActive: { color: theme.colors.primary },
-  empScroll: { paddingHorizontal: 16, gap: 8, paddingVertical: 8 },
+  empScroll: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 8, paddingVertical: 8 },
+  empScrollDesktop: { paddingHorizontal: 32 },
   empChip: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: theme.colors.card, borderRadius: 10, padding: 8, borderWidth: 1.5, borderColor: theme.colors.border },
   empChipActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primaryLight },
   empAvatar: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
