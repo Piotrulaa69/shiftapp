@@ -111,7 +111,7 @@ export default function ProfileScreen() {
       </ScrollView>
 
       {/* Change Password Modal */}
-      <Modal visible={showPasswordModal} animationType="slide" transparent onRequestClose={() => setShowPasswordModal(false)}>
+      <Modal visible={showPasswordModal} animationType="fade" transparent onRequestClose={() => setShowPasswordModal(false)}>
         <View style={mStyles.overlay}>
           <View style={mStyles.sheet}>
             <View style={mStyles.mHeader}>

@@ -448,7 +448,7 @@ export default function TasksScreen() {
       </ScrollView>
 
       {/* Create Task Modal */}
-      <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
+      <Modal visible={showModal} animationType="fade" transparent onRequestClose={() => setShowModal(false)}>
         <View style={mStyles.overlay}>
           <View style={[mStyles.sheet, isDesktop && mStyles.sheetDesktop]}>
             <View style={mStyles.header}>
@@ -508,7 +508,7 @@ export default function TasksScreen() {
       </Modal>
 
       {/* Task Detail Modal */}
-      <Modal visible={!!detailTask} animationType="slide" transparent onRequestClose={() => setDetailTask(null)}>
+      <Modal visible={!!detailTask} animationType="fade" transparent onRequestClose={() => setDetailTask(null)}>
         <View style={mStyles.overlay}>
           <View style={[mStyles.sheet, isDesktop && mStyles.sheetDesktop]}>
             {detailTask && (() => {

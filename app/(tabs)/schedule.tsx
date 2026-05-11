@@ -1028,7 +1028,7 @@ export default function ScheduleScreen() {
       </Modal>
 
       {/* ── Legend Modal ── */}
-      <Modal visible={showLegend} animationType="slide" transparent onRequestClose={() => setShowLegend(false)}>
+      <Modal visible={showLegend} animationType="fade" transparent onRequestClose={() => setShowLegend(false)}>
         <TouchableOpacity style={mStyles.overlay} activeOpacity={1} onPress={() => setShowLegend(false)}>
           <TouchableOpacity style={styles.legendSheet} activeOpacity={1}>
             <View style={styles.legendHandle} />
@@ -1052,7 +1052,7 @@ export default function ScheduleScreen() {
       </Modal>
 
       {/* ── Create Shift Modal ── */}
-      <Modal visible={showCreateModal} animationType="slide" transparent onRequestClose={() => setShowCreateModal(false)}>
+      <Modal visible={showCreateModal} animationType="fade" transparent onRequestClose={() => setShowCreateModal(false)}>
         <View style={mStyles.overlay}>
           <View style={[mStyles.sheet, isDesktop && mStyles.sheetDesktop]}>
             <View style={mStyles.header}>

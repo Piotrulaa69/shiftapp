@@ -179,7 +179,7 @@ export default function ScheduleEditorScreen() {
       )}
 
       {/* Add Shift Modal */}
-      <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
+      <Modal visible={showModal} animationType="fade" transparent onRequestClose={() => setShowModal(false)}>
         <View style={mStyles.overlay}>
           <View style={mStyles.sheet}>
             <View style={mStyles.mHeader}>

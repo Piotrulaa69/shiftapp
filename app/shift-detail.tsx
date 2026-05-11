@@ -224,7 +224,7 @@ export default function ShiftDetailScreen() {
       </ScrollView>
 
       {/* Absence Modal */}
-      <Modal visible={showAbsenceModal} animationType="slide" transparent onRequestClose={() => setShowAbsenceModal(false)}>
+      <Modal visible={showAbsenceModal} animationType="fade" transparent onRequestClose={() => setShowAbsenceModal(false)}>
         <View style={mStyles.overlay}>
           <View style={mStyles.sheet}>
             <View style={mStyles.mHeader}>
