@@ -153,14 +153,14 @@ const sideStyles = StyleSheet.create({
     flexDirection: 'column',
   },
   logoRow: {
-    paddingHorizontal: 16,
-    paddingTop: 28,
-    paddingBottom: 24,
+    paddingHorizontal: 12,
+    paddingTop: 20,
+    paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
     alignItems: 'center',
   },
-  logo: { width: 220, height: 80 },
+  logo: { width: 236, height: 110 },
   navScroll: { flex: 1, paddingTop: 16 },
   navItem: {
     flexDirection: 'row',
