@@ -1,8 +1,7 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-    Image,
+    ActivityIndicator,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -10,283 +9,367 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    useWindowDimensions,
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../context/AlertContext';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
-import { theme } from '../styles/theme';
 
 type Step = 'code' | 'register';
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   WEB PORTAL — dark two-column auth design (same CSS as login)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const JOIN_CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+#sa-join{font-family:'Inter',ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased;display:flex;min-height:100vh;width:100%;background:white;padding:14px;}
+@media(min-width:1024px){#sa-join{height:100vh;overflow:hidden;}}
+
+/* ─── LEFT: blue hero ─── */
+.aj-left{width:52%;position:relative;display:none;flex-direction:column;align-items:center;justify-content:center;padding:0 48px;border-radius:24px;overflow:hidden;height:100%;flex-shrink:0;background:linear-gradient(160deg,#2563EB 0%,#1E40AF 50%,#1E3A5F 100%);}
+@media(min-width:1024px){.aj-left{display:flex;}}
+.aj-left::before{content:'';position:absolute;top:-30%;left:-20%;width:70%;height:70%;background:radial-gradient(circle,rgba(96,165,250,.5) 0%,transparent 65%);filter:blur(60px);pointer-events:none;}
+.aj-left::after{content:'';position:absolute;bottom:-30%;right:-20%;width:70%;height:70%;background:radial-gradient(circle,rgba(37,99,235,.4) 0%,transparent 65%);filter:blur(70px);pointer-events:none;}
+.aj-noise{position:absolute;inset:0;pointer-events:none;opacity:.18;mix-blend-mode:soft-light;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");background-size:200px 200px;border-radius:inherit;}
+.aj-lc{position:relative;z-index:10;width:100%;max-width:320px;display:flex;flex-direction:column;gap:32px;}
+.aj-brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:20px;letter-spacing:-.4px;color:white;}
+.aj-mark{width:32px;height:32px;border-radius:9px;background:rgba(255,255,255,.2);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:16px;box-shadow:inset 0 1px 2px rgba(255,255,255,.3);}
+.aj-heading{display:flex;flex-direction:column;text-align:center;gap:10px;}
+.aj-heading h1{font-size:38px;font-weight:600;letter-spacing:-.03em;color:white;line-height:1.1;}
+.aj-heading p{color:rgba(255,255,255,.65);font-size:14px;line-height:1.6;padding:0 12px;}
+.aj-steps{display:flex;flex-direction:column;gap:8px;}
+.aj-step{display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:12px;font-size:14px;font-weight:500;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.7);transition:all .2s;}
+.aj-step.act{background:white;color:#1E3A5F;border-color:white;font-weight:600;}
+.aj-sn{width:26px;height:26px;border-radius:9999px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.5);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.aj-step.act .aj-sn{background:#2563EB;color:white;}
+
+/* ─── RIGHT: white form ─── */
+.aj-right{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px;overflow-y:auto;}
+@media(min-width:640px){.aj-right{padding:48px 48px;}}
+@media(min-width:1024px){.aj-right{padding:24px 64px;}}
+.aj-form{width:100%;max-width:420px;display:flex;flex-direction:column;gap:0;}
+.aj-fh{font-size:28px;font-weight:700;letter-spacing:-.03em;color:#111827;margin-bottom:6px;}
+.aj-fs{font-size:14px;color:#6B7280;margin-bottom:24px;line-height:1.5;}
+.aj-field{margin-bottom:14px;}
+.aj-lbl{display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;}
+.aj-in{width:100%;background:#F9FAFB;border:1.5px solid #E5E7EB;border-radius:12px;height:48px;padding:0 16px;color:#111827;font-size:14px;font-family:inherit;outline:none;transition:all .2s;}
+.aj-in:hover{border-color:#D1D5DB;}
+.aj-in:focus{background:white;border-color:#2563EB;box-shadow:0 0 0 3px rgba(37,99,235,.1);}
+.aj-in::placeholder{color:#9CA3AF;}
+.aj-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;}
+.aj-code{width:100%;background:#F9FAFB;border:2px solid #E5E7EB;border-radius:16px;height:72px;text-align:center;font-size:32px;font-weight:800;color:#111827;letter-spacing:8px;font-family:inherit;outline:none;transition:all .2s;}
+.aj-code:focus{background:white;border-color:#2563EB;box-shadow:0 0 0 4px rgba(37,99,235,.1);}
+.aj-code::placeholder{font-size:16px;letter-spacing:2px;font-weight:500;color:#9CA3AF;}
+.aj-sub{width:100%;height:52px;background:#2563EB;color:white;border:none;border-radius:12px;font-size:15px;font-weight:600;margin-top:16px;cursor:pointer;transition:all .15s;font-family:inherit;box-shadow:0 4px 14px rgba(37,99,235,.3);}
+.aj-sub:hover{background:#1d4ed8;box-shadow:0 6px 20px rgba(37,99,235,.4);transform:translateY(-1px);}
+.aj-sub:active{transform:scale(0.98);}
+.aj-sub:disabled{opacity:.5;cursor:not-allowed;transform:none;}
+.aj-back{display:inline-flex;align-items:center;gap:6px;background:none;border:none;color:#9CA3AF;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;margin-bottom:28px;padding:0;transition:color .2s;}
+.aj-back:hover{color:#111827;}
+.aj-back svg{width:16px;height:16px;}
+.aj-err{background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:12px 14px;font-size:13px;color:#DC2626;margin-bottom:14px;display:flex;align-items:center;gap:10px;font-weight:500;}
+.aj-hint{background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:14px;font-size:13px;color:#1d4ed8;margin-top:16px;line-height:1.5;}
+.aj-ok{background:#F0FDF4;border:1px solid #BBF7D0;border-radius:14px;padding:16px;display:flex;align-items:flex-start;gap:12px;margin-bottom:20px;}
+.aj-ok-ico{width:24px;height:24px;border-radius:9999px;background:#16A34A;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:white;font-size:14px;font-weight:700;}
+.aj-ok-name{font-size:15px;font-weight:700;color:#166534;}
+.aj-ok-role{font-size:12px;color:#16a34a;font-weight:500;margin-top:2px;}
+.aj-fl{color:#2563EB;font-weight:600;background:none;border:none;cursor:pointer;font-family:inherit;font-size:14px;}
+.aj-fl:hover{text-decoration:underline;}
+.aj-fr{margin-top:20px;text-align:center;font-size:14px;color:#6B7280;}
+`;
+
+const ERR_ICO = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+const CHECK_ICO = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`;
+
+function buildJoinPortal(step: Step, loading: boolean, err: string, restaurantName: string, jobTitle: string) {
+  const leftSteps = `
+    <div class="aj-steps">
+      <div class="aj-step ${step === 'code' ? 'act' : ''}"><div class="aj-sn">1</div><span>Kod aktywacyjny</span></div>
+      <div class="aj-step ${step === 'register' ? 'act' : ''}"><div class="aj-sn">2</div><span>Utwórz konto</span></div>
+      <div class="aj-step"><div class="aj-sn">3</div><span>Dołącz do zespołu</span></div>
+    </div>`;
+
+  const codeForm = `
+    <div class="aj-form">
+      <button class="aj-back" data-action="back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="15 18 9 12 15 6"/></svg>Powrót</button>
+      <div class="aj-fh">Dołącz do restauracji</div>
+      <div class="aj-fs">Wpisz kod aktywacyjny od pracodawcy.</div>
+      ${err ? `<div class="aj-err">${ERR_ICO}${err}</div>` : ''}
+      <div class="aj-field"><label class="aj-lbl">Kod aktywacyjny</label>
+        <input class="aj-code" id="aj-code" type="text" placeholder="np. CAFE47" maxlength="8" autocomplete="off" autocapitalize="characters"/>
+      </div>
+      <button class="aj-sub" data-action="verify" ${loading ? 'disabled' : ''}>${loading ? 'Sprawdzanie…' : 'Sprawdź kod →'}</button>
+      <div class="aj-hint">💡 Kod aktywacyjny otrzymujesz od właściciela lub kierownika restauracji. Składa się z 6 znaków (np. CAFE47).</div>
+      <div class="aj-fr">Masz już konto? <button class="aj-fl" data-action="login">Zaloguj się</button></div>
+    </div>`;
+
+  const registerForm = `
+    <div class="aj-form">
+      <button class="aj-back" data-action="backToCode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="15 18 9 12 15 6"/></svg>Zmień kod</button>
+      <div class="aj-ok"><div class="aj-ok-ico">${CHECK_ICO}</div><div><div class="aj-ok-name">${restaurantName}</div><div class="aj-ok-role">Stanowisko: ${jobTitle}</div></div></div>
+      <div class="aj-fh">Utwórz konto</div>
+      <div class="aj-fs">Uzupełnij dane, aby dołączyć do zespołu.</div>
+      ${err ? `<div class="aj-err">${ERR_ICO}${err}</div>` : ''}
+      <div class="aj-row">
+        <div class="aj-field"><label class="aj-lbl">Imię</label><input class="aj-in" id="aj-fn" type="text" placeholder="Anna" autocapitalize="words"/></div>
+        <div class="aj-field"><label class="aj-lbl">Nazwisko</label><input class="aj-in" id="aj-ln" type="text" placeholder="Nowak" autocapitalize="words"/></div>
+      </div>
+      <div class="aj-field"><label class="aj-lbl">E-mail</label><input class="aj-in" id="aj-em" type="email" placeholder="anna@email.pl" autocomplete="email"/></div>
+      <div class="aj-field"><label class="aj-lbl">Hasło</label><input class="aj-in" id="aj-pw" type="password" placeholder="Minimum 6 znaków" autocomplete="new-password"/></div>
+      <button class="aj-sub" data-action="register" ${loading ? 'disabled' : ''}>${loading ? 'Dołączanie…' : `Dołącz do ${restaurantName}`}</button>
+    </div>`;
+
+  return `
+  <div class="aj-left">
+    <div class="aj-noise"></div>
+    <div class="aj-lc">
+      <div class="aj-brand"><div class="aj-mark">S</div><span>ShiftApp</span></div>
+      <div class="aj-heading">
+        <h1>${step === 'code' ? 'Dołącz do zespołu' : 'Prawie gotowe'}</h1>
+        <p>${step === 'code' ? 'Wpisz kod aktywacyjny i dołącz do restauracji w kilka sekund.' : 'Uzupełnij dane i zacznij pracować ze swoim zespołem.'}</p>
+      </div>
+      ${leftSteps}
+    </div>
+  </div>
+  <div class="aj-right">
+    ${step === 'code' ? codeForm : registerForm}
+  </div>`;
+}
 
 export default function JoinScreen() {
   const router = useRouter();
   const { joinWithCode, isLoading } = useAuth();
   const { showAlert } = useAlert();
-  const { width } = useWindowDimensions();
-  const isDesktop = Platform.OS === 'web' && width >= 768;
 
   const [step, setStep] = useState<Step>('code');
   const [code, setCode] = useState('');
   const [restaurantName, setRestaurantName] = useState('');
   const [jobTitle, setJobTitle] = useState('');
 
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  /* ── WEB: portal ── */
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
 
-  const handleVerifyCode = async () => {
-    const cleaned = code.trim().toUpperCase();
-    if (cleaned.length < 4) {
-      showAlert('Nieprawidłowy kod', 'Wpisz kod aktywacyjny otrzymany od pracodawcy.');
-      return;
-    }
-    const { data, error } = await supabase.rpc('accept_invitation', { p_code: cleaned });
-    if (error || !data || data.error) {
-      showAlert('Kod nieważny', data?.error ?? 'Kod nie istnieje lub wygasł. Poproś pracodawcę o nowy kod.');
-      return;
-    }
-    setRestaurantName(data.restaurant_name ?? '');
-    setJobTitle(data.job_title ?? '');
-    setStep('register');
-  };
+    const portal = document.createElement('div');
+    portal.id = 'sa-join';
 
-  const handleRegister = async () => {
-    if (!firstName.trim() || !lastName.trim() || !email.trim() || !password.trim()) {
-      showAlert('Uzupełnij dane', 'Wszystkie pola są wymagane.');
-      return;
+    let styleEl = document.getElementById('sa-join-css') as HTMLStyleElement | null;
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = 'sa-join-css';
+      document.head.appendChild(styleEl);
     }
-    const success = await joinWithCode(code.trim().toUpperCase(), {
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      email: email.trim(),
-      password: password.trim(),
+    styleEl.textContent = JOIN_CSS;
+
+    const hidden: { el: HTMLElement; d: string }[] = [];
+    Array.from(document.body.children).forEach((c) => {
+      const el = c as HTMLElement;
+      if (['SCRIPT','STYLE','LINK'].includes(el.tagName) || el.id === 'sa-join') return;
+      hidden.push({ el, d: el.style.display || '' });
+      el.style.display = 'none';
     });
-    if (success) {
-      router.replace('/(tabs)/dashboard');
-    } else {
-      showAlert('Błąd', 'Nie udało się dołączyć. Sprawdź dane i spróbuj ponownie.');
-    }
-  };
 
-  const content = (
-    <ScrollView
-      contentContainerStyle={[s.scroll, isDesktop && s.scrollDesktop]}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-    >
-      <TouchableOpacity style={s.backBtn} onPress={() => step === 'register' ? setStep('code') : router.back()} activeOpacity={0.7}>
-        <Ionicons name="arrow-back" size={20} color={theme.colors.text} />
-        <Text style={s.backText}>{step === 'register' ? 'Zmień kod' : 'Powrót'}</Text>
-      </TouchableOpacity>
+    const html = document.documentElement;
+    const body = document.body;
+    const orig = { ho: html.style.overflow, hh: html.style.height, bo: body.style.overflow, bh: body.style.height, bg: body.style.background };
+    html.style.overflow = 'auto'; html.style.height = 'auto';
+    body.style.overflow = 'auto'; body.style.height = 'auto';
+    body.style.background = '#ffffff';
 
-      <Image
-        source={require('../assets/images/logo.png')}
-        style={[s.logo, isDesktop && s.logoDesktop]}
-        resizeMode="contain"
-      />
+    let currentStep: Step = 'code';
+    let currentCode = '';
+    let currentRestaurant = '';
+    let currentJob = '';
 
-      {step === 'code' && (
-        <>
-          <Text style={s.title}>Dołącz do restauracji</Text>
-          <Text style={s.subtitle}>
-            Wpisz kod aktywacyjny, który otrzymałeś{'\n'}od swojego pracodawcy
-          </Text>
+    const render = (s: Step, loading: boolean, err: string, rn: string, jt: string) => {
+      portal.innerHTML = buildJoinPortal(s, loading, err, rn, jt);
+      if (s === 'code') {
+        setTimeout(() => {
+          const el = portal.querySelector('#aj-code') as HTMLInputElement;
+          if (el) { el.value = currentCode; el.focus(); }
+        }, 0);
+      }
+    };
 
-          <View style={s.codeInputWrap}>
-            <TextInput
-              style={s.codeInput}
-              placeholder="np. CAFE47"
-              placeholderTextColor={theme.colors.textMuted}
-              value={code}
-              onChangeText={(t) => setCode(t.toUpperCase())}
-              autoCapitalize="characters"
-              maxLength={8}
-              autoFocus
-            />
-          </View>
+    render(currentStep, false, '', '', '');
+    document.body.appendChild(portal);
 
-          <TouchableOpacity
-            style={[s.primaryBtn, !code.trim() && s.primaryBtnDisabled]}
-            onPress={handleVerifyCode}
-            activeOpacity={0.85}
-          >
-            <Text style={s.primaryBtnText}>Sprawdź kod</Text>
-            <Ionicons name="arrow-forward" size={18} color={theme.colors.white} />
-          </TouchableOpacity>
+    const handler = async (e: Event) => {
+      const trigger = (e.target as HTMLElement).closest?.('[data-action]') as HTMLElement | null;
+      if (!trigger) return;
+      const action = trigger.getAttribute('data-action');
 
-          <View style={s.helpBox}>
-            <Ionicons name="help-circle-outline" size={18} color={theme.colors.textSecondary} />
-            <Text style={s.helpText}>
-              Kod aktywacyjny otrzymujesz od właściciela lub kierownika restauracji.
-              Składa się z 6 znaków (np. CAFE47).
-            </Text>
-          </View>
-        </>
-      )}
+      if (action === 'back') { router.push('/landing' as any); return; }
+      if (action === 'login') { router.push('/login' as any); return; }
 
-      {step === 'register' && (
-        <>
-          {/* Restaurant info */}
-          <View style={s.restaurantCard}>
-            <Ionicons name="checkmark-circle" size={24} color={theme.colors.green} />
-            <View style={s.restaurantInfo}>
-              <Text style={s.restaurantName}>{restaurantName}</Text>
-              <Text style={s.restaurantRole}>Stanowisko: {jobTitle}</Text>
-            </View>
-          </View>
+      if (action === 'backToCode') {
+        currentStep = 'code';
+        render(currentStep, false, '', '', '');
+        return;
+      }
 
-          <Text style={s.title}>Utwórz konto</Text>
-          <Text style={s.subtitle}>
-            Uzupełnij swoje dane, aby dołączyć do zespołu
-          </Text>
+      if (action === 'verify') {
+        const codeEl = portal.querySelector('#aj-code') as HTMLInputElement;
+        const cleaned = (codeEl?.value || '').trim().toUpperCase();
+        currentCode = cleaned;
+        if (cleaned.length < 4) {
+          render(currentStep, false, 'Wpisz kod aktywacyjny (minimum 4 znaki).', '', '');
+          setTimeout(() => { const el = portal.querySelector('#aj-code') as HTMLInputElement; if (el) el.value = cleaned; }, 0);
+          return;
+        }
+        render(currentStep, true, '', '', '');
+        const { data, error } = await supabase.rpc('accept_invitation', { p_code: cleaned });
+        if (error || !data || data.error) {
+          render(currentStep, false, data?.error ?? 'Kod nie istnieje lub wygasł. Poproś pracodawcę o nowy.', '', '');
+          setTimeout(() => { const el = portal.querySelector('#aj-code') as HTMLInputElement; if (el) el.value = cleaned; }, 0);
+          return;
+        }
+        currentRestaurant = data.restaurant_name ?? '';
+        currentJob = data.job_title ?? '';
+        currentStep = 'register';
+        render(currentStep, false, '', currentRestaurant, currentJob);
+        return;
+      }
 
-          <View style={s.inputRow}>
-            <View style={s.inputHalf}>
-              <Text style={s.inputLabel}>Imię</Text>
-              <TextInput
-                style={s.input}
-                placeholder="Anna"
-                placeholderTextColor={theme.colors.textMuted}
-                value={firstName}
-                onChangeText={setFirstName}
-                autoCapitalize="words"
-              />
-            </View>
-            <View style={s.inputHalf}>
-              <Text style={s.inputLabel}>Nazwisko</Text>
-              <TextInput
-                style={s.input}
-                placeholder="Nowak"
-                placeholderTextColor={theme.colors.textMuted}
-                value={lastName}
-                onChangeText={setLastName}
-                autoCapitalize="words"
-              />
-            </View>
-          </View>
+      if (action === 'register') {
+        const fn = (portal.querySelector('#aj-fn') as HTMLInputElement)?.value?.trim() || '';
+        const ln = (portal.querySelector('#aj-ln') as HTMLInputElement)?.value?.trim() || '';
+        const em = (portal.querySelector('#aj-em') as HTMLInputElement)?.value?.trim() || '';
+        const pw = (portal.querySelector('#aj-pw') as HTMLInputElement)?.value?.trim() || '';
+        if (!fn || !ln || !em || !pw) {
+          render(currentStep, false, 'Wszystkie pola są wymagane.', currentRestaurant, currentJob);
+          setTimeout(() => {
+            const f = portal.querySelector('#aj-fn') as HTMLInputElement;
+            const l = portal.querySelector('#aj-ln') as HTMLInputElement;
+            const eEl = portal.querySelector('#aj-em') as HTMLInputElement;
+            const p = portal.querySelector('#aj-pw') as HTMLInputElement;
+            if (f) f.value = fn; if (l) l.value = ln; if (eEl) eEl.value = em; if (p) p.value = pw;
+          }, 0);
+          return;
+        }
+        render(currentStep, true, '', currentRestaurant, currentJob);
+        const success = await joinWithCode(currentCode, { firstName: fn, lastName: ln, email: em, password: pw });
+        if (success) {
+          router.replace('/(tabs)/dashboard');
+        } else {
+          render(currentStep, false, 'Nie udało się dołączyć. Sprawdź dane i spróbuj ponownie.', currentRestaurant, currentJob);
+          setTimeout(() => {
+            const f = portal.querySelector('#aj-fn') as HTMLInputElement;
+            const l = portal.querySelector('#aj-ln') as HTMLInputElement;
+            const eEl = portal.querySelector('#aj-em') as HTMLInputElement;
+            if (f) f.value = fn; if (l) l.value = ln; if (eEl) eEl.value = em;
+          }, 0);
+        }
+      }
+    };
 
-          <View style={s.inputGroup}>
-            <Text style={s.inputLabel}>E-mail</Text>
-            <TextInput
-              style={s.input}
-              placeholder="anna@email.pl"
-              placeholderTextColor={theme.colors.textMuted}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
+    portal.addEventListener('click', handler);
 
-          <View style={s.inputGroup}>
-            <Text style={s.inputLabel}>Hasło</Text>
-            <TextInput
-              style={s.input}
-              placeholder="Minimum 6 znaków"
-              placeholderTextColor={theme.colors.textMuted}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
-          </View>
+    const inputHandler = (e: Event) => {
+      const input = e.target as HTMLInputElement;
+      if (input.id === 'aj-code') {
+        input.value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        currentCode = input.value;
+      }
+    };
+    portal.addEventListener('input', inputHandler);
 
-          <TouchableOpacity
-            style={[s.primaryBtn, isLoading && s.primaryBtnDisabled]}
-            onPress={handleRegister}
-            activeOpacity={0.85}
-          >
-            {isLoading ? (
-              <Text style={s.primaryBtnText}>Dołączanie...</Text>
+    return () => {
+      portal.removeEventListener('click', handler);
+      portal.removeEventListener('input', inputHandler);
+      portal.remove();
+      styleEl?.remove();
+      hidden.forEach(({ el, d }) => { el.style.display = d; });
+      html.style.overflow = orig.ho; html.style.height = orig.hh;
+      body.style.overflow = orig.bo; body.style.height = orig.bh;
+      body.style.background = orig.bg;
+    };
+  }, []);
+
+  /* ── MOBILE fallback ── */
+  if (Platform.OS !== 'web') {
+    const [mStep, setMStep] = useState<Step>('code');
+    const [mCode, setMCode] = useState('');
+    const [mRestaurant, setMRestaurant] = useState('');
+    const [mJob, setMJob] = useState('');
+    const [mFn, setMFn] = useState('');
+    const [mLn, setMLn] = useState('');
+    const [mEmail, setMEmail] = useState('');
+    const [mPw, setMPw] = useState('');
+
+    const verifyCode = async () => {
+      const cleaned = mCode.trim().toUpperCase();
+      if (cleaned.length < 4) { showAlert('Błąd', 'Wpisz kod aktywacyjny.'); return; }
+      const { data, error } = await supabase.rpc('accept_invitation', { p_code: cleaned });
+      if (error || !data || data.error) { showAlert('Błąd', data?.error ?? 'Kod nieważny.'); return; }
+      setMRestaurant(data.restaurant_name ?? '');
+      setMJob(data.job_title ?? '');
+      setMStep('register');
+    };
+
+    const register = async () => {
+      if (!mFn.trim() || !mLn.trim() || !mEmail.trim() || !mPw.trim()) { showAlert('Błąd', 'Uzupełnij wszystkie pola.'); return; }
+      const success = await joinWithCode(mCode.trim().toUpperCase(), { firstName: mFn.trim(), lastName: mLn.trim(), email: mEmail.trim(), password: mPw.trim() });
+      if (success) { router.replace('/(tabs)/dashboard'); }
+      else { showAlert('Błąd', 'Nie udało się dołączyć. Spróbuj ponownie.'); }
+    };
+
+    return (
+      <SafeAreaView style={mob.safe} edges={['top']}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView contentContainerStyle={mob.form} keyboardShouldPersistTaps="handled">
+            {mStep === 'code' ? (
+              <>
+                <Text style={mob.title}>Dołącz do restauracji</Text>
+                <Text style={mob.sub}>Wpisz kod aktywacyjny od pracodawcy.</Text>
+                <Text style={mob.lbl}>Kod aktywacyjny</Text>
+                <TextInput style={[mob.input, { textAlign: 'center', fontSize: 24, letterSpacing: 6, fontWeight: '800' }]} placeholder="CAFE47" placeholderTextColor="#94a3b8" value={mCode} onChangeText={v => setMCode(v.toUpperCase())} autoCapitalize="characters" maxLength={8} />
+                <TouchableOpacity style={mob.btn} onPress={verifyCode} disabled={isLoading} activeOpacity={0.88}>
+                  {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={mob.btnTxt}>Sprawdź kod →</Text>}
+                </TouchableOpacity>
+              </>
             ) : (
               <>
-                <Text style={s.primaryBtnText}>Dołącz do {restaurantName}</Text>
-                <Ionicons name="checkmark-circle" size={18} color={theme.colors.white} />
+                <Text style={mob.title}>Utwórz konto</Text>
+                <Text style={mob.sub}>{mRestaurant} · {mJob}</Text>
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={mob.lbl}>Imię</Text>
+                    <TextInput style={mob.input} placeholder="Anna" placeholderTextColor="#94a3b8" value={mFn} onChangeText={setMFn} autoCapitalize="words" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={mob.lbl}>Nazwisko</Text>
+                    <TextInput style={mob.input} placeholder="Nowak" placeholderTextColor="#94a3b8" value={mLn} onChangeText={setMLn} autoCapitalize="words" />
+                  </View>
+                </View>
+                <Text style={mob.lbl}>E-mail</Text>
+                <TextInput style={mob.input} placeholder="anna@email.pl" placeholderTextColor="#94a3b8" value={mEmail} onChangeText={setMEmail} keyboardType="email-address" autoCapitalize="none" />
+                <Text style={mob.lbl}>Hasło</Text>
+                <TextInput style={mob.input} placeholder="Minimum 6 znaków" placeholderTextColor="#94a3b8" value={mPw} onChangeText={setMPw} secureTextEntry />
+                <TouchableOpacity style={mob.btn} onPress={register} disabled={isLoading} activeOpacity={0.88}>
+                  {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={mob.btnTxt}>Dołącz do {mRestaurant}</Text>}
+                </TouchableOpacity>
               </>
             )}
-          </TouchableOpacity>
-        </>
-      )}
-    </ScrollView>
-  );
-
-  if (isDesktop) {
-    return (
-      <View style={s.desktopRoot}>
-        <View style={s.desktopInner}>{content}</View>
-      </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     );
   }
 
-  return (
-    <SafeAreaView style={s.safe} edges={['top']}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        {content}
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
+  return null;
 }
 
-const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: theme.colors.card },
-  desktopRoot: { flex: 1, backgroundColor: theme.colors.background, alignItems: 'center', justifyContent: 'center' },
-  desktopInner: {
-    width: '100%', maxWidth: 520, backgroundColor: theme.colors.card,
-    borderRadius: theme.borderRadius.xl, overflow: 'hidden', ...theme.shadows.card,
-  },
-  scroll: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40, gap: 16 },
-  scrollDesktop: { paddingHorizontal: 32, paddingTop: 24 },
-
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
-  backText: { fontSize: 14, color: theme.colors.textSecondary, fontWeight: '500' },
-
-  logo: { width: 200, height: 66, alignSelf: 'center', marginBottom: 16 },
-  logoDesktop: { width: 260, height: 86 },
-
-  title: { fontSize: 24, fontWeight: '700', color: theme.colors.text },
-  subtitle: { fontSize: 14, color: theme.colors.textSecondary, lineHeight: 20 },
-
-  codeInputWrap: { marginTop: 8 },
-  codeInput: {
-    height: 64, borderWidth: 2, borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.lg, paddingHorizontal: 20,
-    fontSize: 28, fontWeight: '800', color: theme.colors.navy,
-    textAlign: 'center', letterSpacing: 6, backgroundColor: theme.colors.background,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-
-  primaryBtn: {
-    backgroundColor: theme.colors.navy, borderRadius: theme.borderRadius.md,
-    height: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-  },
-  primaryBtnDisabled: { backgroundColor: theme.colors.textMuted },
-  primaryBtnText: { fontSize: 16, fontWeight: '700', color: theme.colors.white },
-
-  helpBox: {
-    flexDirection: 'row', gap: 10, backgroundColor: theme.colors.background,
-    borderRadius: theme.borderRadius.md, padding: 14,
-  },
-  helpText: { flex: 1, fontSize: 13, color: theme.colors.textSecondary, lineHeight: 20 },
-
-  restaurantCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: theme.colors.greenLight, borderRadius: theme.borderRadius.lg,
-    padding: 16, borderWidth: 1, borderColor: theme.colors.green,
-  },
-  restaurantInfo: { flex: 1 },
-  restaurantName: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
-  restaurantRole: { fontSize: 13, color: theme.colors.green, fontWeight: '600', marginTop: 2 },
-
-  inputRow: { flexDirection: 'row', gap: 12 },
-  inputHalf: { flex: 1 },
-  inputGroup: {},
-  inputLabel: { fontSize: 13, fontWeight: '600', color: theme.colors.text, marginBottom: 6 },
-  input: {
-    height: 48, borderWidth: 1.5, borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.md, paddingHorizontal: 14,
-    fontSize: 15, color: theme.colors.text, backgroundColor: theme.colors.background,
-  },
+const mob = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: '#fff' },
+  form: { paddingHorizontal: 28, paddingTop: 60, paddingBottom: 40, flexGrow: 1, justifyContent: 'center', gap: 4 },
+  title: { fontSize: 26, fontWeight: '700', color: '#0f172a', marginBottom: 6 },
+  sub: { fontSize: 14, color: '#64748b', marginBottom: 24 },
+  lbl: { fontSize: 13, fontWeight: '500', color: '#374151', marginBottom: 6, marginTop: 12 },
+  input: { backgroundColor: '#f8fafc', borderRadius: 12, height: 44, paddingHorizontal: 14, fontSize: 14, color: '#0f172a', borderWidth: 1, borderColor: 'rgba(0,0,0,0.08)' },
+  btn: { marginTop: 24, height: 52, backgroundColor: '#0084FF', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  btnTxt: { color: '#fff', fontSize: 15, fontWeight: '600' },
 });

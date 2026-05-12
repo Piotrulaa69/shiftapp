@@ -1,5 +1,4 @@
 import { Redirect } from 'expo-router';
-import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { theme } from '../styles/theme';
@@ -13,7 +12,7 @@ export default function Index() {
       </View>
     );
   }
-  if (!isAuthenticated) return <Redirect href="/login" />;
+  if (!isAuthenticated) return <Redirect href={'/landing' as any} />;
   if (user && !user.onboardingDone) return <Redirect href="/onboarding" />;
   return <Redirect href="/(tabs)/dashboard" />;
 }
