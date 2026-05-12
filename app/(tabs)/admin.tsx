@@ -616,12 +616,10 @@ export default function AdminScreen() {
         {tab === 'tools' && (
           <View style={{ gap: 12 }}>
             {[
-              { icon: 'calendar', label: 'Edytor grafiku', desc: 'Planuj zmiany dla zespołu', route: '/schedule-editor', color: theme.colors.primary },
-              { icon: 'bar-chart', label: 'Raporty', desc: 'Statystyki i analizy', route: '/reports', color: '#22C55E' },
-              { icon: 'document-text', label: 'Wnioski urlopowe', desc: 'Zarządzaj wnioskami urlopowymi', route: '/leave-requests', color: '#F97316' },
-              { icon: 'swap-horizontal', label: 'Wymiany zmian', desc: 'Zatwierdź wymiany zmian', route: '/shift-swap', color: '#A855F7' },
+              { icon: 'bar-chart', label: 'Raporty', desc: 'Statystyki i analizy pracy zespołu', route: '/reports', color: '#22C55E' },
+              { icon: 'swap-horizontal', label: 'Wymiany zmian', desc: 'Przeglądaj i zatwierdzaj wymiany', route: '/shift-swap', color: '#A855F7' },
               { icon: 'folder-open', label: 'Dokumenty', desc: 'Umowy, certyfikaty i zaświadczenia', route: '/documents', color: '#0EA5E9' },
-              { icon: 'calendar-number', label: 'Dyspozycyjność', desc: 'Dostępność pracowników', route: '/availability', color: '#8B5CF6' },
+              { icon: 'calendar-number', label: 'Dyspozycyjność', desc: 'Dostępność całego zespołu', route: '/availability', color: '#8B5CF6' },
             ].map((tool) => (
               <TouchableOpacity
                 key={tool.label}

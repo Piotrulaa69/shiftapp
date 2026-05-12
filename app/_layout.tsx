@@ -21,7 +21,6 @@ export default function RootLayout() {
           <Stack.Screen name="leave-requests" />
           <Stack.Screen name="documents" />
           <Stack.Screen name="earnings" />
-          <Stack.Screen name="schedule-editor" />
           <Stack.Screen name="reports" />
           <Stack.Screen name="shift-swap" />
           <Stack.Screen name="notifications" />
