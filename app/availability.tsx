@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
-import { getAvailability, getAvailabilityAll, getEmployees, setAvailability } from '../lib/db';
-import type { DbAvailability, DbProfile } from '../lib/supabase';
+import { getAvailability, getAvailabilityAll, getEmployees, getShifts, setAvailability } from '../lib/db';
+import type { DbAvailability, DbProfile, DbShift } from '../lib/supabase';
 import { theme } from '../styles/theme';
 
 const DAY_NAMES = ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'So', 'Nd'];
@@ -45,6 +45,7 @@ export default function AvailabilityScreen() {
   // Availability data
   const [data, setData] = useState<DbAvailability[]>([]);
   const [allData, setAllData] = useState<DbAvailability[]>([]);
+  const [shifts, setShifts] = useState<DbShift[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -63,12 +64,14 @@ export default function AvailabilityScreen() {
     if (!rid || !user) return;
     setLoading(true);
     const empId = canManage ? selEmpId : uid;
-    const [avail, emps, allAvail] = await Promise.all([
+    const [avail, emps, allAvail, allShifts] = await Promise.all([
       getAvailability(rid, empId, currentMonth),
       canManage ? getEmployees(rid) : Promise.resolve([]),
       canManage ? getAvailabilityAll(rid, currentMonth) : Promise.resolve([]),
+      getShifts(rid),
     ]);
     setData(avail);
+    setShifts(allShifts);
     if (canManage) { setEmployees(emps); setAllData(allAvail); }
     setChanges({});
     setLoading(false);
@@ -78,6 +81,9 @@ export default function AvailabilityScreen() {
 
   const daysInMonth = new Date(year, month, 0).getDate();
   const firstDayOfWeek = (new Date(year, month - 1, 1).getDay() + 6) % 7;
+
+  const getShiftsOnDay = (day: string, empId?: string): DbShift[] =>
+    shifts.filter((s) => s.day === day && (!empId || s.employee_id === empId));
 
   const getStatus = (day: string, empId?: string): AvailStatus => {
     const src = empId ? allData : data;
@@ -109,13 +115,22 @@ export default function AvailabilityScreen() {
   const handleSave = async () => {
     if (!user) return;
     setSaving(true);
-    const empId = canManage ? selEmpId : uid;
-    for (const [day, status] of Object.entries(changes)) {
-      const isPartial = status === 'partial';
-      await setAvailability(rid, empId, day, status === 'none' ? 'unavailable' : status, isPartial ? { slot1_start: slot1Start || undefined, slot1_end: slot1End || undefined } : undefined);
+    try {
+      const empId = canManage ? selEmpId : uid;
+      for (const [day, status] of Object.entries(changes)) {
+        const isPartial = status === 'partial';
+        const ok = await setAvailability(rid, empId, day, status === 'none' ? 'unavailable' : status, isPartial ? { slot1_start: slot1Start || undefined, slot1_end: slot1End || undefined } : undefined);
+        if (!ok) {
+          Alert.alert('Błąd zapisu', 'Nie udało się zapisać dyspozycyjności. Sprawdź uprawnienia i spróbuj ponownie.');
+          return;
+        }
+      }
+      loadData();
+    } catch (e) {
+      Alert.alert('Błąd', 'Wystąpił nieoczekiwany błąd.');
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    loadData();
   };
 
   const prevMonth = () => {
@@ -196,7 +211,7 @@ export default function AvailabilityScreen() {
 
         {/* Legend */}
         <View style={styles.legend}>
-          {Object.entries(STATUS_COLORS).filter(([k]) => k !== 'none').map(([key, val]) => (
+          {[...Object.entries(STATUS_COLORS).filter(([k]) => k !== 'none'), ['shift', { text: theme.colors.primary, label: 'Zaplanowana zmiana' }]].map(([key, val]: any) => (
             <View key={key} style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: val.text }]} />
               <Text style={styles.legendText}>{val.label}</Text>
@@ -238,6 +253,9 @@ export default function AvailabilityScreen() {
                   return (
                     <View key={d} style={[styles.teamDayCol, { backgroundColor: c.bg }]}>
                       <View style={[styles.teamDot, { backgroundColor: c.text }]} />
+                      {getShiftsOnDay(dayStr, emp.id).length > 0 && (
+                        <View style={styles.teamShiftDot} />
+                      )}
                     </View>
                   );
                 })}
@@ -279,6 +297,11 @@ export default function AvailabilityScreen() {
                       {st !== 'none' && (
                         <View style={[styles.statusDot, { backgroundColor: colors.text }]} />
                       )}
+                      {getShiftsOnDay(dayStr, canManage ? selEmpId : uid).map((s) => (
+                        <View key={s.id} style={styles.shiftChip}>
+                          <Text style={styles.shiftChipText} numberOfLines={1}>{s.start_time.slice(0,5)}</Text>
+                        </View>
+                      ))}
                     </TouchableOpacity>
                   );
                 })}
@@ -371,6 +394,9 @@ const styles = StyleSheet.create({
   dayCell: { flex: 1, aspectRatio: 1, borderRadius: 8, alignItems: 'center', justifyContent: 'center', gap: 2 },
   dayNum: { fontSize: 13, fontWeight: '600' },
   statusDot: { width: 4, height: 4, borderRadius: 2 },
+  shiftChip: { backgroundColor: theme.colors.primary + '22', borderRadius: 3, paddingHorizontal: 2, paddingVertical: 1, marginTop: 1, width: '90%' },
+  shiftChipText: { fontSize: 7, fontWeight: '700', color: theme.colors.primary, textAlign: 'center' },
+  teamShiftDot: { position: 'absolute', bottom: 2, right: 2, width: 4, height: 4, borderRadius: 2, backgroundColor: theme.colors.primary },
   tapHint: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 12, marginBottom: 4 },
   tapHintText: { fontSize: 11, color: theme.colors.textMuted },
   saveBtn: { backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.md, paddingVertical: 14, alignItems: 'center', marginTop: 16 },

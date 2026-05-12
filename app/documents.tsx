@@ -60,6 +60,9 @@ export default function DocumentsScreen() {
   const [pickedFile, setPickedFile] = useState<{ name: string; uri: string; mimeType: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Preview modal
+  const [previewDoc, setPreviewDoc] = useState<DbDocument | null>(null);
+
   const load = useCallback(async () => {
     if (!rid || !user) return;
     setLoading(true);
@@ -115,7 +118,14 @@ export default function DocumentsScreen() {
   };
 
   const handleSave = async () => {
-    if (!docName.trim()) return;
+    if (!docName.trim()) {
+      Alert.alert('Wymagane', 'Wpisz nazwę dokumentu.');
+      return;
+    }
+    if (docExpiry && !/^\d{4}-\d{2}-\d{2}$/.test(docExpiry)) {
+      Alert.alert('Błędny format daty', 'Data ważności musi być w formacie RRRR-MM-DD, np. 2026-12-31');
+      return;
+    }
     setSaving(true);
     try {
       let fileUrl = editingDoc?.file_url ?? null;
@@ -124,8 +134,9 @@ export default function DocumentsScreen() {
         if (uploaded) fileUrl = uploaded;
       }
       const status = computeStatus(docExpiry || null);
+      let ok = false;
       if (editingDoc) {
-        await updateDocument(editingDoc.id, {
+        ok = await updateDocument(editingDoc.id, {
           name: docName.trim(),
           doc_type: docType,
           file_url: fileUrl ?? undefined,
@@ -133,7 +144,7 @@ export default function DocumentsScreen() {
           status,
         });
       } else {
-        await createDocument(rid, {
+        const created = await createDocument(rid, {
           employee_id: canManage ? selEmployee : uid,
           name: docName.trim(),
           doc_type: docType,
@@ -141,11 +152,18 @@ export default function DocumentsScreen() {
           expires_at: docExpiry || undefined,
           uploaded_by: uid,
         });
+        ok = !!created;
       }
-    } finally {
-      setSaving(false);
+      if (!ok) {
+        Alert.alert('Błąd zapisu', 'Nie udało się zapisać dokumentu. Sprawdź uprawnienia i spróbuj ponownie.');
+        return;
+      }
       setShowModal(false);
       load();
+    } catch (e) {
+      Alert.alert('Błąd', 'Wystąpił nieoczekiwany błąd.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -230,7 +248,7 @@ export default function DocumentsScreen() {
           const emp = employees.find((e) => e.id === doc.employee_id);
           const empName = emp ? `${emp.first_name} ${emp.last_name}` : '';
           return (
-            <View key={doc.id} style={styles.card}>
+            <TouchableOpacity key={doc.id} style={styles.card} onPress={() => setPreviewDoc(doc)} activeOpacity={0.75}>
               <View style={[styles.cardIcon, { backgroundColor: st.bg }]}>
                 <Ionicons name={TYPE_ICON[doc.doc_type] as any ?? 'document-text'} size={20} color={st.color} />
               </View>
@@ -256,22 +274,115 @@ export default function DocumentsScreen() {
                 </View>
                 <View style={styles.cardActions}>
                   {doc.file_url && (
-                    <TouchableOpacity style={styles.iconBtn} onPress={() => openFile(doc.file_url!)}>
+                    <TouchableOpacity style={styles.iconBtn} onPress={(e) => { (e as any).stopPropagation?.(); openFile(doc.file_url!); }}>
                       <Ionicons name="download-outline" size={17} color={theme.colors.primary} />
                     </TouchableOpacity>
                   )}
-                  <TouchableOpacity style={styles.iconBtn} onPress={() => openEdit(doc)}>
-                    <Ionicons name="pencil-outline" size={16} color={theme.colors.textSecondary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.iconBtn} onPress={() => handleDelete(doc)}>
-                    <Ionicons name="trash-outline" size={16} color={theme.colors.error} />
-                  </TouchableOpacity>
+                  {canManage && (
+                    <TouchableOpacity style={styles.iconBtn} onPress={(e) => { (e as any).stopPropagation?.(); openEdit(doc); }}>
+                      <Ionicons name="pencil-outline" size={16} color={theme.colors.textSecondary} />
+                    </TouchableOpacity>
+                  )}
+                  {canManage && (
+                    <TouchableOpacity style={styles.iconBtn} onPress={(e) => { (e as any).stopPropagation?.(); handleDelete(doc); }}>
+                      <Ionicons name="trash-outline" size={16} color={theme.colors.error} />
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
-            </View>
+            </TouchableOpacity>
           );
         })}
       </ScrollView>
+
+      {/* Preview Modal */}
+      <Modal visible={!!previewDoc} animationType="slide" transparent onRequestClose={() => setPreviewDoc(null)}>
+        <View style={pStyles.overlay}>
+          <View style={pStyles.sheet}>
+            {previewDoc && (() => {
+              const st = STATUS_MAP[previewDoc.status] ?? STATUS_MAP.active;
+              const emp = employees.find((e) => e.id === previewDoc.employee_id);
+              const uploader = employees.find((e) => e.id === previewDoc.uploaded_by);
+              const typeName = DOC_TYPES.find((t) => t.key === previewDoc.doc_type)?.label ?? previewDoc.doc_type;
+              return (
+                <>
+                  <View style={pStyles.handle} />
+                  <View style={pStyles.iconWrap}>
+                    <View style={[pStyles.bigIcon, { backgroundColor: st.bg }]}>
+                      <Ionicons name={TYPE_ICON[previewDoc.doc_type] as any ?? 'document-text'} size={32} color={st.color} />
+                    </View>
+                    <View style={[pStyles.statusBadge, { backgroundColor: st.bg }]}>
+                      <Ionicons name={st.icon as any} size={12} color={st.color} />
+                      <Text style={[pStyles.statusText, { color: st.color }]}>{st.label}</Text>
+                    </View>
+                  </View>
+
+                  <Text style={pStyles.docName}>{previewDoc.name}</Text>
+                  <Text style={pStyles.docType}>{typeName}</Text>
+
+                  <View style={pStyles.infoSection}>
+                    {emp && (
+                      <View style={pStyles.infoRow}>
+                        <Ionicons name="person-outline" size={15} color={theme.colors.textMuted} />
+                        <Text style={pStyles.infoLabel}>Pracownik</Text>
+                        <Text style={pStyles.infoValue}>{emp.first_name} {emp.last_name}</Text>
+                      </View>
+                    )}
+                    {uploader && (
+                      <View style={pStyles.infoRow}>
+                        <Ionicons name="cloud-upload-outline" size={15} color={theme.colors.textMuted} />
+                        <Text style={pStyles.infoLabel}>Dodał</Text>
+                        <Text style={pStyles.infoValue}>{uploader.first_name} {uploader.last_name}</Text>
+                      </View>
+                    )}
+                    {previewDoc.expires_at && (
+                      <View style={pStyles.infoRow}>
+                        <Ionicons name="time-outline" size={15} color={st.color} />
+                        <Text style={pStyles.infoLabel}>Ważny do</Text>
+                        <Text style={[pStyles.infoValue, { color: st.color, fontWeight: '700' }]}>{previewDoc.expires_at}</Text>
+                      </View>
+                    )}
+                    <View style={pStyles.infoRow}>
+                      <Ionicons name="calendar-outline" size={15} color={theme.colors.textMuted} />
+                      <Text style={pStyles.infoLabel}>Dodano</Text>
+                      <Text style={pStyles.infoValue}>{new Date(previewDoc.created_at).toLocaleDateString('pl-PL')}</Text>
+                    </View>
+                    <View style={pStyles.infoRow}>
+                      <Ionicons name="attach-outline" size={15} color={theme.colors.textMuted} />
+                      <Text style={pStyles.infoLabel}>Plik</Text>
+                      <Text style={pStyles.infoValue}>{previewDoc.file_url ? 'Załadowany' : 'Brak pliku'}</Text>
+                    </View>
+                  </View>
+
+                  <View style={pStyles.actions}>
+                    {previewDoc.file_url && (
+                      <TouchableOpacity style={pStyles.btnPrimary} onPress={() => openFile(previewDoc.file_url!)} activeOpacity={0.85}>
+                        <Ionicons name="download-outline" size={17} color="#fff" />
+                        <Text style={pStyles.btnPrimaryText}>Otwórz plik</Text>
+                      </TouchableOpacity>
+                    )}
+                    {canManage && (
+                      <View style={pStyles.btnRow}>
+                        <TouchableOpacity style={pStyles.btnSecondary} onPress={() => { setPreviewDoc(null); openEdit(previewDoc); }} activeOpacity={0.8}>
+                          <Ionicons name="pencil-outline" size={15} color={theme.colors.primary} />
+                          <Text style={pStyles.btnSecondaryText}>Edytuj</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={pStyles.btnDanger} onPress={() => { setPreviewDoc(null); handleDelete(previewDoc); }} activeOpacity={0.8}>
+                          <Ionicons name="trash-outline" size={15} color={theme.colors.error} />
+                          <Text style={pStyles.btnDangerText}>Usuń</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                    <TouchableOpacity style={pStyles.btnClose} onPress={() => setPreviewDoc(null)} activeOpacity={0.8}>
+                      <Text style={pStyles.btnCloseText}>Zamknij</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
 
       {/* Add / Edit Modal */}
       <Modal visible={showModal} animationType="fade" transparent onRequestClose={() => setShowModal(false)}>
@@ -353,9 +464,9 @@ export default function DocumentsScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[mStyles.saveBtn, (!docName.trim()) && { opacity: 0.5 }]}
+                style={[mStyles.saveBtn, saving && { opacity: 0.5 }]}
                 onPress={handleSave}
-                disabled={saving || !docName.trim()}
+                disabled={saving}
                 activeOpacity={0.85}
               >
                 {saving ? (
@@ -445,4 +556,30 @@ const mStyles = StyleSheet.create({
   empJob: { fontSize: 11, color: theme.colors.textMuted },
   saveBtn: { backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.md, paddingVertical: 14, alignItems: 'center', marginTop: 24, marginBottom: 30 },
   saveBtnText: { color: theme.colors.white, fontSize: 15, fontWeight: '700' },
+});
+
+const pStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: theme.colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 40, paddingHorizontal: 24, paddingTop: 12, maxHeight: '88%' },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: theme.colors.border, alignSelf: 'center', marginBottom: 20 },
+  iconWrap: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  bigIcon: { width: 64, height: 64, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
+  statusText: { fontSize: 12, fontWeight: '700' },
+  docName: { fontSize: 20, fontWeight: '800', color: theme.colors.text, marginBottom: 4 },
+  docType: { fontSize: 13, color: theme.colors.textSecondary, marginBottom: 20 },
+  infoSection: { backgroundColor: theme.colors.surface, borderRadius: 14, padding: 4, marginBottom: 20 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  infoLabel: { fontSize: 13, color: theme.colors.textSecondary, width: 90 },
+  infoValue: { fontSize: 13, fontWeight: '600', color: theme.colors.text, flex: 1 },
+  actions: { gap: 10 },
+  btnPrimary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.md, paddingVertical: 14 },
+  btnPrimaryText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  btnRow: { flexDirection: 'row', gap: 10 },
+  btnSecondary: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: theme.borderRadius.md, paddingVertical: 12, borderWidth: 1.5, borderColor: theme.colors.primary, backgroundColor: theme.colors.primaryLight },
+  btnSecondaryText: { fontSize: 14, fontWeight: '600', color: theme.colors.primary },
+  btnDanger: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: theme.borderRadius.md, paddingVertical: 12, borderWidth: 1.5, borderColor: theme.colors.error, backgroundColor: theme.colors.errorLight },
+  btnDangerText: { fontSize: 14, fontWeight: '600', color: theme.colors.error },
+  btnClose: { alignItems: 'center', paddingVertical: 12 },
+  btnCloseText: { fontSize: 14, color: theme.colors.textSecondary, fontWeight: '500' },
 });

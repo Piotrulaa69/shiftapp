@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { createLeaveRequest, deleteLeaveRequest, getEmployees, getLeaveRequests, getLeaveTypes, reviewLeaveRequest, updateLeaveRequest } from '../lib/db';
@@ -93,28 +93,39 @@ export default function LeaveRequestsScreen() {
   const handleSave = async () => {
     if (!dateFrom || !dateTo || !selType) return;
     setFormLoading(true);
-    const days = calcDays(dateFrom, dateTo);
-    if (editingReq) {
-      await updateLeaveRequest(editingReq.id, {
-        leave_type_id: selType,
-        date_from: dateFrom,
-        date_to: dateTo,
-        days_count: days,
-        comment: comment || undefined,
-      });
-    } else {
-      const empId = canManage && selEmployee ? selEmployee : user!.id;
-      await createLeaveRequest(rid, empId, {
-        leave_type_id: selType,
-        date_from: dateFrom,
-        date_to: dateTo,
-        days_count: days,
-        comment: comment || undefined,
-      });
+    try {
+      const days = calcDays(dateFrom, dateTo);
+      let ok = false;
+      if (editingReq) {
+        ok = await updateLeaveRequest(editingReq.id, {
+          leave_type_id: selType,
+          date_from: dateFrom,
+          date_to: dateTo,
+          days_count: days,
+          comment: comment || undefined,
+        });
+      } else {
+        const empId = canManage && selEmployee ? selEmployee : user!.id;
+        const created = await createLeaveRequest(rid, empId, {
+          leave_type_id: selType,
+          date_from: dateFrom,
+          date_to: dateTo,
+          days_count: days,
+          comment: comment || undefined,
+        });
+        ok = !!created;
+      }
+      if (!ok) {
+        Alert.alert('Błąd zapisu', 'Nie udało się złożyć wniosku. Sprawdź uprawnienia i spróbuj ponownie.');
+        return;
+      }
+      setShowModal(false);
+      load();
+    } catch (e) {
+      Alert.alert('Błąd', 'Wystąpił nieoczekiwany błąd.');
+    } finally {
+      setFormLoading(false);
     }
-    setFormLoading(false);
-    setShowModal(false);
-    load();
   };
 
   const handleDelete = async (r: DbLeaveRequest) => {
