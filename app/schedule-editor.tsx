@@ -34,6 +34,9 @@ const STATUSES: Array<{ value: string; label: string }> = [
   { value: 'ukonczona', label: 'UKOŃCZONA' },
 ];
 
+
+
+dss
 const isWeb = Platform.OS === 'web';
 
 function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
