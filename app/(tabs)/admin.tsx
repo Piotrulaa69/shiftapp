@@ -17,8 +17,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileHeader from '../../components/MobileHeader';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
-import { createTraining, deleteTraining, generateInvitation, getEmployees, getInvitations, getTrainings, removeEmployee, updateRestaurant, updateTraining } from '../../lib/db';
-import type { DbInvitation, DbProfile, DbTraining } from '../../lib/supabase';
+import { createTraining, deleteTraining, generateInvitation, getAbsences, getEmployees, getInvitations, getLeaveRequests, getTrainings, removeEmployee, reviewAbsence, reviewLeaveRequest, updateRestaurant, updateTraining } from '../../lib/db';
+import type { DbAbsence, DbInvitation, DbLeaveRequest, DbProfile, DbTraining } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
 const JOB_OPTIONS = ['Kelner', 'Kucharz', 'Barista', 'Lider zmiany', 'Hostessa', 'Pizzaiolo', 'Sprzątanie'];
@@ -34,10 +34,12 @@ export default function AdminScreen() {
   const [employees, setEmployees] = useState<DbProfile[]>([]);
   const [invitations, setInvitations] = useState<DbInvitation[]>([]);
   const [trainings, setTrainings] = useState<DbTraining[]>([]);
+  const [leaveRequests, setLeaveRequests] = useState<DbLeaveRequest[]>([]);
+  const [absences, setAbsences] = useState<DbAbsence[]>([]);
   const [showInvite, setShowInvite] = useState(false);
   const [jobTitle, setJobTitle] = useState('Kelner');
   const [lastCode, setLastCode] = useState<string | null>(null);
-  const [tab, setTab] = useState<'team' | 'invites' | 'settings' | 'tools' | 'trainings'>('team');
+  const [tab, setTab] = useState<'team' | 'invites' | 'settings' | 'tools' | 'trainings' | 'urlopy' | 'nieobecnosci'>('team');
 
   // Restaurant edit state
   const [rName, setRName] = useState('');
@@ -57,6 +59,8 @@ export default function AdminScreen() {
     getEmployees(rid).then(setEmployees);
     getInvitations(rid).then(setInvitations);
     getTrainings(rid).then(setTrainings);
+    getLeaveRequests(rid).then(setLeaveRequests);
+    getAbsences(rid).then(setAbsences);
   };
 
   useEffect(() => { refresh(); }, [rid]);
@@ -195,6 +199,8 @@ export default function AdminScreen() {
         {([
           { key: 'team', label: 'Zespół', icon: 'people' },
           { key: 'invites', label: 'Zaproszenia', icon: 'mail' },
+          { key: 'urlopy', label: 'Urlopy', icon: 'umbrella' },
+          { key: 'nieobecnosci', label: 'Nieobecności', icon: 'alert-circle' },
           { key: 'trainings', label: 'Szkolenia', icon: 'school' },
           { key: 'tools', label: 'Narzędzia', icon: 'build' },
           { key: 'settings', label: 'Restauracja', icon: 'restaurant' },
@@ -509,6 +515,101 @@ export default function AdminScreen() {
               )}
             </View>
           </>
+        )}
+
+        {/* ─── URLOPY TAB ─── */}
+        {tab === 'urlopy' && (
+          <View style={{ gap: 0 }}>
+            <View style={s.section}>
+              <Text style={s.sectionTitle}>Wnioski urlopowe ({leaveRequests.filter((r) => r.status === 'pending').length} oczekujących)</Text>
+              {leaveRequests.length === 0 ? (
+                <View style={s.emptyState}>
+                  <Ionicons name="umbrella-outline" size={36} color={theme.colors.border} />
+                  <Text style={s.emptyText}>Brak wniosków</Text>
+                </View>
+              ) : (
+                leaveRequests.map((lr) => {
+                  const emp = employees.find((e) => e.id === lr.employee_id);
+                  const isPending = lr.status === 'pending';
+                  return (
+                    <View key={lr.id} style={s.approvalRow}>
+                      <View style={[s.empAvatar, { backgroundColor: emp?.avatar_color ?? theme.colors.surface }]}>
+                        <Text style={s.empInitials}>{emp ? `${emp.first_name[0]}${emp.last_name[0]}`.toUpperCase() : '?'}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.empName}>{emp ? `${emp.first_name} ${emp.last_name}` : lr.employee_id.slice(0, 8)}</Text>
+                        <Text style={s.empRole}>{lr.date_from} — {lr.date_to} ({lr.days_count} dni)</Text>
+                        {lr.comment ? <Text style={s.emptySub} numberOfLines={1}>{lr.comment}</Text> : null}
+                      </View>
+                      <View style={[s.statusChip, { backgroundColor: lr.status === 'approved' ? theme.colors.greenLight : lr.status === 'rejected' ? theme.colors.errorLight : theme.colors.primaryLight }]}>
+                        <Text style={[s.statusChipText, { color: lr.status === 'approved' ? theme.colors.green : lr.status === 'rejected' ? theme.colors.error : theme.colors.primary }]}>
+                          {lr.status === 'approved' ? 'Zatwierdzony' : lr.status === 'rejected' ? 'Odrzucony' : 'Oczekuje'}
+                        </Text>
+                      </View>
+                      {isPending && user && (
+                        <View style={{ flexDirection: 'row', gap: 6 }}>
+                          <TouchableOpacity style={s.approveBtn} onPress={async () => { await reviewLeaveRequest(lr.id, user.id, 'approved'); refresh(); }} activeOpacity={0.7}>
+                            <Ionicons name="checkmark" size={14} color={theme.colors.white} />
+                          </TouchableOpacity>
+                          <TouchableOpacity style={s.rejectBtn} onPress={async () => { await reviewLeaveRequest(lr.id, user.id, 'rejected'); refresh(); }} activeOpacity={0.7}>
+                            <Ionicons name="close" size={14} color={theme.colors.white} />
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* ─── NIEOBECNOSCI TAB ─── */}
+        {tab === 'nieobecnosci' && (
+          <View style={{ gap: 0 }}>
+            <View style={s.section}>
+              <Text style={s.sectionTitle}>Zgłoszone nieobecności ({absences.filter((a) => a.status === 'pending').length} oczekujących)</Text>
+              {absences.length === 0 ? (
+                <View style={s.emptyState}>
+                  <Ionicons name="alert-circle-outline" size={36} color={theme.colors.border} />
+                  <Text style={s.emptyText}>Brak nieobecności</Text>
+                </View>
+              ) : (
+                absences.map((ab) => {
+                  const emp = employees.find((e) => e.id === ab.employee_id);
+                  const isPending = ab.status === 'pending';
+                  const ABSENCE_LABELS: Record<string, string> = { l4: 'L4', child_care: 'Opieka nad dzieckiem', force_majeure: 'Siła wyższa', other: 'Inne' };
+                  return (
+                    <View key={ab.id} style={s.approvalRow}>
+                      <View style={[s.empAvatar, { backgroundColor: emp?.avatar_color ?? theme.colors.surface }]}>
+                        <Text style={s.empInitials}>{emp ? `${emp.first_name[0]}${emp.last_name[0]}`.toUpperCase() : '?'}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.empName}>{emp ? `${emp.first_name} ${emp.last_name}` : ab.employee_id.slice(0, 8)}</Text>
+                        <Text style={s.empRole}>{ABSENCE_LABELS[ab.absence_type] ?? ab.absence_type}</Text>
+                        {ab.description ? <Text style={s.emptySub} numberOfLines={1}>{ab.description}</Text> : null}
+                      </View>
+                      <View style={[s.statusChip, { backgroundColor: ab.status === 'approved' ? theme.colors.greenLight : ab.status === 'rejected' ? theme.colors.errorLight : theme.colors.primaryLight }]}>
+                        <Text style={[s.statusChipText, { color: ab.status === 'approved' ? theme.colors.green : ab.status === 'rejected' ? theme.colors.error : theme.colors.primary }]}>
+                          {ab.status === 'approved' ? 'Zatwierdzona' : ab.status === 'rejected' ? 'Odrzucona' : 'Oczekuje'}
+                        </Text>
+                      </View>
+                      {isPending && user && (
+                        <View style={{ flexDirection: 'row', gap: 6 }}>
+                          <TouchableOpacity style={s.approveBtn} onPress={async () => { await reviewAbsence(ab.id, user.id, 'approved'); refresh(); }} activeOpacity={0.7}>
+                            <Ionicons name="checkmark" size={14} color={theme.colors.white} />
+                          </TouchableOpacity>
+                          <TouchableOpacity style={s.rejectBtn} onPress={async () => { await reviewAbsence(ab.id, user.id, 'rejected'); refresh(); }} activeOpacity={0.7}>
+                            <Ionicons name="close" size={14} color={theme.colors.white} />
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          </View>
         )}
 
         {/* ─── TOOLS TAB ─── */}
@@ -860,4 +961,21 @@ const s = StyleSheet.create({
   chipActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primaryLight },
   chipText: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary },
   chipTextActive: { color: theme.colors.primary },
+
+  approvalRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 12, borderTopWidth: 1, borderTopColor: theme.colors.border,
+  },
+  statusChip: {
+    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4,
+  },
+  statusChipText: { fontSize: 11, fontWeight: '700' },
+  approveBtn: {
+    width: 32, height: 32, borderRadius: 8, backgroundColor: theme.colors.green,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  rejectBtn: {
+    width: 32, height: 32, borderRadius: 8, backgroundColor: theme.colors.error,
+    alignItems: 'center', justifyContent: 'center',
+  },
 });

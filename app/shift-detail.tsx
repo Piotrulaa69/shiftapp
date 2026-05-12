@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
-import { clockIn, clockOut, getActiveClockIn, getTodayShift } from '../lib/db';
+import { clockIn, clockInWithPin, clockOut, getActiveClockIn, getTodayShift } from '../lib/db';
 import type { DbClockIn, DbShift } from '../lib/supabase';
 import { supabase } from '../lib/supabase';
 import { theme } from '../styles/theme';
@@ -41,6 +41,9 @@ export default function ShiftDetailScreen() {
   const [absenceType, setAbsenceType] = useState('l4');
   const [absenceDesc, setAbsenceDesc] = useState('');
   const [elapsed, setElapsed] = useState('00:00:00');
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pin, setPin] = useState('');
+  const [pinError, setPinError] = useState('');
 
   const loadData = useCallback(async () => {
     let resolvedShift: DbShift | null = null;
@@ -73,11 +76,31 @@ export default function ShiftDetailScreen() {
     return () => clearInterval(interval);
   }, [activeCI]);
 
-  const handleClockIn = async () => {
+  const handleClockIn = () => {
+    setPin('');
+    setPinError('');
+    setShowPinModal(true);
+  };
+
+  const handlePinClockIn = async () => {
+    if (!shift || !user) return;
+    setClockLoading(true);
+    setPinError('');
+    const result = await clockInWithPin(rid, shift.id, user.id, pin);
+    if (result.success && result.clockIn) {
+      setActiveCI(result.clockIn);
+      setShowPinModal(false);
+    } else {
+      setPinError(result.error ?? 'Błąd clock-in');
+    }
+    setClockLoading(false);
+  };
+
+  const handleManualClockIn = async () => {
     if (!shift || !user) return;
     setClockLoading(true);
     const ci = await clockIn(rid, shift.id, user.id, 'manual');
-    if (ci) setActiveCI(ci);
+    if (ci) { setActiveCI(ci); setShowPinModal(false); }
     setClockLoading(false);
   };
 
@@ -222,6 +245,50 @@ export default function ShiftDetailScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* PIN Clock-in Modal */}
+      <Modal visible={showPinModal} animationType="fade" transparent onRequestClose={() => setShowPinModal(false)}>
+        <View style={mStyles.overlay}>
+          <View style={mStyles.sheet}>
+            <View style={mStyles.mHeader}>
+              <Text style={mStyles.mTitle}>Zameldowanie</Text>
+              <TouchableOpacity onPress={() => setShowPinModal(false)}><Ionicons name="close" size={24} color={theme.colors.text} /></TouchableOpacity>
+            </View>
+            <View style={mStyles.body}>
+              <Text style={{ fontSize: 13, color: theme.colors.textSecondary, textAlign: 'center', marginBottom: 16 }}>
+                Wpisz PIN zmiany lub zamelduj się ręcznie
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'center', marginBottom: 12 }}>
+                {[0, 1, 2, 3].map((i) => (
+                  <View key={i} style={{ width: 48, height: 56, borderRadius: 12, borderWidth: 2, borderColor: pin.length > i ? theme.colors.primary : theme.colors.border, backgroundColor: pin.length > i ? theme.colors.primaryLight : theme.colors.surface, alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontSize: 20, fontWeight: '800', color: theme.colors.primary }}>{pin.length > i ? '●' : ''}</Text>
+                  </View>
+                ))}
+              </View>
+              {pinError ? <Text style={{ color: theme.colors.error, fontSize: 13, textAlign: 'center', marginBottom: 8 }}>{pinError}</Text> : null}
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginBottom: 12 }}>
+                {['1','2','3','4','5','6','7','8','9','⌫','0','✓'].map((k) => (
+                  <TouchableOpacity
+                    key={k}
+                    style={{ width: 72, height: 52, borderRadius: 12, backgroundColor: k === '✓' ? theme.colors.primary : theme.colors.surface, alignItems: 'center', justifyContent: 'center', ...theme.shadows.card }}
+                    onPress={() => {
+                      if (k === '⌫') { setPin((p) => p.slice(0, -1)); setPinError(''); }
+                      else if (k === '✓') { handlePinClockIn(); }
+                      else if (pin.length < 6) { setPin((p) => p + k); setPinError(''); }
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    {clockLoading && k === '✓' ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={{ fontSize: 18, fontWeight: '700', color: k === '✓' ? '#FFF' : theme.colors.text }}>{k}</Text>}
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TouchableOpacity style={[mStyles.saveBtn, { backgroundColor: theme.colors.surface }]} onPress={handleManualClockIn} disabled={clockLoading} activeOpacity={0.8}>
+                <Text style={[mStyles.saveBtnText, { color: theme.colors.textSecondary }]}>Zamelduj ręcznie (bez PIN)</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Absence Modal */}
       <Modal visible={showAbsenceModal} animationType="fade" transparent onRequestClose={() => setShowAbsenceModal(false)}>

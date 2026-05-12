@@ -37,6 +37,10 @@ export type DbRestaurant = {
   owner_id: string | null;
   plan: 'basic' | 'premium';
   logo_color: string;
+  clock_in_method: 'pin' | 'qr' | 'gps' | 'manual';
+  clock_in_window_min: number;
+  late_threshold_min: number;
+  pay_period_type: 'weekly' | 'biweekly' | 'monthly' | 'custom';
   created_at: string;
 };
 
@@ -51,6 +55,10 @@ export type DbProfile = {
   is_active: boolean;
   onboarding_done: boolean;
   phone: string | null;
+  photo_url: string | null;
+  employment_type: 'full_time' | 'part_time' | 'contract';
+  max_hours_weekly: number | null;
+  max_hours_monthly: number | null;
   created_at: string;
 };
 
@@ -89,9 +97,13 @@ export type DbTask = {
   assigned_time: string;
   completed: boolean;
   priority: 'wysoki' | 'normalny' | 'niski';
-  status: 'do_zrobienia' | 'w_trakcie' | 'zamkniete';
+  status: 'do_zrobienia' | 'w_trakcie' | 'czeka_na_zatwierdzenie' | 'zatwierdzone' | 'odrzucone' | 'zamkniete';
   duration_min: number;
   confirmation_type: 'photo' | 'values' | 'description' | null;
+  points: number;
+  proof_photo_url: string | null;
+  proof_comment: string | null;
+  is_cyclic: boolean;
   created_at: string;
 };
 

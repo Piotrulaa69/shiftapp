@@ -5,14 +5,14 @@ import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TextI
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileHeader from '../../components/MobileHeader';
 import { useAuth } from '../../context/AuthContext';
-import { createTask, deleteTask as dbDeleteTask, toggleTask as dbToggleTask, getEmployees, getTasks } from '../../lib/db';
+import { createTask, approveTask as dbApproveTask, deleteTask as dbDeleteTask, rejectTask as dbRejectTask, toggleTask as dbToggleTask, getEmployees, getTasks, submitTaskForApproval } from '../../lib/db';
 import type { DbProfile, DbTask } from '../../lib/supabase';
 import { supabase } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
 type ConfirmationType = 'photo' | 'values' | 'description';
 type TaskPriority = 'wysoki' | 'normalny' | 'niski';
-type TaskStatus = 'do_zrobienia' | 'w_trakcie' | 'zamkniete';
+type TaskStatus = 'do_zrobienia' | 'w_trakcie' | 'czeka_na_zatwierdzenie' | 'zatwierdzone' | 'odrzucone' | 'zamkniete';
 
 const CONFIRM_CONFIG: Record<ConfirmationType, { icon: string; label: string; color: string; bg: string; route: string }> = {
   photo: { icon: 'camera-outline', label: 'Zdjęcie', color: theme.colors.primary, bg: theme.colors.primaryLight, route: '/task/confirm-photo' },
@@ -221,8 +221,15 @@ export default function TasksScreen() {
   };
 
   const finishTask = async (id: string) => {
-    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'zamkniete' as TaskStatus, completed: true } : t));
-    await dbToggleTask(id, true);
+    const task = tasks.find((t) => t.id === id);
+    if (!task) return;
+    if (task.confirmation_type) {
+      setTasks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'czeka_na_zatwierdzenie' as TaskStatus } : t));
+      await submitTaskForApproval(id);
+    } else {
+      setTasks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'zamkniete' as TaskStatus, completed: true } : t));
+      await dbToggleTask(id, true);
+    }
   };
 
   const deleteTask = async (id: string) => {
@@ -275,13 +282,15 @@ export default function TasksScreen() {
   const pendingApproval = tasks.filter((t) => (t.status as string) === 'czeka_na_zatwierdzenie');
 
   const approveTask = async (id: string) => {
-    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'zamkniete' as any, completed: true } : t));
-    await supabase.from('tasks').update({ status: 'zatwierdzone', completed: true }).eq('id', id);
+    const task = tasks.find((t) => t.id === id);
+    if (!task) return;
+    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'zatwierdzone' as TaskStatus, completed: true } : t));
+    await dbApproveTask(id, rid, task.assigned_to ?? '', task.points ?? 20);
   };
 
   const rejectTask = async (id: string) => {
-    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'do_zrobienia' as any } : t));
-    await supabase.from('tasks').update({ status: 'odrzucone' }).eq('id', id);
+    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'odrzucone' as TaskStatus } : t));
+    await dbRejectTask(id);
   };
 
   return (

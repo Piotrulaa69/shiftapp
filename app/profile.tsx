@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
+import { getNotifPrefs, upsertNotifPrefs } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { theme } from '../styles/theme';
 
@@ -23,12 +24,47 @@ export default function ProfileScreen() {
   const { user, restaurant, logout } = useAuth();
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showNotifModal, setShowNotifModal] = useState(false);
+  const [notifPrefs, setNotifPrefs] = useState<Record<string, boolean>>({
+    shift_reminder: true,
+    task_assigned: true,
+    leave_approved: true,
+    shift_swap: true,
+    announcement: true,
+  });
+  const [notifSaving, setNotifSaving] = useState(false);
   const [currentPw, setCurrentPw] = useState('');
   const [newPw, setNewPw] = useState('');
   const [confirmPw, setConfirmPw] = useState('');
   const [pwLoading, setPwLoading] = useState(false);
   const [pwError, setPwError] = useState('');
   const [pwSuccess, setPwSuccess] = useState(false);
+
+  useEffect(() => {
+    if (user?.id) {
+      getNotifPrefs(user.id).then((prefs) => {
+        if (prefs) {
+          setNotifPrefs({
+            shift_reminder: prefs.shift_reminder !== 'false',
+            task_assigned: prefs.task_assigned !== 'false',
+            leave_approved: prefs.leave_approved !== 'false',
+            shift_swap: prefs.shift_swap !== 'false',
+            announcement: prefs.announcement !== 'false',
+          });
+        }
+      });
+    }
+  }, [user?.id]);
+
+  const saveNotifPrefs = async () => {
+    if (!user?.id) return;
+    setNotifSaving(true);
+    const serialized: Record<string, string> = {};
+    Object.entries(notifPrefs).forEach(([k, v]) => { serialized[k] = String(v); });
+    await upsertNotifPrefs(user.id, serialized);
+    setNotifSaving(false);
+    setShowNotifModal(false);
+  };
 
   const handleChangePassword = async () => {
     setPwError('');
@@ -93,7 +129,7 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Ustawienia</Text>
           <ActionRow icon="lock-closed-outline" label="Zmień hasło" onPress={() => setShowPasswordModal(true)} />
-          <ActionRow icon="notifications-outline" label="Powiadomienia" onPress={() => router.push('/notifications' as any)} />
+          <ActionRow icon="notifications-outline" label="Preferencje powiadomień" onPress={() => setShowNotifModal(true)} />
           <ActionRow icon="document-text-outline" label="Moje dokumenty" onPress={() => router.push('/documents' as any)} />
           <ActionRow icon="calendar-outline" label="Dyspozycyjność" onPress={() => router.push('/availability' as any)} />
           <ActionRow icon="airplane-outline" label="Wnioski urlopowe" onPress={() => router.push('/leave-requests' as any)} />
@@ -109,6 +145,45 @@ export default function ProfileScreen() {
 
         <Text style={styles.version}>ShiftApp v1.0 · © 2025</Text>
       </ScrollView>
+
+      {/* Notification Preferences Modal */}
+      <Modal visible={showNotifModal} animationType="fade" transparent onRequestClose={() => setShowNotifModal(false)}>
+        <View style={mStyles.overlay}>
+          <View style={mStyles.sheet}>
+            <View style={mStyles.mHeader}>
+              <Text style={mStyles.mTitle}>Powiadomienia</Text>
+              <TouchableOpacity onPress={() => setShowNotifModal(false)}>
+                <Ionicons name="close" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+            <View style={mStyles.body}>
+              {([
+                { key: 'shift_reminder', label: 'Przypomnienie o zmianie', icon: 'alarm-outline' },
+                { key: 'task_assigned', label: 'Nowe zadanie', icon: 'checkbox-outline' },
+                { key: 'leave_approved', label: 'Decyzja o urlopie', icon: 'umbrella-outline' },
+                { key: 'shift_swap', label: 'Wymiana zmiany', icon: 'swap-horizontal-outline' },
+                { key: 'announcement', label: 'Ogłoszenia managera', icon: 'megaphone-outline' },
+              ] as const).map((item) => (
+                <TouchableOpacity
+                  key={item.key}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}
+                  onPress={() => setNotifPrefs((p) => ({ ...p, [item.key]: !p[item.key] }))}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name={item.icon as any} size={20} color={theme.colors.primary} />
+                  <Text style={{ flex: 1, fontSize: 14, fontWeight: '500', color: theme.colors.text }}>{item.label}</Text>
+                  <View style={{ width: 44, height: 26, borderRadius: 13, backgroundColor: notifPrefs[item.key] ? theme.colors.primary : theme.colors.border, justifyContent: 'center', paddingHorizontal: 2 }}>
+                    <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: theme.colors.white, alignSelf: notifPrefs[item.key] ? 'flex-end' : 'flex-start' }} />
+                  </View>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity style={[mStyles.saveBtn, { marginTop: 16 }]} onPress={saveNotifPrefs} disabled={notifSaving} activeOpacity={0.85}>
+                {notifSaving ? <ActivityIndicator color={theme.colors.white} /> : <Text style={mStyles.saveBtnText}>Zapisz ustawienia</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Change Password Modal */}
       <Modal visible={showPasswordModal} animationType="fade" transparent onRequestClose={() => setShowPasswordModal(false)}>

@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<!-- saved from url=(0143)file:///Users/piotrsoltysek/Library/Containers/net.whatsapp.WhatsApp/Data/tmp/documents/A1F030FA-977B-4AB6-8EA4-55A02E18641F/shiftapp_spec.html -->
+<html lang="pl"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ShiftApp — Specyfikacja struktury</title>
+<link href="./ShiftApp — Specyfikacja struktury_files/css2" rel="stylesheet">
+<style>
+  :root {
+    --primary: #2196C9;
+    --primary-light: #5BC8F5;
+    --primary-dark: #1670A0;
+    --dark: #1A1A2E;
+    --dark-2: #0D1B2A;
+    --gray-900: #1C1C1C;
+    --gray-700: #444444;
+    --gray-500: #777777;
+    --gray-300: #CCCCCC;
+    --gray-100: #F5F5F5;
+    --gray-50: #FAFAFA;
+    --white: #FFFFFF;
+    --success: #34C759;
+    --warning: #FF9500;
+    --error: #FF3B30;
+    --success-bg: #E8F8ED;
+    --warning-bg: #FFF4E5;
+    --error-bg: #FFF0EF;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--gray-50);
+    color: var(--gray-900);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── COVER ── */
+  .cover {
+    background: linear-gradient(135deg, #0D1B2A 0%, #1B2838 40%, #1A3A4A 100%);
+    padding: 80px 60px 60px;
+    position: relative;
+    overflow: hidden;
+    page-break-after: always;
+  }
+  .cover::before {
+    content: '';
+    position: absolute;
+    top: -40%;
+    right: -20%;
+    width: 70vw;
+    height: 70vw;
+    background: radial-gradient(circle, rgba(91,200,245,0.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .cover-inner { position: relative; z-index: 1; max-width: 900px; }
+  .cover-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(33,150,201,0.15);
+    border: 1px solid rgba(91,200,245,0.3);
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--primary-light);
+    margin-bottom: 32px;
+  }
+  .cover h1 {
+    font-size: 56px;
+    font-weight: 800;
+    color: var(--white);
+    letter-spacing: -2px;
+    line-height: 1.1;
+    margin-bottom: 16px;
+  }
+  .cover h1 span { color: var(--primary-light); }
+  .cover-sub {
+    font-size: 18px;
+    color: rgba(255,255,255,0.5);
+    font-weight: 400;
+    margin-bottom: 48px;
+    max-width: 520px;
+    line-height: 1.6;
+  }
+  .cover-meta {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 12px;
+    overflow: hidden;
+    max-width: 700px;
+  }
+  .cover-meta-item {
+    background: rgba(255,255,255,0.04);
+    padding: 16px 20px;
+  }
+  .cover-meta-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.3);
+    margin-bottom: 4px;
+  }
+  .cover-meta-value {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.8);
+  }
+
+  /* ── LAYOUT ── */
+  .wrapper {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 40px 40px 80px;
+  }
+
+  /* ── STATUS TABLE ── */
+  .status-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin: 32px 0;
+  }
+  .status-card {
+    background: var(--white);
+    border: 1px solid #E8E8E8;
+    border-radius: 12px;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .status-card-label { font-size: 13px; font-weight: 500; color: var(--gray-700); }
+  .status-card-val { font-size: 11px; color: var(--gray-500); margin-top: 1px; }
+
+  /* ── SECTION HEADERS ── */
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 48px 0 20px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--primary);
+  }
+  .section-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .section-icon svg { width: 18px; height: 18px; }
+  .section-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--dark);
+    letter-spacing: -0.5px;
+  }
+  .section-subtitle {
+    font-size: 13px;
+    color: var(--gray-500);
+    margin-top: 2px;
+  }
+
+  /* ── TOGGLE ITEMS ── */
+  .toggle-group { margin-bottom: 4px; }
+
+  .toggle-item {
+    background: var(--white);
+    border: 1px solid #EBEBEB;
+    border-radius: 10px;
+    margin-bottom: 4px;
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+  .toggle-item:hover { border-color: var(--primary-light); }
+  .toggle-item.open { border-color: var(--primary); }
+
+  .toggle-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 16px;
+    cursor: pointer;
+    user-select: none;
+    background: transparent;
+    transition: background 0.1s;
+  }
+  .toggle-header:hover { background: rgba(33,150,201,0.03); }
+  .toggle-item.open .toggle-header { background: rgba(33,150,201,0.05); }
+
+  .toggle-arrow {
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    background: var(--gray-100);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.15s, transform 0.2s;
+  }
+  .toggle-item.open .toggle-arrow {
+    background: var(--primary);
+    transform: rotate(90deg);
+  }
+  .toggle-arrow svg { width: 10px; height: 10px; }
+  .toggle-item.open .toggle-arrow svg path { stroke: white; }
+
+  .toggle-label {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gray-900);
+  }
+  .toggle-item.open .toggle-label { color: var(--primary-dark); }
+
+  .toggle-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    letter-spacing: 0.3px;
+    flex-shrink: 0;
+  }
+  .badge-screen { background: rgba(33,150,201,0.1); color: var(--primary-dark); }
+  .badge-logic { background: rgba(52,199,89,0.1); color: #1A7A3A; }
+  .badge-config { background: rgba(255,149,0,0.1); color: #A05800; }
+  .badge-update { background: rgba(91,200,245,0.15); color: #0D6A9A; }
+
+  .toggle-body {
+    display: none;
+    padding: 0 16px 16px 16px;
+    border-top: 1px solid #F0F0F0;
+  }
+  .toggle-item.open .toggle-body { display: block; }
+
+  /* Nested toggles */
+  .toggle-nested {
+    margin-top: 10px;
+    padding-left: 12px;
+    border-left: 2px solid #E8E8E8;
+  }
+  .toggle-nested .toggle-item {
+    background: var(--gray-50);
+    border-color: #F0F0F0;
+  }
+  .toggle-nested .toggle-item.open { border-color: rgba(33,150,201,0.4); }
+  .toggle-nested .toggle-header { padding: 10px 14px; }
+  .toggle-nested .toggle-label { font-size: 12px; font-weight: 500; color: var(--gray-700); }
+  .toggle-nested .toggle-item.open .toggle-label { color: var(--primary); }
+  .toggle-nested .toggle-body { padding: 0 14px 12px; }
+
+  /* Deep nested */
+  .toggle-deep {
+    margin-top: 8px;
+    padding-left: 10px;
+    border-left: 2px solid #EEF6FB;
+  }
+  .toggle-deep .toggle-item {
+    background: var(--white);
+    border-color: #F5F5F5;
+    border-radius: 8px;
+  }
+  .toggle-deep .toggle-header { padding: 8px 12px; }
+  .toggle-deep .toggle-label { font-size: 11px; font-weight: 500; }
+  .toggle-deep .toggle-body { padding: 0 12px 10px; }
+
+  /* ── CONTENT STYLES ── */
+  .content { font-size: 13px; color: var(--gray-700); line-height: 1.7; }
+  .content p { margin-bottom: 8px; }
+  .content p:last-child { margin-bottom: 0; }
+
+  .field-list { margin: 8px 0; }
+  .field-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    padding: 5px 0;
+    border-bottom: 1px solid #F5F5F5;
+    font-size: 12px;
+    color: var(--gray-700);
+    line-height: 1.5;
+  }
+  .field-item:last-child { border-bottom: none; }
+  .field-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--primary-light);
+    flex-shrink: 0;
+    margin-top: 6px;
+  }
+
+  .arrow-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    padding: 4px 0;
+    font-size: 12px;
+    color: var(--gray-700);
+    line-height: 1.5;
+  }
+  .arrow-icon { color: var(--primary); font-size: 11px; flex-shrink: 0; margin-top: 2px; }
+
+  .tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 0.3px;
+  }
+  .tag-blue { background: rgba(33,150,201,0.1); color: var(--primary-dark); }
+  .tag-green { background: var(--success-bg); color: #1A7A3A; }
+  .tag-orange { background: var(--warning-bg); color: #A05800; }
+  .tag-red { background: var(--error-bg); color: #C0392B; }
+  .tag-gray { background: var(--gray-100); color: var(--gray-700); }
+
+  .info-box {
+    background: rgba(33,150,201,0.06);
+    border: 1px solid rgba(33,150,201,0.2);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--primary-dark);
+    margin: 8px 0;
+    line-height: 1.6;
+  }
+  .warn-box {
+    background: var(--warning-bg);
+    border: 1px solid rgba(255,149,0,0.3);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: #7A4400;
+    margin: 8px 0;
+  }
+
+  /* ── TABLES ── */
+  .spec-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin: 8px 0;
+  }
+  .spec-table th {
+    background: var(--dark);
+    color: rgba(255,255,255,0.85);
+    font-weight: 600;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 8px 12px;
+    text-align: left;
+  }
+  .spec-table th:first-child { border-radius: 6px 0 0 0; }
+  .spec-table th:last-child { border-radius: 0 6px 0 0; }
+  .spec-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #F0F0F0;
+    color: var(--gray-700);
+    vertical-align: top;
+  }
+  .spec-table tr:last-child td { border-bottom: none; }
+  .spec-table tr:nth-child(even) td { background: var(--gray-50); }
+
+  /* ── DIVIDER ── */
+  .divider {
+    height: 1px;
+    background: linear-gradient(to right, var(--primary-light), transparent);
+    margin: 32px 0;
+    opacity: 0.4;
+  }
+
+  /* ── ROLE PILL ── */
+  .role-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-right: 4px;
+  }
+  .role-employee { background: rgba(33,150,201,0.1); color: var(--primary-dark); }
+  .role-manager { background: rgba(255,149,0,0.1); color: #A05800; }
+  .role-employer { background: rgba(52,199,89,0.1); color: #1A7A3A; }
+
+  /* ── NAV BAR ── */
+  .nav-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(255,255,255,0.95);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid #EBEBEB;
+    padding: 0 40px;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    height: 48px;
+  }
+  .nav-logo {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--primary);
+    margin-right: 24px;
+    letter-spacing: -0.3px;
+    white-space: nowrap;
+  }
+  .nav-links {
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-link {
+    padding: 0 14px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--gray-500);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: color 0.1s, border-color 0.1s;
+    text-decoration: none;
+  }
+  .nav-link:hover { color: var(--primary); border-bottom-color: var(--primary-light); }
+
+  /* ── EXPAND/COLLAPSE ALL ── */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .toolbar-title { font-size: 11px; color: var(--gray-500); font-weight: 500; }
+  .btn-expand {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--primary);
+    background: rgba(33,150,201,0.08);
+    border: none;
+    border-radius: 6px;
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .btn-expand:hover { background: rgba(33,150,201,0.15); }
+
+  /* ── SUBHEADER ── */
+  .sub-header {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--gray-500);
+    margin: 16px 0 8px;
+  }
+
+  /* ── SCREEN CARD ── */
+  .screen-id {
+    font-size: 10px;
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
+    color: var(--primary);
+    background: rgba(33,150,201,0.08);
+    padding: 2px 7px;
+    border-radius: 4px;
+    margin-right: 4px;
+  }
+
+  @media print {
+    .nav-bar { display: none; }
+    .toggle-body { display: block !important; }
+    .toggle-arrow { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav-bar">
+  <div class="nav-logo">Shift<span style="color:var(--primary-light)">App</span></div>
+  <div class="nav-links">
+    <a class="nav-link" href="file:///Users/piotrsoltysek/Library/Containers/net.whatsapp.WhatsApp/Data/tmp/documents/A1F030FA-977B-4AB6-8EA4-55A02E18641F/shiftapp_spec.html#logowanie">Logowanie</a>
+    <a class="nav-link" href="file:///Users/piotrsoltysek/Library/Containers/net.whatsapp.WhatsApp/Data/tmp/documents/A1F030FA-977B-4AB6-8EA4-55A02E18641F/shiftapp_spec.html#pracownik">Pracownik</a>
+    <a class="nav-link" href="file:///Users/piotrsoltysek/Library/Containers/net.whatsapp.WhatsApp/Data/tmp/documents/A1F030FA-977B-4AB6-8EA4-55A02E18641F/shiftapp_spec.html#manager">Manager</a>
+    <a class="nav-link" href="file:///Users/piotrsoltysek/Library/Containers/net.whatsapp.WhatsApp/Data/tmp/documents/A1F030FA-977B-4AB6-8EA4-55A02E18641F/shiftapp_spec.html#pracodawca">Pracodawca</a>
+    <a class="nav-link" href="file:///Users/piotrsoltysek/Library/Containers/net.whatsapp.WhatsApp/Data/tmp/documents/A1F030FA-977B-4AB6-8EA4-55A02E18641F/shiftapp_spec.html#uzupelnienia">Uzupełnienia</a>
+    <a class="nav-link" href="file:///Users/piotrsoltysek/Library/Containers/net.whatsapp.WhatsApp/Data/tmp/documents/A1F030FA-977B-4AB6-8EA4-55A02E18641F/shiftapp_spec.html#powiadomienia">Powiadomienia</a>
+    <a class="nav-link" href="file:///Users/piotrsoltysek/Library/Containers/net.whatsapp.WhatsApp/Data/tmp/documents/A1F030FA-977B-4AB6-8EA4-55A02E18641F/shiftapp_spec.html#deeplinks">Deep Linki</a>
+    <a class="nav-link" href="file:///Users/piotrsoltysek/Library/Containers/net.whatsapp.WhatsApp/Data/tmp/documents/A1F030FA-977B-4AB6-8EA4-55A02E18641F/shiftapp_spec.html#backlog">Backlog</a>
+  </div>
+</nav>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="cover-inner">
+    <div class="cover-badge">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="rgba(91,200,245,0.6)" stroke-width="1.5"></circle><path d="M6 3v3l2 1.5" stroke="rgba(91,200,245,0.8)" stroke-width="1.2" stroke-linecap="round"></path></svg>
+      Specyfikacja struktury v1.0
+    </div>
+    <h1>Shift<span>App</span><br>Struktura aplikacji</h1>
+    <p class="cover-sub">Kompletna specyfikacja widoków, logiki i interakcji dla trzech ról użytkownika — pracownik, manager, pracodawca.</p>
+    <div class="cover-meta">
+      <div class="cover-meta-item">
+        <div class="cover-meta-label">Wersja</div>
+        <div class="cover-meta-value">1.0 — finał</div>
+      </div>
+      <div class="cover-meta-item">
+        <div class="cover-meta-label">Data</div>
+        <div class="cover-meta-value">Maj 2026</div>
+      </div>
+      <div class="cover-meta-item">
+        <div class="cover-meta-label">Język</div>
+        <div class="cover-meta-value">Polski</div>
+      </div>
+      <div class="cover-meta-item">
+        <div class="cover-meta-label">Ekranów</div>
+        <div class="cover-meta-value">60+</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wrapper">
+
+  <!-- STATUS -->
+  <div class="status-grid">
+    <div class="status-card"><div class="status-dot" style="background:var(--success)"></div><div><div class="status-card-label">Widok pracownika</div><div class="status-card-val">Zamknięty ✓</div></div></div>
+    <div class="status-card"><div class="status-dot" style="background:var(--success)"></div><div><div class="status-card-label">Widok managera</div><div class="status-card-val">Zamknięty ✓</div></div></div>
+    <div class="status-card"><div class="status-dot" style="background:var(--success)"></div><div><div class="status-card-label">Widok pracodawcy</div><div class="status-card-val">Zamknięty ✓</div></div></div>
+  </div>
+
+  <!-- ═══════════════════════════════════ LOGOWANIE ═══════════════════ -->
+  <div id="logowanie" class="section-header">
+    <div class="section-icon"><svg viewBox="0 0 18 18" fill="none" stroke="white" stroke-width="1.8"><rect x="3" y="2" width="12" height="14" rx="2"></rect><path d="M6 7h6M6 10h4"></path></svg></div>
+    <div><div class="section-title">Logowanie</div><div class="section-subtitle">Wspólne dla wszystkich ról</div></div>
+  </div>
+
+  <div class="toggle-group">
+    <div class="toggle-item" onclick="toggle(this)">
+      <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">LOGIN</span> Ekran logowania</div><span class="toggle-badge badge-screen">EKRAN</span></div>
+      <div class="toggle-body">
+        <div class="field-list">
+          <div class="field-item"><div class="field-dot"></div><div>Pole: e-mail</div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Pole: hasło</div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Przycisk: „Zaloguj się"</div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Link: „Zapomniałem hasła" → EKRAN LOGIN-A</div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Po zalogowaniu → system wykrywa rolę z profilu → redirect do dashboardu odpowiedniej roli</div></div>
+        </div>
+        <div class="toggle-nested">
+          <div class="toggle-item" onclick="toggle(this)">
+            <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">LOGIN-A</span> Reset hasła — krok 1</div></div>
+            <div class="toggle-body"><div class="field-list">
+              <div class="field-item"><div class="field-dot"></div><div>Pole: e-mail</div></div>
+              <div class="field-item"><div class="field-dot"></div><div>Przycisk: „Wyślij link resetujący"</div></div>
+              <div class="field-item"><div class="field-dot"></div><div>Komunikat: „Jeśli konto istnieje, otrzymasz e-mail z linkiem"</div></div>
+            </div></div>
+          </div>
+          <div class="toggle-item" onclick="toggle(this)">
+            <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">LOGIN-B</span> Reset hasła — krok 2 (po kliknięciu linku)</div></div>
+            <div class="toggle-body"><div class="field-list">
+              <div class="field-item"><div class="field-dot"></div><div>Pole: nowe hasło</div></div>
+              <div class="field-item"><div class="field-dot"></div><div>Pole: powtórz nowe hasło</div></div>
+              <div class="field-item"><div class="field-dot"></div><div>Walidacja: min. 8 znaków, oba pola identyczne</div></div>
+              <div class="field-item"><div class="field-dot"></div><div>Przycisk: „Ustaw nowe hasło" → redirect do logowania</div></div>
+              <div class="field-item"><div class="field-dot"></div><div>Link wygasa po 24h od wysłania</div></div>
+            </div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="toggle-item" onclick="toggle(this)">
+      <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">ONBOARD</span> Onboarding nowego pracownika</div><span class="toggle-badge badge-logic">LOGIKA</span></div>
+      <div class="toggle-body">
+        <div class="info-box">Pierwsze logowanie po rejestracji przez link zaproszenia. Kolejność: Powitanie → Profil → Hasło → Powiadomienia.</div>
+        <div class="toggle-nested">
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">ONBOARD-1 — Witaj w ShiftApp</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Ekran powitalny z nazwą firmy i logo</div></div><div class="field-item"><div class="field-dot"></div><div>Przycisk: „Zacznijmy" → ONBOARD-2</div></div></div></div></div>
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">ONBOARD-2 — Uzupełnij profil</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Pole: imię (wymagane)</div></div><div class="field-item"><div class="field-dot"></div><div>Pole: nazwisko (wymagane)</div></div><div class="field-item"><div class="field-dot"></div><div>Pole: numer telefonu (wymagane)</div></div><div class="field-item"><div class="field-dot"></div><div>Pole: zdjęcie profilowe (opcjonalne)</div></div><div class="field-item"><div class="field-dot"></div><div>Przycisk: „Dalej" → ONBOARD-3</div></div></div></div></div>
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">ONBOARD-3 — Ustaw hasło</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Pole: hasło</div></div><div class="field-item"><div class="field-dot"></div><div>Pole: powtórz hasło</div></div><div class="field-item"><div class="field-dot"></div><div>Walidacja: min. 8 znaków</div></div><div class="field-item"><div class="field-dot"></div><div>Przycisk: „Dalej" → ONBOARD-4</div></div></div></div></div>
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">ONBOARD-4 — Powiadomienia → Dashboard</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Prośba o zgodę na powiadomienia push (systemowy dialog)</div></div><div class="field-item"><div class="field-dot"></div><div>Przycisk: „Włącz powiadomienia" → dialog systemowy</div></div><div class="field-item"><div class="field-dot"></div><div>Link: „Teraz nie" → pominięcie</div></div><div class="field-item"><div class="field-dot"></div><div>→ redirect do dashboardu pracownika</div></div><div class="field-item"><div class="field-dot"></div><div>Manager otrzymuje push: „Pracownik X ukończył rejestrację"</div></div></div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════ PRACOWNIK ═══════════════════ -->
+  <div id="pracownik" class="section-header">
+    <div class="section-icon"><svg viewBox="0 0 18 18" fill="none" stroke="white" stroke-width="1.8"><circle cx="9" cy="6" r="3"></circle><path d="M3 16c0-3.314 2.686-5 6-5s6 1.686 6 5"></path></svg></div>
+    <div><div class="section-title">Widok pracownika</div><div class="section-subtitle">Nawigacja: Home / Grafik / Zadania / Szkolenia</div></div>
+  </div>
+
+  <div class="toolbar">
+    <div class="toolbar-title"><span class="role-pill role-employee">PRACOWNIK</span> Bottom bar: Home · Grafik · Zadania · Szkolenia</div>
+    <button class="btn-expand" onclick="expandAll(&#39;pracownik-group&#39;)">Rozwiń wszystko</button>
+  </div>
+
+  <div id="pracownik-group" class="toggle-group">
+
+    <!-- HOME -->
+    <div class="toggle-item" onclick="toggle(this)">
+      <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">EKRAN 1</span> Dashboard (Home)</div><span class="toggle-badge badge-screen">EKRAN</span></div>
+      <div class="toggle-body">
+        <div class="field-list">
+          <div class="field-item"><div class="field-dot"></div><div>Karta: najbliższa zmiana (data, godziny, lokalizacja) + Przycisk Clock-in/out</div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Karta: zarobki bieżącego okresu (łączna kwota) → EKRAN 1B</div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Karta: punkty bieżącego okresu (łączna liczba + pozycja w rankingu) → zakładka Szkolenia</div></div>
+        </div>
+        <div class="toggle-nested">
+          <!-- CLOCK IN -->
+          <div class="toggle-item" onclick="toggle(this)">
+            <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">EKRAN 1A</span> Clock-in</div></div>
+            <div class="toggle-body">
+              <div class="info-box">Przyjście przed zmianą → naliczanie od godziny z grafiku. Spóźnienie → od faktycznej godziny. Clock-in na czas → punkty za punktualność.</div>
+              <div class="toggle-deep">
+                <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">1A-PIN — Weryfikacja PINem</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Pole na PIN (4–6 cyfr)</div></div><div class="field-item"><div class="field-dot"></div><div>Przycisk: „Potwierdź"</div></div><div class="field-item"><div class="field-dot"></div><div>Błędny PIN → komunikat błędu + możliwość ponowienia</div></div><div class="field-item"><div class="field-dot"></div><div>Poprawny PIN → status: <span class="tag tag-blue">TRWA</span> → powrót do Home</div></div></div></div></div>
+                <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">1A-QR — Weryfikacja kodem QR</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Uruchomienie kamery urządzenia</div></div><div class="field-item"><div class="field-dot"></div><div>Skanowanie QR wyświetlanego w miejscu pracy (unikalny per zmiana)</div></div><div class="field-item"><div class="field-dot"></div><div>Błędny / nieaktualny kod → komunikat błędu</div></div><div class="field-item"><div class="field-dot"></div><div>Poprawny kod → status: <span class="tag tag-blue">TRWA</span> → powrót do Home</div></div></div></div></div>
+                <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">1A-GPS — Weryfikacja lokalizacją</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Aplikacja pobiera lokalizację urządzenia</div></div><div class="field-item"><div class="field-dot"></div><div>Porównanie z adresem i radiusem GPS lokalizacji (konfigurowalne)</div></div><div class="field-item"><div class="field-dot"></div><div>Za daleko → komunikat z informacją o odległości</div></div><div class="field-item"><div class="field-dot"></div><div>W zasięgu → status: <span class="tag tag-blue">TRWA</span> → powrót do Home</div></div></div></div></div>
+                <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">1A-OUT — Spóźniony clock-out</div></div><div class="toggle-body"><div class="info-box">Wyzwalacz: brak clock-out po zakończeniu zmiany → push do pracownika.</div><div class="field-list"><div class="field-item"><div class="field-dot"></div><div><b>Opcja A — Skończyłem:</b> pole godziny wyjścia → „Zapisz" → clock-out wsteczny</div></div><div class="field-item"><div class="field-dot"></div><div><b>Opcja B — Nadal pracuję:</b> pole tekstowe (wymagane: 1 zdanie) → „Zapisz" → alert do managera</div></div><div class="field-item"><div class="field-dot"></div><div><b>Brak reakcji:</b> auto clock-out o godzinie końca zmiany z grafiku</div></div></div></div></div>
+              </div>
+            </div>
+          </div>
+          <!-- ZAROBKI -->
+          <div class="toggle-item" onclick="toggle(this)">
+            <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">EKRAN 1B</span> Zarobki</div></div>
+            <div class="toggle-body"><div class="field-list">
+              <div class="field-item"><div class="field-dot"></div><div>Nazwa okresu rozliczeniowego (okres definiowany przez pracodawcę)</div></div>
+              <div class="field-item"><div class="field-dot"></div><div>Łączna kwota do wypłaty za okres</div></div>
+              <div class="field-item"><div class="field-dot"></div><div>Jeśli pracownik pracował na kilku stanowiskach → podział per stanowisko (np. Kierowca: 800 zł / Kelner: 400 zł)</div></div>
+              <div class="field-item"><div class="field-dot"></div><div>Jeśli nadgodziny → podział: regularne + nadgodziny z osobnymi kwotami</div></div>
+              <div class="field-item"><div class="field-dot"></div><div>Status: <span class="tag tag-blue">W TRAKCIE</span> / <span class="tag tag-gray">ZAMKNIĘTY</span></div></div>
+              <div class="field-item"><div class="field-dot"></div><div>Nawigacja ← → między okresami (pełna historia, bez limitu) — tylko podgląd</div></div>
+            </div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GRAFIK -->
+    <div class="toggle-item" onclick="toggle(this)">
+      <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">EKRAN 2</span> Grafik</div><span class="toggle-badge badge-screen">EKRAN</span></div>
+      <div class="toggle-body">
+        <div class="field-list">
+          <div class="field-item"><div class="field-dot"></div><div>Kalendarz / lista zmian: poprzednie → aktualny → przyszły (jeśli opublikowany)</div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Status zmian: <span class="tag tag-blue">NADCHODZĄCA</span> <span class="tag tag-orange">TRWA</span> <span class="tag tag-gray">ZAKOŃCZONA</span></div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Przyciski na dole: „Dyspozycyjność" → EKRAN 2B | „Wnioski urlopowe" → EKRAN 2C</div></div>
+        </div>
+        <div class="toggle-nested">
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">EKRAN 2A</span> Szczegóły zmiany</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Data, godziny, lokalizacja, stanowisko</div></div><div class="field-item"><div class="field-dot"></div><div>Faktyczny clock-in / clock-out (jeśli zakończona)</div></div><div class="field-item"><div class="field-dot"></div><div>Notatka od managera (jeśli istnieje)</div></div><div class="field-item"><div class="field-dot"></div><div>Przycisk: „Zgłoś nieobecność" (tylko dla zmian <span class="tag tag-blue">NADCHODZĄCA</span>) → EKRAN ABS-1</div></div><div class="field-item"><div class="field-dot"></div><div>Przycisk: „Zaproponuj wymianę" → EKRAN SWAP-1</div></div></div></div></div>
+
+          <div class="toggle-item" onclick="toggle(this)">
+            <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">EKRAN 2B</span> Dyspozycyjność</div></div>
+            <div class="toggle-body">
+              <div class="field-list">
+                <div class="field-item"><div class="field-dot"></div><div>Kalendarz miesięczny, nawigacja w przód bez limitu</div></div>
+                <div class="field-item"><div class="field-dot"></div><div>Domyślny stan: full-time → <span class="tag tag-green">DOSTĘPNY</span> / part-time → <span class="tag tag-gray">NIEDOSTĘPNY</span></div></div>
+                <div class="field-item"><div class="field-dot"></div><div>Dni z przypisaną zmianą w grafiku → zablokowane</div></div>
+                <div class="field-item"><div class="field-dot"></div><div>Przycisk „Zapisz" → zapisuje cały miesiąc → powrót do Grafiku</div></div>
+              </div>
+              <div class="toggle-deep">
+                <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">2B-1 — Ustawienie dnia (bottom sheet)</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div><b>Opcja A — Dostępny cały dzień:</b> <span class="tag tag-green">DOSTĘPNY</span> → zamknięcie</div></div><div class="field-item"><div class="field-dot"></div><div><b>Opcja B — Niedostępny:</b> <span class="tag tag-gray">NIEDOSTĘPNY</span> → zamknięcie</div></div><div class="field-item"><div class="field-dot"></div><div><b>Opcja C — Częściowo:</b> sheet rozszerza się o 2 przedziały: Od–Do (przedział 1 wymagany, 2 opcjonalny)</div></div><div class="field-item"><div class="field-dot"></div><div>Walidacja: „Do" późniejsze niż „Od", przedziały nie mogą się nakładać</div></div></div></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="toggle-item" onclick="toggle(this)">
+            <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">EKRAN 2C</span> Wnioski urlopowe</div></div>
+            <div class="toggle-body">
+              <div class="field-list">
+                <div class="field-item"><div class="field-dot"></div><div>Saldo dni urlopowych (per typ skonfigurowany przez pracodawcę)</div></div>
+                <div class="field-item"><div class="field-dot"></div><div>Lista wniosków z filtrami: wszystkie / oczekujące / zatwierdzone / odrzucone</div></div>
+                <div class="field-item"><div class="field-dot"></div><div>Przycisk: „Nowy wniosek" → EKRAN 2C-1</div></div>
+              </div>
+              <div class="toggle-deep">
+                <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">2C-1 — Nowy wniosek (formularz 2-krokowy)</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div><b>Krok 1:</b> wybór typu urlopu (lista typów z pracodawcy)</div></div><div class="field-item"><div class="field-dot"></div><div><b>Krok 2:</b> data od + data do + automatyczne wyliczenie dni roboczych</div></div><div class="field-item"><div class="field-dot"></div><div>Walidacja: brak salda → blokada | kolizja z zatwierdzonym wnioskiem → błąd</div></div><div class="field-item"><div class="field-dot"></div><div>Pola dodatkowe zależne od typu: komentarz (opcjonalne / wymagane) + załącznik</div></div><div class="field-item"><div class="field-dot"></div><div>Wyślij → status: <span class="tag tag-orange">OCZEKUJĄCY</span> → push do pracownika</div></div></div></div></div>
+                <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">2C-2 — Szczegóły wniosku</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Typ, daty, dni, data złożenia, status, komentarze, załącznik</div></div><div class="field-item"><div class="field-dot"></div><div>Status <span class="tag tag-orange">OCZEKUJĄCY</span> → przycisk „Anuluj wniosek" → dialog → <span class="tag tag-gray">ANULOWANY</span></div></div><div class="field-item"><div class="field-dot"></div><div>Pozostałe statusy → tylko podgląd</div></div></div></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">EKRAN ABS-1</span> Zgłoś nieobecność nieplanowaną</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Typ: L4 / Opieka nad dzieckiem / Siła wyższa / Inne</div></div><div class="field-item"><div class="field-dot"></div><div>Opis (wymagane dla „Inne"), załącznik (opcjonalne)</div></div><div class="field-item"><div class="field-dot"></div><div>Wyślij → status zmiany: <span class="tag tag-orange">NIEOBECNOŚĆ ZGŁOSZONA</span> → push do managera</div></div></div></div></div>
+
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">EKRAN SWAP-1/2</span> Wymiana zmian (pracownik)</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div><b>SWAP-1 (inicjator):</b> wybór pracownika z tym samym stanowiskiem → „Wymień za zmianę" lub „Oddaj zmianę" → wyślij do pracownika B</div></div><div class="field-item"><div class="field-dot"></div><div><b>SWAP-2 (odpowiedź):</b> podgląd propozycji → „Zaakceptuj" (→ do managera) lub „Odrzuć" (→ push do A)</div></div></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ZADANIA -->
+    <div class="toggle-item" onclick="toggle(this)">
+      <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">EKRAN 3</span> Zadania</div><span class="toggle-badge badge-screen">EKRAN</span></div>
+      <div class="toggle-body">
+        <div class="field-list">
+          <div class="field-item"><div class="field-dot"></div><div>Lista zadań pracownika i jego roli / stanowiska</div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Typy: <b>Cykliczne</b> (auto) | <b>Przypisane do zmiany</b> | <b>Przypisane imiennie</b></div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Per zadanie: nazwa, opis, termin, punkty za wykonanie, status <span class="tag tag-gray">DO ZROBIENIA</span> / <span class="tag tag-green">ZROBIONE</span></div></div>
+        </div>
+        <div class="toggle-nested">
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">EKRAN 3A — Szczegóły zadania</div></div><div class="toggle-body">
+            <div class="info-box">Punkty dodawane dopiero po zatwierdzeniu przez managera, nie od razu po oznaczeniu.</div>
+            <div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Pole tekstowe: komentarz (opcjonalne)</div></div><div class="field-item"><div class="field-dot"></div><div>Przycisk: dodaj zdjęcie jako dowód wykonania</div></div><div class="field-item"><div class="field-dot"></div><div>Przycisk: „Oznacz jako wykonane" → <span class="tag tag-orange">CZEKA NA ZATWIERDZENIE</span> → push do managera</div></div>
+            <div class="field-item"><div class="field-dot"></div><div>Po odrzuceniu: komentarz managera + info o której zmianie zadanie pojawi się ponownie</div></div></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SZKOLENIA -->
+    <div class="toggle-item" onclick="toggle(this)">
+      <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">EKRAN 4</span> Szkolenia + System punktów</div><span class="toggle-badge badge-screen">EKRAN</span></div>
+      <div class="toggle-body">
+        <div class="sub-header">Sekcja „Moje punkty"</div>
+        <div class="field-list">
+          <div class="field-item"><div class="field-dot"></div><div>Łączna liczba punktów w bieżącym okresie rozliczeniowym</div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Pozycja w rankingu zespołu (np. „3 / 12")</div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Ranking zespołu: imię nazwisko + punkty per osoba</div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Historia zdarzeń: data, zdarzenie, punkty</div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Nawigacja ← → między poprzednimi okresami</div></div>
+        </div>
+        <div class="sub-header">Sekcja „Szkolenia"</div>
+        <div class="field-list">
+          <div class="field-item"><div class="field-dot"></div><div>Lista: nazwa, typ, punkty, status <span class="tag tag-blue">NOWE</span> <span class="tag tag-orange">W TRAKCIE</span> <span class="tag tag-green">UKOŃCZONE</span></div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Filtr: wszystkie / do zrobienia / ukończone</div></div>
+        </div>
+        <div class="toggle-nested">
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">4A — Materiał (PDF / wideo)</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>PDF viewer lub odtwarzacz wideo, pasek postępu</div></div><div class="field-item"><div class="field-dot"></div><div>Przycisk: „Potwierdzam zapoznanie" → <span class="tag tag-green">UKOŃCZONE</span> → punkty dodane</div></div></div></div></div>
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">4B — Test / Quiz</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Pytania (jednokrotny / wielokrotny wybór)</div></div><div class="field-item"><div class="field-dot"></div><div>Wynik wyświetlony od razu → punkty proporcjonalne do wyniku (im lepszy % tym więcej punktów)</div></div><div class="field-item"><div class="field-dot"></div><div>Wynik widoczny dla managera</div></div></div></div></div>
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">4C — Materiał + Test</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Najpierw 4A → punkty za materiał</div></div><div class="field-item"><div class="field-dot"></div><div>Po potwierdzeniu → odblokowanie 4B → dodatkowe punkty za wynik testu</div></div></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROFIL -->
+    <div class="toggle-item" onclick="toggle(this)">
+      <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">EKRAN 5</span> Profil pracownika (top bar → avatar)</div><span class="toggle-badge badge-screen">EKRAN</span></div>
+      <div class="toggle-body">
+        <div class="field-list">
+          <div class="field-item"><div class="field-dot"></div><div><b>Moje dane (podgląd):</b> imię, nazwisko, stanowiska, firma, typ zatrudnienia</div></div>
+          <div class="field-item"><div class="field-dot"></div><div><b>Edytowalne:</b> zdjęcie, telefon, e-mail (potwierdzenie), hasło → EKRAN 5A</div></div>
+          <div class="field-item"><div class="field-dot"></div><div><b>Powiadomienia:</b> per typ: Push / E-mail / Push+E-mail / Wyłączone</div></div>
+          <div class="field-item"><div class="field-dot"></div><div><b>Dokumenty:</b> lista dokumentów pracownika → EKRAN DOC-1</div></div>
+          <div class="field-item"><div class="field-dot"></div><div><b>Inne:</b> Wyloguj (dialog) | wersja aplikacji</div></div>
+        </div>
+        <div class="toggle-nested">
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">5A — Zmiana hasła</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Pole: aktualne hasło</div></div><div class="field-item"><div class="field-dot"></div><div>Pola: nowe hasło + powtórz (min. 8 znaków, identyczne)</div></div><div class="field-item"><div class="field-dot"></div><div>Przycisk „Zapisz" → potwierdzenie → powrót do profilu</div></div></div></div></div>
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">DOC-1/2/3 — Dokumenty</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div><b>DOC-1 Lista:</b> filtr statusu, typy: UMOWA / ZAŚWIADCZENIE / CERTYFIKAT / INNE, badge wygaśnięcia</div></div><div class="field-item"><div class="field-dot"></div><div><b>DOC-2 Dodaj:</b> nazwa, typ, data wygaśnięcia (opcjonalna), upload PDF/JPG/PNG</div></div><div class="field-item"><div class="field-dot"></div><div><b>DOC-3 Szczegóły:</b> podgląd pliku, pobierz, edytuj metadane, usuń (dialog)</div></div><div class="field-item"><div class="field-dot"></div><div>Przypomnienia: 30 dni i 7 dni przed wygaśnięciem → push + e-mail</div></div><div class="field-item"><div class="field-dot"></div><div>Widoczność: pracownik + jego manager + pracodawca</div></div></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHAT -->
+    <div class="toggle-item" onclick="toggle(this)">
+      <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">EKRAN CHAT</span> Czat (top bar → ikona)</div><span class="toggle-badge badge-screen">EKRAN</span></div>
+      <div class="toggle-body">
+        <div class="info-box">Czat 1:1 — pracownik ↔ manager. Brak czatu grupowego w MVP. Pracodawca nie ma czatu.</div>
+        <div class="toggle-nested">
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">CHAT-1 — Lista konwersacji</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Avatar, imię, ostatnia wiadomość, czas, badge nieprzeczytanych</div></div><div class="field-item"><div class="field-dot"></div><div>Wyszukiwarka po imieniu</div></div><div class="field-item"><div class="field-dot"></div><div>Pracownik widzi tylko managerów | Manager widzi cały zespół</div></div></div></div></div>
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">CHAT-2 — Rozmowa</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Wiadomości bąbelkowe z datą/godziną</div></div><div class="field-item"><div class="field-dot"></div><div>Pole tekstowe + wyślij + dodaj zdjęcie (galeria / aparat)</div></div><div class="field-item"><div class="field-dot"></div><div>Wiadomości oznaczane jako przeczytane po otwarciu</div></div></div></div></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end pracownik-group -->
+
+  <!-- ═══════════════════════════════════ MANAGER ═══════════════════ -->
+  <div id="manager" class="section-header">
+    <div class="section-icon"><svg viewBox="0 0 18 18" fill="none" stroke="white" stroke-width="1.8"><circle cx="9" cy="5" r="3"></circle><path d="M3 14c0-2.761 2.686-4 6-4s6 1.239 6 4"></path><path d="M13 8l2 2-2 2" stroke-width="1.5"></path></svg></div>
+    <div><div class="section-title">Widok managera</div><div class="section-subtitle">Nawigacja: Home / Grafik / Zespół / Więcej | Przełącznik: Mój widok / Zespół</div></div>
+  </div>
+
+  <div class="toolbar">
+    <div class="toolbar-title"><span class="role-pill role-manager">MANAGER</span> Przełącznik top bar: Mój widok (= widok pracownika) / Zespół</div>
+    <button class="btn-expand" onclick="expandAll(&#39;manager-group&#39;)">Rozwiń wszystko</button>
+  </div>
+
+  <div id="manager-group" class="toggle-group">
+
+    <div class="toggle-item" onclick="toggle(this)">
+      <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">EKRAN M1</span> Dashboard managera</div><span class="toggle-badge badge-screen">EKRAN</span></div>
+      <div class="toggle-body">
+        <div class="sub-header">Sekcja „Dziś"</div>
+        <div class="field-list">
+          <div class="field-item"><div class="field-dot"></div><div>Lista zmian na dziś: imię, godziny, status: <span class="tag tag-green">NA CZAS</span> <span class="tag tag-orange">SPÓŹNIENIE</span> <span class="tag tag-red">BRAK CLOCK-IN</span> <span class="tag tag-blue">NADAL PRACUJE</span></div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Kliknięcie pracownika → EKRAN M1A</div></div>
+        </div>
+        <div class="sub-header">Sekcja „Do zatwierdzenia" (liczniki per kategoria)</div>
+        <div class="field-list">
+          <div class="field-item"><div class="field-dot"></div><div>Wnioski urlopowe → EKRAN M3C</div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Clock-outy wsteczne → EKRAN M1B</div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Zadania do zatwierdzenia → EKRAN M4A</div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Wymiany zmian → EKRAN SWAP-3</div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Nieobecności → EKRAN ABS (manager)</div></div>
+        </div>
+        <div class="toggle-nested">
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">M1A — Szczegóły obecności + M1A-1 Korekta godzin</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Imię, rola, zaplanowane i faktyczne godziny, metoda weryfikacji, notatka clock-out</div></div><div class="field-item"><div class="field-dot"></div><div>Historia obecności ostatnich 7 dni</div></div><div class="field-item"><div class="field-dot"></div><div>Przycisk „Ręczna korekta" → pola godziny in/out + powód korekty (wymagany) → zapisz</div></div></div></div></div>
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">M1B — Clock-outy wsteczne do weryfikacji</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Lista: imię, data zmiany, godzina z grafiku, godzina podana przez pracownika, notatka</div></div><div class="field-item"><div class="field-dot"></div><div>Bottom sheet: „Zatwierdź" / „Koryguj godzinę" / „Odrzuć" (→ auto clock-out z grafiku)</div></div><div class="field-item"><div class="field-dot"></div><div>Każda akcja → push do pracownika</div></div></div></div></div>
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">M-QR — Kody zmian (QR / PIN)</div></div><div class="toggle-body"><div class="info-box">Kody generowane automatycznie per zmiana przy publikacji grafiku. Unikalny kod per zmiana.</div><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Lista zmian na dziś: pracownik, godziny, PIN lub przycisk „Pokaż QR"</div></div><div class="field-item"><div class="field-dot"></div><div>Pełnoekranowy QR do pokazania pracownikowi lub wydruku</div></div><div class="field-item"><div class="field-dot"></div><div>Przycisk „Odśwież kod" → generuje nowy (gdy kod wyciekł)</div></div><div class="field-item"><div class="field-dot"></div><div>Kod ważny: od X minut przed zmianą do końca zmiany (X konfigurowalne)</div></div></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="toggle-item" onclick="toggle(this)">
+      <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">EKRAN M2</span> Grafik — tworzenie i zarządzanie</div><span class="toggle-badge badge-screen">EKRAN</span></div>
+      <div class="toggle-body">
+        <div class="field-list">
+          <div class="field-item"><div class="field-dot"></div><div>Podzakładki: Bieżące / Archiwum</div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Lista grafików: <span class="tag tag-gray">SZKIC</span> / <span class="tag tag-green">OPUBLIKOWANY</span></div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Przycisk „Nowy grafik" → EKRAN M2A | Kliknięcie grafiku → EKRAN M2B (edytor)</div></div>
+        </div>
+        <div class="toggle-nested">
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">M2A — Nowy grafik (inicjalizacja)</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Pole: okres rozliczeniowy (auto-wybrany następny nieobsadzony)</div></div><div class="field-item"><div class="field-dot"></div><div>Pole: lokalizacja (jeśli manager zarządza kilkoma)</div></div><div class="field-item"><div class="field-dot"></div><div>Przycisk „Generuj propozycję" → system analizuje dyspozycyjność + urlopy + typ zatrudnienia → otwiera M2B ze szkicem</div></div></div></div></div>
+          <div class="toggle-item" onclick="toggle(this)">
+            <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">M2B — Edytor grafiku (siatka)</div></div>
+            <div class="toggle-body">
+              <div class="field-list">
+                <div class="field-item"><div class="field-dot"></div><div>Siatka: kolumny = dni okresu, wiersze = pracownicy</div></div>
+                <div class="field-item"><div class="field-dot"></div><div>Kolory komórek: zmiana (wg roli) | urlop (zielony, zablokowany) | niedostępny (szary, ostrzeżenie) | KONFLIKT (czerwony)</div></div>
+                <div class="field-item"><div class="field-dot"></div><div>Pusta komórka → bottom sheet Dodaj (M2B-1) | Zajęta → Edytuj / Usuń / Przenieś</div></div>
+                <div class="field-item"><div class="field-dot"></div><div>Toolbar: „Kopiuj okres" | „Zapisz szkic" | „Publikuj" → push do pracowników</div></div>
+              </div>
+              <div class="toggle-deep">
+                <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">M2B-1 — Dodaj zmianę (bottom sheet)</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Godzina od / do (time picker)</div></div><div class="field-item"><div class="field-dot"></div><div>Stanowisko (wymagane jeśli pracownik ma kilka) → stawka naliczana automatycznie</div></div><div class="field-item"><div class="field-dot"></div><div>Notatka dla pracownika (max 200 znaków, opcjonalne)</div></div><div class="field-item"><div class="field-dot"></div><div>Ostrzeżenie jeśli: poza dyspozycyjnością | przekroczenie limitu godzin (można zignorować)</div></div></div></div></div>
+                <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">M2B-2 — Edytuj zmianę (bottom sheet)</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Pola godzin + stanowisko + notatka (preuzupełnione)</div></div><div class="field-item"><div class="field-dot"></div><div>Edycja opublikowanego grafiku → push do pracownika „Zmiana w grafiku"</div></div></div></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">M2 Archiwum — Grafiki historyczne</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Lista zamkniętych okresów, nawigacja bez limitu wstecz</div></div><div class="field-item"><div class="field-dot"></div><div>Podgląd siatki (tylko do odczytu)</div></div><div class="field-item"><div class="field-dot"></div><div>Przycisk „Kopiuj jako nowy szkic" → otwiera M2B z skopiowanym grafikiem</div></div><div class="field-item"><div class="field-dot"></div><div>Eksport: PDF / CSV</div></div></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="toggle-item" onclick="toggle(this)">
+      <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">EKRAN M3</span> Zespół</div><span class="toggle-badge badge-screen">EKRAN</span></div>
+      <div class="toggle-body">
+        <div class="field-list">
+          <div class="field-item"><div class="field-dot"></div><div>Lista pracowników z filtrem aktywni/archiwalni i wyszukiwarką</div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Badge przy pracowniku: liczba wygasających dokumentów</div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Długie przytrzymanie → multi-select → akcje zbiorcze: przypisz zadanie / szkolenie / wyślij wiadomość</div></div>
+          <div class="field-item"><div class="field-dot"></div><div>Przycisk „Dodaj pracownika" → M3A (zaproszenie e-mail)</div></div>
+        </div>
+        <div class="toggle-nested">
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">M3B — Profil pracownika (manager)</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div><b>Dane podstawowe:</b> podgląd</div></div><div class="field-item"><div class="field-dot"></div><div><b>Ustawienia zatrudnienia:</b> lista stanowisk z osobną stawką per stanowisko, typ zatrudnienia, limit godzin (tygodniowy / miesięczny), dni urlopu, lokalizacje, metoda clock-in</div></div><div class="field-item"><div class="field-dot"></div><div><b>Dyspozycyjność:</b> zbiorcza siatka miesięczna (podgląd)</div></div><div class="field-item"><div class="field-dot"></div><div><b>Dokumenty:</b> → EKRAN DOC-1</div></div><div class="field-item"><div class="field-dot"></div><div><b>Historia:</b> godziny / wnioski / punkty per okres</div></div><div class="field-item"><div class="field-dot"></div><div>Archiwizuj / Przywróć pracownika (dialog)</div></div></div></div></div>
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">M3C — Wnioski urlopowe do zatwierdzenia</div></div><div class="toggle-body">
+            <div class="info-box">Przy zatwierdzeniu — system sprawdza kolizję ze zmianami w grafiku → dialog: usuń zmiany lub zostaw z oznaczeniem KONFLIKT.</div>
+            <div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Lista oczekujących z filtrem (osoba / typ)</div></div><div class="field-item"><div class="field-dot"></div><div>Bottom sheet: podgląd + saldo dni + ostrzeżenie o nakładaniu się urlopów w zespole</div></div><div class="field-item"><div class="field-dot"></div><div>Zatwierdź → <span class="tag tag-green">ZATWIERDZONY</span> → dni odjęte z salda → push | Odrzuć → powód wymagany → push</div></div></div>
+          </div></div>
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">SWAP-3 — Zatwierdzenie wymiany zmian</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Podgląd wymiany: pracownik A ↔ pracownik B, obie zmiany</div></div><div class="field-item"><div class="field-dot"></div><div>Ostrzeżenie jeśli wymiana powoduje przekroczenie limitu godzin</div></div><div class="field-item"><div class="field-dot"></div><div>Zatwierdź → grafik zaktualizowany → push do obu | Odrzuć → powód → push do obu</div></div></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="toggle-item" onclick="toggle(this)">
+      <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">EKRAN M4</span> Więcej (kafelki)</div><span class="toggle-badge badge-screen">EKRAN</span></div>
+      <div class="toggle-body">
+        <div class="toggle-nested">
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">M4A — Zadania</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Podzakładki: Do zatwierdzenia / Aktywne / Archiwum</div></div><div class="field-item"><div class="field-dot"></div><div>Multi-select na liście „Do zatwierdzenia": masowe zatwierdzenie / odrzucenie z jednym powodem</div></div><div class="field-item"><div class="field-dot"></div><div>Formularz nowego zadania: nazwa, opis, punkty, termin, przypisz do (osoba / rola / zmiana), cykliczne (tak/nie → cykl)</div></div><div class="field-item"><div class="field-dot"></div><div>Zatwierdzenie zadania: podgląd zdjęcia dowodu + komentarz → Zatwierdź (→ punkty) / Odrzuć (→ zadanie wraca na zmianę)</div></div></div></div></div>
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">M4B — Szkolenia</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Podzakładki: Biblioteka / Przypisane / Wyniki</div></div><div class="field-item"><div class="field-dot"></div><div>Nowe szkolenie: krok 1 (dane + typ + punkty) → krok 2A (materiał PDF/wideo) → krok 2B (builder pytań testowych: min. 2, max. 6 odpowiedzi)</div></div><div class="field-item"><div class="field-dot"></div><div>Przypisanie: konkretne osoby (multi-select) lub rola + termin (opcjonalne)</div></div></div></div></div>
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">M4C — Raporty (4 typy)</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div><b>Obecność/godziny:</b> zaplanowane vs. przepracowane, nadgodziny, spóźnienia, limit godzin vs. faktyczne</div></div><div class="field-item"><div class="field-dot"></div><div><b>Zarobki zespołu:</b> stawka, godziny, kwota per pracownik, suma łączna</div></div><div class="field-item"><div class="field-dot"></div><div><b>Punkty i rankingi:</b> pozycja, łączne punkty, podział kategorii, trend vs. poprzedni okres</div></div><div class="field-item"><div class="field-dot"></div><div><b>Realizacja zadań:</b> przypisane vs. wykonane vs. zatwierdzone, zaległe, procent per rola</div></div><div class="field-item"><div class="field-dot"></div><div>Każdy raport: Eksport PDF / CSV</div></div></div></div></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end manager-group -->
+
+  <!-- ═══════════════════════════════════ PRACODAWCA ═══════════════════ -->
+  <div id="pracodawca" class="section-header">
+    <div class="section-icon"><svg viewBox="0 0 18 18" fill="none" stroke="white" stroke-width="1.8"><rect x="2" y="4" width="14" height="11" rx="2"></rect><path d="M6 4V3a1 1 0 011-1h4a1 1 0 011 1v1"></path><path d="M2 8h14"></path></svg></div>
+    <div><div class="section-title">Widok pracodawcy</div><div class="section-subtitle">Desktop: sidebar | Mobile: bottom bar (jak manager)</div></div>
+  </div>
+
+  <div class="toolbar">
+    <div class="toolbar-title"><span class="role-pill role-employer">PRACODAWCA</span> Sidebar: Główne / Organizacja / Operacje / Konfiguracja / Konto</div>
+    <button class="btn-expand" onclick="expandAll(&#39;pracodawca-group&#39;)">Rozwiń wszystko</button>
+  </div>
+
+  <div id="pracodawca-group" class="toggle-group">
+
+    <div class="toggle-item" onclick="toggle(this)">
+      <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">EKRAN P1</span> Dashboard pracodawcy</div><span class="toggle-badge badge-screen">EKRAN</span></div>
+      <div class="toggle-body"><div class="field-list">
+        <div class="field-item"><div class="field-dot"></div><div>Selektor firmy (wszystkie / konkretna) + selektor okresu rozliczeniowego</div></div>
+        <div class="field-item"><div class="field-dot"></div><div>KPI kafelki (klikalne → Analityka): aktywni pracownicy | przepracowane godziny vs. plan | koszty pracy | średnia punktów</div></div>
+        <div class="field-item"><div class="field-dot"></div><div>Tabela per firma: pracownicy, godziny, koszty, punkty, managerowie</div></div>
+        <div class="field-item"><div class="field-dot"></div><div>Alerty: brak grafiku na następny okres | wnioski &gt;X dni bez decyzji | manager nieaktywny &gt;X dni</div></div>
+      </div></div>
+    </div>
+
+    <div class="toggle-item" onclick="toggle(this)">
+      <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">EKRAN P2</span> Analityka (4 raporty)</div><span class="toggle-badge badge-screen">EKRAN</span></div>
+      <div class="toggle-body"><div class="field-list">
+        <div class="field-item"><div class="field-dot"></div><div><b>P2A — Obecność/godziny:</b> wykres liniowy zaplanowane vs. przepracowane, drill-down per zmiana, filtr firma/lokalizacja/rola</div></div>
+        <div class="field-item"><div class="field-dot"></div><div><b>P2B — Koszty pracy:</b> słupkowy per okres, per stanowisko, porównanie między firmami, suma łączna</div></div>
+        <div class="field-item"><div class="field-dot"></div><div><b>P2C — Punkty/zaangażowanie:</b> ranking, trend, podział kategorii, top 5 / bottom 5</div></div>
+        <div class="field-item"><div class="field-dot"></div><div><b>P2D — Zadania/szkolenia:</b> % realizacji per rola, średni wynik testów, zaległe zadania</div></div>
+        <div class="field-item"><div class="field-dot"></div><div>Każdy raport: Eksport PDF / CSV</div></div>
+      </div></div>
+    </div>
+
+    <div class="toggle-item" onclick="toggle(this)">
+      <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">P3–P5</span> Firmy / Lokalizacje / Managerowie</div><span class="toggle-badge badge-screen">EKRAN</span></div>
+      <div class="toggle-body">
+        <div class="toggle-nested">
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">P3 — Firmy / Brandy</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Lista firm: nazwa, logo, lokalizacje, pracownicy, status AKTYWNA/NIEAKTYWNA</div></div><div class="field-item"><div class="field-dot"></div><div>Dodaj firmę: nazwa, logo, branża, NIP → po utworzeniu → przejście do konfiguracji P6A</div></div></div></div></div>
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">P4 — Lokalizacje</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Per lokalizacja: adres (dla GPS), radius GPS (w metrach), przypisany manager</div></div><div class="field-item"><div class="field-dot"></div><div>Radius GPS konfigurowalne per lokalizacja (nie globalnie)</div></div></div></div></div>
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">P5 — Managerowie</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Dodaj: e-mail zaproszenia + przypisz do firm (multi) + lokalizacji (multi)</div></div><div class="field-item"><div class="field-dot"></div><div>Profil: historia aktywności (publikacje grafiku, zatwierdzenia), przypisania, archiwizacja</div></div></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="toggle-item" onclick="toggle(this)">
+      <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">EKRAN P11</span> Pracownicy (zbiorczy)</div><span class="toggle-badge badge-screen">EKRAN</span></div>
+      <div class="toggle-body"><div class="field-list">
+        <div class="field-item"><div class="field-dot"></div><div>Filtr: firma / lokalizacja / manager / rola / status (AKTYWNY / ARCHIWALNY / OCZEKUJĄCY)</div></div>
+        <div class="field-item"><div class="field-dot"></div><div>Multi-select: przypisz do firmy | przypisz szkolenie | archiwizuj zbiorczo</div></div>
+        <div class="field-item"><div class="field-dot"></div><div>Profil pracownika P11B = M3B + sekcja „Rola w systemie": zmiana PRACOWNIK ↔ MANAGER (dialog potwierdzenia)</div></div>
+        <div class="field-item"><div class="field-dot"></div><div>Sekcja „Przypisanie": firma, lokalizacja, manager (edytowalne przez pracodawcę)</div></div>
+      </div></div>
+    </div>
+
+    <div class="toggle-item" onclick="toggle(this)">
+      <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">P12–P14</span> Grafiki / Zadania / Szkolenia (zbiorcze)</div><span class="toggle-badge badge-screen">EKRAN</span></div>
+      <div class="toggle-body">
+        <div class="toggle-nested">
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">P12 — Grafiki</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Lista zbiorczy + archiwum bez limitu wstecz</div></div><div class="field-item"><div class="field-dot"></div><div>Pełna edycja jak manager + „Wycofaj publikację" → <span class="tag tag-gray">SZKIC</span> → push do pracowników</div></div></div></div></div>
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">P13 — Zadania</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Zbiorczy widok wszystkich firm + może zatwierdzać zamiast managera</div></div><div class="field-item"><div class="field-dot"></div><div>Tworzenie globalnych zadań: konkretna firma / wszystkie firmy (per rola) / konkretna lokalizacja</div></div></div></div></div>
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">P14 — Szkolenia</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Biblioteka globalna (pracodawca) + firmowa (manager), oznaczenie GLOBALNE / FIRMOWE</div></div><div class="field-item"><div class="field-dot"></div><div>Przypisanie: wszystkie firmy + rola | wybrana firma | konkretne osoby cross-firma</div></div><div class="field-item"><div class="field-dot"></div><div>Wyniki: tabela cross-firma, sortowanie, eksport PDF/CSV</div></div></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="toggle-item" onclick="toggle(this)">
+      <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">EKRAN P15</span> Dokumenty (zbiorczy)</div><span class="toggle-badge badge-screen">EKRAN</span></div>
+      <div class="toggle-body"><div class="field-list">
+        <div class="field-item"><div class="field-dot"></div><div>Filtr: firma / lokalizacja / typ / status (AKTYWNY / WYGASAJĄCY / WYGASŁY)</div></div>
+        <div class="field-item"><div class="field-dot"></div><div>Domyślny sort: od najszybciej wygasających</div></div>
+        <div class="field-item"><div class="field-dot"></div><div>Sekcja alertów: X dokumentów wygasa w ciągu 7 dni / 30 dni</div></div>
+        <div class="field-item"><div class="field-dot"></div><div>Eksport: PDF / CSV listy z datami wygaśnięcia</div></div>
+      </div></div>
+    </div>
+
+    <div class="toggle-item" onclick="toggle(this)">
+      <div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label"><span class="screen-id">P6–P9</span> Konfiguracja firm</div><span class="toggle-badge badge-config">KONFIGURACJA</span></div>
+      <div class="toggle-body">
+        <div class="info-box">Każda firma ma własne, niezależne ustawienia. Globalny szablon + nadpisanie per firma.</div>
+        <div class="toggle-nested">
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">P6A — Konfiguracja firmy</div></div><div class="toggle-body"><div class="field-list">
+            <div class="field-item"><div class="field-dot"></div><div><b>Czas pracy:</b> metoda clock-in (PIN/QR/GPS), okno clock-in (minuty przed zmianą), próg spóźnienia wymagający komentarza</div></div>
+            <div class="field-item"><div class="field-dot"></div><div><b>Okresy rozliczeniowe:</b> tygodniowy / dwutygodniowy / miesięczny / własny (dni), data startowa</div></div>
+            <div class="field-item"><div class="field-dot"></div><div><b>Wynagrodzenia:</b> model (godzinowy/miesięczny/mieszany), nadgodziny (próg dzienny + tygodniowy + mnożnik), czas poprawy zadania = odejmowany od czasu pracy (toggle)</div></div>
+            <div class="field-item"><div class="field-dot"></div><div><b>Urlopy:</b> lista typów (dodaj/edytuj/usuń) → per typ: nazwa, dni w roku, wymagany załącznik, wymagany komentarz</div></div>
+            <div class="field-item"><div class="field-dot"></div><div><b>Dyspozycyjność:</b> termin składania (X dni przed) + domyślny stan bez dyspozycyjności (dostępny/niedostępny)</div></div>
+          </div></div></div>
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">P7 — Modele wynagrodzeń</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Formularz: nazwa, typ (godzinowy/miesięczny), stawka bazowa</div></div><div class="field-item"><div class="field-dot"></div><div>Dodatki: nocna / weekendowa / świąteczna (mnożnik per typ)</div></div><div class="field-item"><div class="field-dot"></div><div>Modele przypisywane do pracowników w profilu (per stanowisko)</div></div></div></div></div>
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">P8 — System punktów</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Wartości per zdarzenie: clock-in na czas | zadanie | szkolenie | wynik testu (przelicznik %→pkt)</div></div><div class="field-item"><div class="field-dot"></div><div>Nagrody: próg punktowy → opis nagrody (dodaj/usuń progi)</div></div><div class="field-item"><div class="field-dot"></div><div>Opis dla pracowników: pole tekstowe wyświetlane w aplikacji</div></div><div class="field-item"><div class="field-dot"></div><div>Reset: automatyczny co okres rozliczeniowy (informacja, nie konfigurowalne)</div></div></div></div></div>
+          <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">P9 — Role i stanowiska</div></div><div class="toggle-body"><div class="field-list"><div class="field-item"><div class="field-dot"></div><div>Lista ról per firma (np. kucharz, kelner, kierowca, pizza master)</div></div><div class="field-item"><div class="field-dot"></div><div>Usunięcie roli: możliwe tylko jeśli brak aktywnych pracowników z tą rolą jako jedynym stanowiskiem</div></div><div class="field-item"><div class="field-dot"></div><div>Role używane przy: zadaniach, szkoleniach, raportach, dyspozycyjności</div></div></div></div></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end pracodawca-group -->
+
+  <!-- ═══════════════════════════════════ UZUPEŁNIENIA ═══════════════════ -->
+  <div id="uzupelnienia" class="section-header">
+    <div class="section-icon"><svg viewBox="0 0 18 18" fill="none" stroke="white" stroke-width="1.8"><path d="M9 2v14M2 9h14"></path></svg></div>
+    <div><div class="section-title">Uzupełnienia globalne</div><div class="section-subtitle">Logika przekrojowa dotycząca wielu ekranów</div></div>
+  </div>
+
+  <div class="toggle-group">
+    <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">Wielostanowiskowość — zmiany w wielu ekranach</div><span class="toggle-badge badge-update">ZMIANA</span></div><div class="toggle-body">
+      <div class="field-list">
+        <div class="field-item"><div class="field-dot"></div><div><b>Profil pracownika (M3B/P11B):</b> lista stanowisk zamiast jednego pola, stawka per stanowisko, jedno domyślne</div></div>
+        <div class="field-item"><div class="field-dot"></div><div><b>Dodaj zmianę (M2B-1):</b> wybór stanowiska wymagany gdy &gt;1, stawka auto-wypełniana</div></div>
+        <div class="field-item"><div class="field-dot"></div><div><b>Zarobki (EKRAN 1B):</b> podział sumy per stanowisko gdy pracował na kilku w okresie</div></div>
+        <div class="field-item"><div class="field-dot"></div><div><b>Raporty kosztów (M4C/P2B):</b> dodatkowy filtr per stanowisko</div></div>
+        <div class="field-item"><div class="field-dot"></div><div><b>Zadania:</b> przypisanie do roli → trafia do wszystkich pracowników z tym stanowiskiem</div></div>
+      </div>
+    </div></div>
+
+    <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">Logika zwracania odrzuconych zadań</div><span class="toggle-badge badge-logic">LOGIKA</span></div><div class="toggle-body">
+      <div class="field-list">
+        <div class="field-item"><div class="field-dot"></div><div><b>Zadanie do zmiany:</b> jeśli zmiana trwa → wraca do tej samej | jeśli zmiana skończyła się → przechodzi na kolejną zmianę</div></div>
+        <div class="field-item"><div class="field-dot"></div><div><b>Zadanie do pracownika:</b> zawsze na kolejną zmianę tego pracownika</div></div>
+        <div class="field-item"><div class="field-dot"></div><div><b>Konfiguracja pracodawcy:</b> czas poprawy = wliczany do czasu pracy / odejmowany (toggle w P6A)</div></div>
+        <div class="field-item"><div class="field-dot"></div><div>Pracownik widzi: komentarz managera + info o której zmianie zadanie pojawi się ponownie</div></div>
+      </div>
+    </div></div>
+
+    <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">Limit godzin per pracownik</div><span class="toggle-badge badge-config">KONFIGURACJA</span></div><div class="toggle-body">
+      <div class="field-list">
+        <div class="field-item"><div class="field-dot"></div><div>Konfiguracja w profilu pracownika (M3B/P11B): max godzin tygodniowo + max miesięcznie (oba opcjonalne)</div></div>
+        <div class="field-item"><div class="field-dot"></div><div>Dodawanie zmiany (M2B-1): ostrzeżenie przy przekroczeniu, manager może zignorować</div></div>
+        <div class="field-item"><div class="field-dot"></div><div>Wymiana zmian (SWAP-3): ostrzeżenie jeśli wymiana powoduje przekroczenie</div></div>
+        <div class="field-item"><div class="field-dot"></div><div>Raporty: kolumna limit vs. przepracowane, oznaczenie przekroczeń</div></div>
+      </div>
+    </div></div>
+
+    <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">Urlop a konflikt ze zmianami w grafiku</div><span class="toggle-badge badge-logic">LOGIKA</span></div><div class="toggle-body">
+      <div class="field-list">
+        <div class="field-item"><div class="field-dot"></div><div>Po zatwierdzeniu wniosku: system sprawdza czy są zmiany w dniach urlopu</div></div>
+        <div class="field-item"><div class="field-dot"></div><div>Dialog: „Usuń zmiany z grafiku" lub „Zostaw — zdecyduję później"</div></div>
+        <div class="field-item"><div class="field-dot"></div><div>Zostaw → zmiany oznaczone <span class="tag tag-red">KONFLIKT</span> (czerwone w siatce), manager usuwa ręcznie</div></div>
+      </div>
+    </div></div>
+
+    <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">Nadgodziny</div><span class="toggle-badge badge-config">KONFIGURACJA</span></div><div class="toggle-body">
+      <div class="field-list">
+        <div class="field-item"><div class="field-dot"></div><div>Konfiguracja (P6A): próg dzienny (np. po 8h) + tygodniowy (np. po 40h) + mnożnik (np. 1.5x)</div></div>
+        <div class="field-item"><div class="field-dot"></div><div>Naliczanie: automatyczne po clock-out, spóźnienie nie skraca podstawy (liczymy od grafiku)</div></div>
+        <div class="field-item"><div class="field-dot"></div><div>Pracownik (1B): podział regularne + nadgodziny z osobnymi kwotami</div></div>
+        <div class="field-item"><div class="field-dot"></div><div>Manager (M4C): kolumna nadgodziny w raporcie + alert na Home</div></div>
+        <div class="field-item"><div class="field-dot"></div><div>Pracodawca (P2B): podział kosztów regularne vs. nadgodziny</div></div>
+      </div>
+    </div></div>
+
+    <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">Zbiorcze akcje na listach</div><span class="toggle-badge badge-update">ZMIANA</span></div><div class="toggle-body">
+      <div class="info-box">Wzorzec: długie przytrzymanie → tryb multi-select → checkbox per element → toolbar na dole → „Anuluj" wychodzi z trybu.</div>
+      <div class="field-list">
+        <div class="field-item"><div class="field-dot"></div><div><b>Lista pracowników (M3/P11):</b> przypisz zadanie | przypisz szkolenie | wyślij wiadomość | archiwizuj</div></div>
+        <div class="field-item"><div class="field-dot"></div><div><b>Lista zadań do zatwierdzenia (M4A):</b> zatwierdź wszystkie zaznaczone | odrzuć z jednym powodem</div></div>
+        <div class="field-item"><div class="field-dot"></div><div><b>Wyniki szkoleń (P14):</b> eksportuj zaznaczone PDF/CSV</div></div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- ═══════════════════════════════════ POWIADOMIENIA ═══════════════════ -->
+  <div id="powiadomienia" class="section-header">
+    <div class="section-icon"><svg viewBox="0 0 18 18" fill="none" stroke="white" stroke-width="1.8"><path d="M9 2a5 5 0 015 5v3l1.5 2.5H2.5L4 10V7a5 5 0 015-5z"></path><path d="M7 14a2 2 0 004 0"></path></svg></div>
+    <div><div class="section-title">Powiadomienia push + e-mail</div><div class="section-subtitle">Per typ zdarzenia: Push / E-mail / Push+E-mail / Wyłączone</div></div>
+  </div>
+
+  <div class="toggle-group">
+    <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">Powiadomienia — Pracownik</div><span class="role-pill role-employee" style="font-size:10px">PRACOWNIK</span></div><div class="toggle-body">
+      <table class="spec-table">
+        <tbody><tr><th>Typ</th><th>Zdarzenie</th><th>Domyślnie</th></tr>
+        <tr><td>Grafik</td><td>Opublikowano nowy grafik</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Grafik</td><td>Zmiana / usunięcie zmiany w grafiku</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Grafik</td><td>Grafik wycofany</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Grafik</td><td>Przypomnienie o zmianie (1h przed)</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Clock-out</td><td>Zapomniano kliknąć clock-out</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Urlop</td><td>Wniosek zatwierdzony / odrzucony</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Zadania</td><td>Nowe zadanie przypisane imiennie / do roli</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Zadania</td><td>Zadanie zatwierdzone / odrzucone → wraca do zmiany</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Zadania</td><td>Przypomnienie o zadaniu przed terminem</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Szkolenia</td><td>Nowe szkolenie przypisane / termin zbliża się</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Punkty</td><td>Zdobyto punkty (każde zdarzenie)</td><td><span class="tag tag-gray">Wyłączone</span></td></tr>
+        <tr><td>Dyspozycyjność</td><td>Przypomnienie o niewypełnionej dyspozycyjności</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Wymiana zmian</td><td>Prośba / odpowiedź / decyzja managera</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Nieobecność</td><td>Nieobecność zatwierdzona / odrzucona</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Dokumenty</td><td>Dokument wygasa za 30 / 7 dni</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Dokumenty</td><td>Manager / pracodawca dodał dokument</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Czat</td><td>Nowa wiadomość od managera</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Rola</td><td>Zmiana roli (awans / powrót)</td><td><span class="tag tag-green">Włączone</span></td></tr>
+      </tbody></table>
+    </div></div>
+
+    <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">Powiadomienia — Manager</div><span class="role-pill role-manager" style="font-size:10px">MANAGER</span></div><div class="toggle-body">
+      <table class="spec-table">
+        <tbody><tr><th>Typ</th><th>Zdarzenie</th><th>Domyślnie</th></tr>
+        <tr><td>Zespół</td><td>Pracownik zarejestrował się po zaproszeniu</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Zespół</td><td>Pracownik nie wylogował się / zgłosił „nadal pracuję"</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Grafik</td><td>Brak grafiku na następny okres (przypomnienie)</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Urlop</td><td>Nowy wniosek do zatwierdzenia / oczekuje &gt;48h</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Zadania</td><td>Zadanie oznaczone jako wykonane — do zatwierdzenia</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Clock-out</td><td>Nowy clock-out wsteczny do weryfikacji</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Nieobecność</td><td>Nowe zgłoszenie nieobecności</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Wymiana zmian</td><td>Nowa prośba do zatwierdzenia</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Godziny</td><td>Pracownik zbliża się do limitu (90%) / przekroczył</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Nadgodziny</td><td>Pracownik przekroczył tygodniowy próg nadgodzin</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Dokumenty</td><td>Dokument pracownika wygasa za 30 / 7 dni</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Czat</td><td>Nowa wiadomość od pracownika</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Szkolenia</td><td>Pracownik ukończył szkolenie</td><td><span class="tag tag-gray">Wyłączone</span></td></tr>
+      </tbody></table>
+    </div></div>
+
+    <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">Powiadomienia — Pracodawca</div><span class="role-pill role-employer" style="font-size:10px">PRACODAWCA</span></div><div class="toggle-body">
+      <table class="spec-table">
+        <tbody><tr><th>Typ</th><th>Zdarzenie</th><th>Domyślnie</th></tr>
+        <tr><td>Firmy</td><td>Nowy manager zarejestrował się</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Firmy</td><td>Manager nieaktywny od 7 dni</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Grafik</td><td>Brak opublikowanego grafiku na nowy okres (per lokalizacja)</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Urlop</td><td>Wnioski oczekujące ponad 72h bez decyzji</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Analityka</td><td>Koszty pracy przekroczyły próg (konfigurowalne)</td><td><span class="tag tag-gray">Wyłączone</span></td></tr>
+        <tr><td>Analityka</td><td>Raport miesięczny gotowy</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Nadgodziny</td><td>Koszty nadgodzin przekroczyły X% budżetu</td><td><span class="tag tag-gray">Wyłączone</span></td></tr>
+        <tr><td>Dokumenty</td><td>Dokumenty wygasające w ciągu 7 dni (dzienny digest)</td><td><span class="tag tag-green">Włączone</span></td></tr>
+        <tr><td>Subskrypcja</td><td>Zbliża się koniec / przekroczono limit pracowników</td><td><span class="tag tag-green">Włączone</span></td></tr>
+      </tbody></table>
+    </div></div>
+  </div>
+
+  <!-- ═══════════════════════════════════ DEEP LINKS ═══════════════════ -->
+  <div id="deeplinks" class="section-header">
+    <div class="section-icon"><svg viewBox="0 0 18 18" fill="none" stroke="white" stroke-width="1.8"><path d="M10 3l5 5-5 5"></path><path d="M3 8h12"></path><path d="M3 13v-2a2 2 0 012-2h2"></path></svg></div>
+    <div><div class="section-title">Deep linki z powiadomień</div><div class="section-subtitle">Każde powiadomienie push/e-mail otwiera dokładny ekran</div></div>
+  </div>
+
+  <div class="toggle-group">
+    <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">Mapa deep linków (wszystkie zdarzenia)</div></div><div class="toggle-body">
+      <div class="info-box">Jeśli użytkownik nie jest zalogowany → ekran logowania → po zalogowaniu redirect na docelowy ekran (nie na Home).</div>
+      <table class="spec-table">
+        <tbody><tr><th>Zdarzenie</th><th>Deep link → ekran</th></tr>
+        <tr><td>Opublikowano nowy grafik</td><td>EKRAN 2 (Grafik, bieżący okres)</td></tr>
+        <tr><td>Zmiana w grafiku</td><td>EKRAN 2A (Szczegóły tej konkretnej zmiany)</td></tr>
+        <tr><td>Grafik wycofany</td><td>EKRAN 2 (Grafik pracownika)</td></tr>
+        <tr><td>Przypomnienie o zmianie</td><td>EKRAN 2A (Szczegóły tej zmiany)</td></tr>
+        <tr><td>Clock-out zapomniano</td><td>EKRAN 1A-OUT (Spóźniony clock-out)</td></tr>
+        <tr><td>Wniosek zatwierdzony / odrzucony</td><td>EKRAN 2C-2 (Szczegóły tego wniosku)</td></tr>
+        <tr><td>Nowe zadanie</td><td>EKRAN 3A (Szczegóły tego zadania)</td></tr>
+        <tr><td>Zadanie zatwierdzone / odrzucone</td><td>EKRAN 3A (Szczegóły tego zadania)</td></tr>
+        <tr><td>Nowe szkolenie</td><td>EKRAN 4 (Szkolenia, przewinięte do szkolenia)</td></tr>
+        <tr><td>Dokument wygasa</td><td>EKRAN DOC-3 (Szczegóły dokumentu)</td></tr>
+        <tr><td>Nowa wiadomość czat</td><td>EKRAN CHAT-2 (Ta konkretna rozmowa)</td></tr>
+        <tr><td>Prośba o wymianę zmiany</td><td>EKRAN SWAP-2 (Odpowiedź na prośbę)</td></tr>
+        <tr><td>Nieobecność zatwierdzona / odrzucona</td><td>EKRAN 2A (Szczegóły zmiany)</td></tr>
+        <tr><td>Pracownik przekroczył limit godzin</td><td>EKRAN M3B (Profil tego pracownika)</td></tr>
+        <tr><td>Zadanie do zatwierdzenia</td><td>EKRAN M4A (podzakładka „Do zatwierdzenia")</td></tr>
+        <tr><td>Nowy wniosek urlopowy</td><td>EKRAN M3C (Ten konkretny wniosek)</td></tr>
+        <tr><td>Clock-out wsteczny do weryfikacji</td><td>EKRAN M1B (Lista clock-outów)</td></tr>
+        <tr><td>Nowa nieobecność do zatwierdzenia</td><td>EKRAN M1 (sekcja „Do zatwierdzenia")</td></tr>
+        <tr><td>Wymiana zmian do zatwierdzenia</td><td>EKRAN SWAP-3 (Ta konkretna wymiana)</td></tr>
+        <tr><td>Pracownik ukończył rejestrację</td><td>EKRAN M3B (Profil tego pracownika)</td></tr>
+        <tr><td>Brak grafiku na nowy okres</td><td>EKRAN M2 (Nowy grafik)</td></tr>
+        <tr><td>Dokumenty wygasające (pracodawca)</td><td>EKRAN P15 (filtr: wygasające)</td></tr>
+        <tr><td>Limit subskrypcji przekroczony</td><td>EKRAN P10 (Rozliczenia)</td></tr>
+      </tbody></table>
+    </div></div>
+  </div>
+
+  <!-- ═══════════════════════════════════ BACKLOG ═══════════════════ -->
+  <div id="backlog" class="section-header">
+    <div class="section-icon"><svg viewBox="0 0 18 18" fill="none" stroke="white" stroke-width="1.8"><circle cx="9" cy="9" r="7"></circle><path d="M9 5v4l3 2"></path></svg></div>
+    <div><div class="section-title">Backlog</div><div class="section-subtitle">Do rozpisania w kolejnej iteracji</div></div>
+  </div>
+
+  <div class="toggle-group">
+    <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">🔵 Strefy czasowe dla wielu lokalizacji</div></div><div class="toggle-body"><div class="warn-box">Odłożono — wymagane gdy aplikacja obsługuje lokalizacje w różnych strefach czasowych (np. różne kraje). Clock-in i grafik muszą działać w lokalnej strefie. Do rozpisania przed implementacją funkcji multi-kraj.</div></div></div>
+    <div class="toggle-item" onclick="toggle(this)"><div class="toggle-header"><div class="toggle-arrow"><svg viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="#666" stroke-width="1.5" stroke-linecap="round"></path></svg></div><div class="toggle-label">🔵 Zadania cykliczne a urlop pracownika</div></div><div class="toggle-body"><div class="warn-box">Odłożono — nierozstrzygnięte: czy zadanie cykliczne przypadające na dzień urlopu jest pomijane, przypisywane innemu pracownikowi z tą samą rolą, czy czeka do powrotu. Do decyzji product ownera.</div></div></div>
+  </div>
+
+</div><!-- end wrapper -->
+
+<script>
+function toggle(el) {
+  el.classList.toggle('open');
+}
+
+function expandAll(groupId) {
+  const group = document.getElementById(groupId);
+  if (!group) return;
+  const items = group.querySelectorAll('.toggle-item');
+  const allOpen = Array.from(items).every(i => i.classList.contains('open'));
+  items.forEach(i => allOpen ? i.classList.remove('open') : i.classList.add('open'));
+  const btn = document.querySelector(`[onclick="expandAll('${groupId}')"]`);
+  if (btn) btn.textContent = allOpen ? 'Rozwiń wszystko' : 'Zwiń wszystko';
+}
+</script>
+
+
+</body></html>

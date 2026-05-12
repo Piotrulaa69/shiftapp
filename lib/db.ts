@@ -16,7 +16,7 @@ export type { DbProfile as AppUser, DbInvitation as Invitation, DbRestaurant as 
 
 export type ShiftStatus = 'zaplanowana' | 'do_potwierdzenia' | 'potwierdzona' | 'urlop';
 export type TaskPriority = 'wysoki' | 'normalny' | 'niski';
-export type TaskStatus = 'do_zrobienia' | 'w_trakcie' | 'zamkniete';
+export type TaskStatus = 'do_zrobienia' | 'w_trakcie' | 'czeka_na_zatwierdzenie' | 'zatwierdzone' | 'odrzucone' | 'zamkniete';
 export type ConfirmationType = 'photo' | 'values' | 'description';
 
 // ─── Shifts ───────────────────────────────────────────────────────────────────
@@ -662,4 +662,104 @@ export async function getTeamPoints(restaurantId: string): Promise<{ employee_id
   const map: Record<string, number> = {};
   (data ?? []).forEach((r: any) => { map[r.employee_id] = (map[r.employee_id] ?? 0) + r.points; });
   return Object.entries(map).map(([employee_id, total]) => ({ employee_id, total })).sort((a, b) => b.total - a.total);
+}
+
+// ─── Shifts by date ───────────────────────────────────────────────────────────
+
+export async function getShiftsForDate(restaurantId: string, date: string): Promise<DbShift[]> {
+  const { data, error } = await supabase
+    .from('shifts')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .eq('day', date)
+    .order('start_time');
+  if (error) { console.error('getShiftsForDate', error); return []; }
+  return data as DbShift[];
+}
+
+// ─── Manager pending counts ───────────────────────────────────────────────────
+
+export async function getPendingCounts(restaurantId: string): Promise<{
+  leaveRequests: number; absences: number; swaps: number; taskApprovals: number;
+}> {
+  const [lrRes, absRes, swapRes, taskRes] = await Promise.all([
+    supabase.from('leave_requests').select('id', { count: 'exact', head: true }).eq('restaurant_id', restaurantId).eq('status', 'pending'),
+    supabase.from('absences').select('id', { count: 'exact', head: true }).eq('restaurant_id', restaurantId).eq('status', 'pending'),
+    supabase.from('shift_swaps').select('id', { count: 'exact', head: true }).eq('restaurant_id', restaurantId).eq('status', 'pending_manager'),
+    supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('restaurant_id', restaurantId).eq('status', 'czeka_na_zatwierdzenie'),
+  ]);
+  return {
+    leaveRequests: lrRes.count ?? 0,
+    absences: absRes.count ?? 0,
+    swaps: swapRes.count ?? 0,
+    taskApprovals: taskRes.count ?? 0,
+  };
+}
+
+// ─── Task approval flow ───────────────────────────────────────────────────────
+
+export async function submitTaskForApproval(taskId: string, proofPhotoUrl?: string, proofComment?: string): Promise<boolean> {
+  const { error } = await supabase.from('tasks').update({
+    status: 'czeka_na_zatwierdzenie',
+    proof_photo_url: proofPhotoUrl ?? null,
+    proof_comment: proofComment ?? null,
+  }).eq('id', taskId);
+  return !error;
+}
+
+export async function approveTask(
+  taskId: string, restaurantId: string, employeeId: string, points: number,
+): Promise<boolean> {
+  const { error } = await supabase.from('tasks').update({ status: 'zatwierdzone', completed: true }).eq('id', taskId);
+  if (error) return false;
+  if (points > 0) await addPoints(restaurantId, employeeId, points, 'task_completed', taskId, 'Zadanie zatwierdzone');
+  return true;
+}
+
+export async function rejectTask(taskId: string, comment?: string): Promise<boolean> {
+  const { error } = await supabase.from('tasks').update({ status: 'odrzucone', proof_comment: comment ?? null }).eq('id', taskId);
+  return !error;
+}
+
+// ─── Clock-in with PIN ────────────────────────────────────────────────────────
+
+export async function clockInWithPin(
+  restaurantId: string, shiftId: string, employeeId: string, pin: string,
+): Promise<{ success: boolean; clockIn?: DbClockIn; error?: string }> {
+  const { data: shift } = await supabase.from('shifts').select('pin_code').eq('id', shiftId).single();
+  if (shift?.pin_code && shift.pin_code !== pin) {
+    return { success: false, error: 'Nieprawidłowy PIN' };
+  }
+  const ci = await clockIn(restaurantId, shiftId, employeeId, 'pin');
+  return ci ? { success: true, clockIn: ci } : { success: false, error: 'Błąd rejestracji' };
+}
+
+// ─── Notification preferences ─────────────────────────────────────────────────
+
+export async function getNotifPrefs(userId: string): Promise<Record<string, string> | null> {
+  const { data } = await supabase.from('notification_preferences').select('*').eq('user_id', userId).maybeSingle();
+  return data ?? null;
+}
+
+export async function upsertNotifPrefs(userId: string, prefs: Record<string, string>): Promise<boolean> {
+  const { error } = await supabase.from('notification_preferences')
+    .upsert({ user_id: userId, ...prefs }, { onConflict: 'user_id' });
+  return !error;
+}
+
+// ─── Update profile ────────────────────────────────────────────────────────────
+
+export async function updateProfile(
+  userId: string,
+  fields: Partial<{ first_name: string; last_name: string; phone: string; job_title: string; employment_type: string; max_hours_weekly: number | null; max_hours_monthly: number | null; is_active: boolean }>,
+): Promise<boolean> {
+  const { error } = await supabase.from('profiles').update(fields).eq('id', userId);
+  return !error;
+}
+
+// ─── Absences for manager ─────────────────────────────────────────────────────
+
+export async function reviewAbsence(id: string, reviewerId: string, status: 'approved' | 'rejected'): Promise<boolean> {
+  const { error } = await supabase.from('absences').update({ status, reviewed_by: reviewerId }).eq('id', id);
+  return !error;
 }
