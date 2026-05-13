@@ -72,7 +72,7 @@ const CSS = `
   font-size:18px;color:#64748b;line-height:1.5;margin-top:18px;letter-spacing:-.005em;
   max-width:580px;
 }
-.lead-center{margin-left:auto;margin-right:auto;}
+.lead-center{margin-left:auto;margin-right:auto;text-align:center;}
 
 /* ─── Background glow ─── */
 .glow-wrap{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0;}
@@ -237,11 +237,10 @@ const CSS = `
 .btn-primary{
   display:inline-flex;align-items:center;gap:10px;
   padding:13px 22px 13px 24px;
-  background:rgba(0,132,255,.92);
+  background:#0084FF;
   color:#fff;
   border-radius:13px;
   font-size:14.5px;font-weight:600;letter-spacing:-.005em;
-  backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.4),inset 0 4px 4px rgba(255,255,255,.18),0 8px 24px rgba(0,132,255,.35);
   transition:all .2s ease;
   flex-shrink:0;
@@ -544,6 +543,23 @@ const CSS = `
   box-shadow:0 12px 32px rgba(0,132,255,.2);
 }
 .demo-cta:hover{transform:scale(1.02);background:#fff;}
+.demo-video{
+  position:relative;
+  width:100%;max-width:800px;
+  margin:48px auto 0;
+  border-radius:16px;
+  overflow:hidden;
+  box-shadow:0 20px 60px rgba(0,0,0,.4);
+}
+.demo-video::before{
+  content:'';display:block;
+  padding-top:56.25%;
+}
+.demo-video iframe{
+  position:absolute;top:0;left:0;
+  width:100%;height:100%;
+  border:none;
+}
 .demo-cta svg{width:14px;height:14px;}
 
 /* ─── PRICING ─── */
@@ -717,18 +733,19 @@ const CSS = `
 .calc-break-row.tot strong{font-size:18px;font-family:'Fustat',sans-serif;letter-spacing:-.02em;}
 
 /* ─── FAQ ─── */
-.faq-wrap{background:#F5F7FA;position:relative;}
-.faq-grid{max-width:780px;margin:0 auto;display:flex;flex-direction:column;gap:12px;}
+.faq-wrap{background:#F5F7FA;position:relative;padding:0 24px;}
+.faq-grid{max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:16px;}
 .faq-item{
-  background:#fff;border:1px solid rgba(0,0,0,.06);border-radius:18px;
+  background:#fff;border:1px solid rgba(0,0,0,.06);border-radius:20px;
   overflow:hidden;
   transition:all .25s ease;
+  box-shadow:0 2px 8px rgba(0,0,0,.04);
 }
 .faq-item:hover{border-color:rgba(0,132,255,.2);}
 .faq-item.open{border-color:rgba(0,132,255,.3);box-shadow:0 8px 24px rgba(0,132,255,.08);}
 .faq-q{
   width:100%;display:flex;align-items:center;justify-content:space-between;
-  padding:22px 26px;font-size:16px;font-weight:600;color:#0f172a;
+  padding:24px 32px;font-size:17px;font-weight:600;color:#0f172a;
   text-align:left;letter-spacing:-.01em;
 }
 .faq-q-ic{
@@ -742,7 +759,7 @@ const CSS = `
 .faq-item.open .faq-q-ic svg{transform:rotate(45deg);}
 .faq-a{max-height:0;overflow:hidden;transition:max-height .35s ease;}
 .faq-item.open .faq-a{max-height:400px;}
-.faq-a-in{padding:0 26px 24px;font-size:14.5px;color:#64748b;line-height:1.6;}
+.faq-a-in{padding:0 32px 28px;font-size:15px;color:#64748b;line-height:1.65;}
 
 /* ─── CONTACT ─── */
 .contact-wrap{
@@ -787,9 +804,9 @@ const CSS = `
 .foot-brand-row{display:flex;align-items:center;gap:12px;}
 .foot-brand-mark{
   width:44px;height:44px;border-radius:12px;
-  background:linear-gradient(135deg,#FF801E,#FF6B00);
+  background:linear-gradient(135deg,#0084FF,#005FBF);
   display:flex;align-items:center;justify-content:center;
-  box-shadow:inset 0 -2px 4px rgba(0,0,0,.1),0 4px 12px rgba(255,128,30,.3);
+  box-shadow:inset 0 -2px 4px rgba(0,0,0,.1),0 4px 12px rgba(0,132,255,.3);
 }
 .foot-brand-mark svg{width:24px;height:24px;color:#fff;}
 .foot-brand-name{
@@ -902,7 +919,6 @@ const HERO = `
   </div>
   <div class="hero-inner">
     <div class="hero-badge reveal reveal-1">
-      <span class="pill">EARLY ADOPTER</span>
       <span>Stworzona dla gastronomii · Premiera Q2 2026</span>
     </div>
     <h1 class="hero-h1 reveal reveal-2">
@@ -1059,7 +1075,10 @@ const DEMO = `
         <div class="demo-eyebrow">Prezentacja</div>
         <h2>Zobacz ShiftApp <br/>w akcji</h2>
         <p>Krótka prezentacja pokazująca, jak ShiftApp rewolucjonizuje zarządzanie zespołem.</p>
-        <a class="demo-cta" data-action="signup" href="#">
+        <div class="demo-video">
+          <iframe src="https://www.youtube.com/embed/EbkxU2stKcs" title="ShiftApp Prezentacja" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+        </div>
+        <a class="demo-cta" data-action="signup" href="#" style="margin-top:48px;">
           <span>Dołącz do Whitelisty</span>
           ${I.arrow}
         </a>
