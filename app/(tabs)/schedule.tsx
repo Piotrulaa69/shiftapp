@@ -197,8 +197,8 @@ function LocationPicker({ value, onChange }: { value: string; onChange: (v: stri
     <View>
       <ScrollView
         horizontal
-        showsHorizontalScrollIndicator={Platform.OS !== 'web'}
-        style={[{ marginBottom: 8 }, Platform.OS === 'web' && { overflowX: 'auto' } as any]}
+        showsHorizontalScrollIndicator={true}
+        style={[{ marginBottom: 8, maxHeight: 50 }, Platform.OS === 'web' && { overflowX: 'auto' } as any]}
         contentContainerStyle={{ gap: 8, paddingHorizontal: 2 }}
       >
         {DEFAULT_LOCATIONS.map(loc => (
@@ -241,8 +241,8 @@ function StatusPicker({ value, onChange }: { value: string; onChange: (v: string
     <View>
       <ScrollView
         horizontal
-        showsHorizontalScrollIndicator={Platform.OS !== 'web'}
-        style={[{ marginBottom: 8 }, Platform.OS === 'web' && { overflowX: 'auto' } as any]}
+        showsHorizontalScrollIndicator={true}
+        style={[{ marginBottom: 8, maxHeight: 50 }, Platform.OS === 'web' && { overflowX: 'auto' } as any]}
         contentContainerStyle={{ gap: 8, paddingHorizontal: 2 }}
       >
         {FIXED_STATUSES.map(s => {
@@ -412,11 +412,8 @@ function ShiftModal({
             <DatePickerField value={editDay} onChange={setEditDay} />
 
             {/* Godziny */}
-            <Text style={sm.label}>Godzina od</Text>
-            <TimePickerRow label="" value={editStart} onChange={setEditStart} />
-
-            <Text style={sm.label}>Godzina do</Text>
-            <TimePickerRow label="" value={editEnd} onChange={setEditEnd} />
+            <TimePickerRow label="Godzina od" value={editStart} onChange={setEditStart} />
+            <TimePickerRow label="Godzina do" value={editEnd} onChange={setEditEnd} />
 
             {/* Lokalizacja */}
             <Text style={sm.label}>Lokalizacja</Text>

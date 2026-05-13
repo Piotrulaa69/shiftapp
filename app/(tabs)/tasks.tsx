@@ -79,7 +79,7 @@ function TaskCard({ task, onToggle, onDelete, onDetail, onStart, onFinish }: {
               <Text style={[tStyles.actionBtnText, { color: theme.colors.primary }]}>Rozpocznij</Text>
             </TouchableOpacity>
           )}
-          {!task.completed && onFinish && inProgress && (
+          {!task.completed && onFinish && inProgress && !confirmCfg && (
             <TouchableOpacity
               style={[tStyles.actionBtn, { backgroundColor: theme.colors.greenLight }]}
               onPress={(e) => { e.stopPropagation?.(); onFinish(); }}
@@ -207,6 +207,12 @@ export default function TasksScreen() {
     });
   }, [rid]);
 
+  const reload = async () => {
+    if (!rid) return;
+    const taskData = await getTasks(rid);
+    setTasks(taskData);
+  };
+
   const toggleTask = async (id: string) => {
     const task = tasks.find((t) => t.id === id);
     if (!task) return;
@@ -227,8 +233,10 @@ export default function TasksScreen() {
       setTasks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'czeka_na_zatwierdzenie' as TaskStatus } : t));
       await submitTaskForApproval(id);
     } else {
-      setTasks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'zamkniete' as TaskStatus, completed: true } : t));
-      await dbToggleTask(id, true);
+      const success = await dbToggleTask(id, true);
+      if (success) {
+        reload();
+      }
     }
   };
 
@@ -274,12 +282,15 @@ export default function TasksScreen() {
 
   const filtered = activeTab === 'all'
     ? empFiltered.filter((t) => (t.status as string) !== 'czeka_na_zatwierdzenie')
+    : activeTab === 'zamkniete'
+    ? empFiltered.filter((t) => t.completed)
     : empFiltered.filter((t) => (t.status as string) === activeTab);
+
+  const pendingApproval = tasks.filter((t) => (t.status as string) === 'czeka_na_zatwierdzenie');
 
   const doZrobienia = filtered.filter((t) => !t.completed && t.status === 'do_zrobienia');
   const wTrakcie = filtered.filter((t) => t.status === 'w_trakcie' && !t.completed);
   const zamkniete = filtered.filter((t) => t.completed);
-  const pendingApproval = tasks.filter((t) => (t.status as string) === 'czeka_na_zatwierdzenie');
 
   const approveTask = async (id: string) => {
     const task = tasks.find((t) => t.id === id);
@@ -353,17 +364,17 @@ export default function TasksScreen() {
         {/* Employee filter (owners/managers only) */}
         {canApprove && employees.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.empRow}>
-            <TouchableOpacity
-              style={[styles.empChip, selectedEmployeeId === null && styles.empChipActive]}
-              onPress={() => setSelectedEmployeeId(null)}
-              activeOpacity={0.75}
-            >
-              <View style={styles.empAvatar}><Text style={styles.empAvatarText}>Ws</Text></View>
-              <Text style={[styles.empName, selectedEmployeeId === null && styles.empNameActive]}>Wszyscy</Text>
-              <View style={styles.empCountBadge}>
-                <Text style={styles.empCountText}>{tasks.length}</Text>
-              </View>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.empChip, selectedEmployeeId === null && styles.empChipActive]}
+                onPress={() => setSelectedEmployeeId(null)}
+                activeOpacity={0.75}
+              >
+                <View style={styles.empAvatar}><Text style={styles.empAvatarText}>Ws</Text></View>
+                <Text style={[styles.empName, selectedEmployeeId === null && styles.empNameActive]}>Wszyscy</Text>
+                <View style={styles.empCountBadge}>
+                  <Text style={styles.empCountText}>{tasks.length}</Text>
+                </View>
+              </TouchableOpacity>
             {employees.map((emp) => {
               const empTaskCount = tasks.filter((t) => t.assigned_to === emp.id).length;
               const initials = `${emp.first_name?.[0] ?? ''}${emp.last_name?.[0] ?? ''}`;
