@@ -1074,7 +1074,7 @@ const DEMO = `
       <div class="demo-content">
         <div class="demo-eyebrow">Prezentacja</div>
         <h2>Zobacz ShiftApp <br/>w akcji</h2>
-        <p>Krótka prezentacja pokazująca, jak ShiftApp rewolucjonizuje zarządzanie zespołem.</p>
+        <p class="lead lead-center" style="color:rgba(255,255,255,.7);">Krótka prezentacja pokazująca, jak ShiftApp rewolucjonizuje zarządzanie zespołem.</p>
         <div class="demo-video">
           <iframe src="https://www.youtube.com/embed/EbkxU2stKcs" title="ShiftApp Prezentacja" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
         </div>
