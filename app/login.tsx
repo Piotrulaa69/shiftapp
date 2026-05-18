@@ -145,8 +145,6 @@ function buildLoginPortal(showPw: boolean, loading: boolean, err: string) {
       </div>
 
       <button class="al-sub" data-action="login" ${loading ? 'disabled' : ''}>${loading ? 'Logowanie…' : 'Zaloguj się'}</button>
-
-      <div class="al-fr">Nie masz konta? <button class="al-fl" data-action="register" type="button">Zarejestruj się</button></div>
     </div>
   </div>`;
 }
@@ -309,9 +307,6 @@ export default function LoginScreen() {
             </View>
             <TouchableOpacity style={mob.btn} onPress={handleLogin} disabled={isLoading} activeOpacity={0.88}>
               {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={mob.btnTxt}>Zaloguj się</Text>}
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/join' as any)} style={{ marginTop: 16, alignItems: 'center' }}>
-              <Text style={{ color: '#0084FF', fontSize: 14, fontWeight: '600' }}>Zarejestruj się</Text>
             </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
