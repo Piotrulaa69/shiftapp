@@ -100,8 +100,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasSession, setHasSession] = useState(false);
-  const loginInProgress = React.useRef(false);
-
   // Restore session on mount
   useEffect(() => {
     // Fallback: force loading=false after 4s so app never stays stuck
@@ -115,24 +113,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setHasSession(false);
         setIsLoading(false);
       } else if (session?.user) {
-        // Skip if login() is already handling this session
-        if (loginInProgress.current) return;
-        // Session is known — unblock navigation immediately, load profile in background
         setHasSession(true);
         setIsLoading(false);
-        loadUserData(session.user.id, session.user.email ?? '').then(async (result) => {
+        loadUserData(session.user.id, session.user.email ?? '').then((result) => {
           if (result) {
             setUser(result.user);
             setRestaurant(result.restaurant);
-          } else {
-            // Retry once after short delay (handles transient DB/RLS issues)
-            await new Promise(r => setTimeout(r, 1500));
-            const retry = await loadUserData(session.user.id, session.user.email ?? '');
-            if (retry) {
-              setUser(retry.user);
-              setRestaurant(retry.restaurant);
-            }
           }
+          // Don't sign out on failure — session stays, user data loads on next refresh
         });
       }
     });
@@ -141,33 +129,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    loginInProgress.current = true;
     setIsLoading(true);
-    const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-    if (error || !data.user) {
-      loginInProgress.current = false;
-      setIsLoading(false);
-      return false;
-    }
-    // Unblock navigation immediately — user goes to dashboard
-    setHasSession(true);
-    setIsLoading(false);
-    // Load profile in background
-    const result = await loadUserData(data.user.id, data.user.email ?? '');
-    loginInProgress.current = false;
-    if (!result) {
-      // Retry once before giving up
-      await new Promise(r => setTimeout(r, 1500));
-      const retry = await loadUserData(data.user.id, data.user.email ?? '');
-      if (retry) {
-        setUser(retry.user);
-        setRestaurant(retry.restaurant);
-        return true;
-      }
-      return false;
-    }
-    setUser(result.user);
-    setRestaurant(result.restaurant);
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (error) { setIsLoading(false); return false; }
+    // onAuthStateChange will handle setHasSession + loadUserData
     return true;
   };
 
