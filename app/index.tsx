@@ -12,7 +12,7 @@ export default function Index() {
       </View>
     );
   }
-  if (!isAuthenticated) return <Redirect href={'/landing' as any} />;
+  if (!isAuthenticated) return <Redirect href={'/login' as any} />;
   if (user && !user.onboardingDone) return <Redirect href="/onboarding" />;
   return <Redirect href="/(tabs)/dashboard" />;
 }
