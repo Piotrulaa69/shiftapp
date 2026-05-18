@@ -144,13 +144,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(false);
       return false;
     }
-    const result = await loadUserData(data.user.id, data.user.email ?? '');
-    loginInProgress.current = false;
-    if (!result) { supabase.auth.signOut(); setIsLoading(false); return false; }
-    setUser(result.user);
-    setRestaurant(result.restaurant);
+    // Unblock navigation immediately — user goes to dashboard
     setHasSession(true);
     setIsLoading(false);
+    // Load profile in background
+    const result = await loadUserData(data.user.id, data.user.email ?? '');
+    loginInProgress.current = false;
+    if (!result) { supabase.auth.signOut(); return false; }
+    setUser(result.user);
+    setRestaurant(result.restaurant);
     return true;
   };
 
