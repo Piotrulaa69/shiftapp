@@ -221,6 +221,7 @@ export async function getEmployees(restaurantId: string): Promise<DbProfile[]> {
     .from('profiles')
     .select('*')
     .eq('restaurant_id', restaurantId)
+    .eq('is_active', true)
     .order('created_at', { ascending: true });
   if (error) { console.error('getEmployees', error); return []; }
   return data as DbProfile[];

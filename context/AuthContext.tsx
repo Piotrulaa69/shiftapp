@@ -100,6 +100,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasSession, setHasSession] = useState(false);
+  const loginInProgress = React.useRef(false);
 
   // Restore session on mount
   useEffect(() => {
@@ -114,6 +115,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setHasSession(false);
         setIsLoading(false);
       } else if (session?.user) {
+        // Skip if login() is already handling this session
+        if (loginInProgress.current) return;
         // Session is known — unblock navigation immediately, load profile in background
         setHasSession(true);
         setIsLoading(false);
@@ -133,15 +136,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
+    loginInProgress.current = true;
     setIsLoading(true);
     const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-    if (error || !data.user) { setIsLoading(false); return false; }
-    setHasSession(true);
-    setIsLoading(false);
+    if (error || !data.user) {
+      loginInProgress.current = false;
+      setIsLoading(false);
+      return false;
+    }
     const result = await loadUserData(data.user.id, data.user.email ?? '');
-    if (!result) { supabase.auth.signOut(); return false; }
+    loginInProgress.current = false;
+    if (!result) { supabase.auth.signOut(); setIsLoading(false); return false; }
     setUser(result.user);
     setRestaurant(result.restaurant);
+    setHasSession(true);
+    setIsLoading(false);
     return true;
   };
 
