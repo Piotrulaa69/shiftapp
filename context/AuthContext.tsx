@@ -120,13 +120,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Session is known — unblock navigation immediately, load profile in background
         setHasSession(true);
         setIsLoading(false);
-        loadUserData(session.user.id, session.user.email ?? '').then((result) => {
+        loadUserData(session.user.id, session.user.email ?? '').then(async (result) => {
           if (result) {
             setUser(result.user);
             setRestaurant(result.restaurant);
           } else {
-            // Profile missing — sign out
-            supabase.auth.signOut();
+            // Retry once after short delay (handles transient DB/RLS issues)
+            await new Promise(r => setTimeout(r, 1500));
+            const retry = await loadUserData(session.user.id, session.user.email ?? '');
+            if (retry) {
+              setUser(retry.user);
+              setRestaurant(retry.restaurant);
+            }
           }
         });
       }
@@ -150,7 +155,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Load profile in background
     const result = await loadUserData(data.user.id, data.user.email ?? '');
     loginInProgress.current = false;
-    if (!result) { supabase.auth.signOut(); return false; }
+    if (!result) {
+      // Retry once before giving up
+      await new Promise(r => setTimeout(r, 1500));
+      const retry = await loadUserData(data.user.id, data.user.email ?? '');
+      if (retry) {
+        setUser(retry.user);
+        setRestaurant(retry.restaurant);
+        return true;
+      }
+      return false;
+    }
     setUser(result.user);
     setRestaurant(result.restaurant);
     return true;

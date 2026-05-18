@@ -66,7 +66,7 @@ VALUES (
 ON CONFLICT (provider, provider_id) DO NOTHING;
 
 -- 3. Create demo restaurant
-INSERT INTO public.restaurants (id, name, address, phone, owner_id, plan, logo_color, created_at)
+INSERT INTO public.restaurants (id, name, address, phone, owner_id, plan, logo_color, clock_in_method, clock_in_window_min, late_threshold_min, pay_period_type, created_at)
 VALUES (
   'de000000-0001-0000-0000-000000000001',
   'Demo Restaurant',
@@ -75,9 +75,15 @@ VALUES (
   'de000000-0000-0000-0000-000000000001',
   'premium',
   '#2563EB',
+  'manual',
+  15,
+  10,
+  'monthly',
   now()
 )
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+  name = 'Demo Restaurant',
+  clock_in_method = 'manual';
 
 -- 4. Create profile with owner role
 INSERT INTO public.profiles (
