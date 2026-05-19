@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
+    ActivityIndicator,
     Animated,
     Platform,
     ScrollView,
@@ -14,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
-import { addPoints, notify } from '../../lib/db';
+import { addPoints, DbQuizQuestion, getQuizQuestions, notify } from '../../lib/db';
 import type { QuizQuestion } from '../../lib/quiz-data';
 import { getQuizForTraining } from '../../lib/quiz-data';
 import { supabase } from '../../lib/supabase';
@@ -32,9 +33,10 @@ export default function QuizScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
 
-  const quiz = getQuizForTraining(category ?? '');
-  const questions = quiz.questions;
+  const fallbackQuiz = getQuizForTraining(category ?? '');
 
+  const [dbQuestions, setDbQuestions] = useState<DbQuizQuestion[] | null>(null);
+  const [loadingQ, setLoadingQ] = useState(true);
   const [current, setCurrent] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [answered, setAnswered] = useState(false);
@@ -42,8 +44,20 @@ export default function QuizScreen() {
   const [finished, setFinished] = useState(false);
   const progressAnim = useRef(new Animated.Value(0)).current;
 
-  const q: QuizQuestion = questions[current];
+  const questions: QuizQuestion[] = dbQuestions && dbQuestions.length > 0
+    ? dbQuestions.map((q) => ({ id: q.id, question: q.question, options: q.options, correctIndex: q.correct_index, explanation: q.explanation ?? '' }))
+    : fallbackQuiz.questions;
+  const quiz = dbQuestions && dbQuestions.length > 0
+    ? { title: title ?? fallbackQuiz.title, color: fallbackQuiz.color, icon: fallbackQuiz.icon }
+    : fallbackQuiz;
+
+  const q: QuizQuestion = questions[current] ?? questions[0];
   const progress = (current + 1) / questions.length;
+
+  useEffect(() => {
+    if (!trainingId) { setLoadingQ(false); return; }
+    getQuizQuestions(trainingId).then((qs) => { setDbQuestions(qs); setLoadingQ(false); });
+  }, [trainingId]);
 
   useEffect(() => {
     Animated.timing(progressAnim, {
@@ -102,6 +116,65 @@ export default function QuizScreen() {
     if (idx === selected && idx !== q.correctIndex) return [styles.optionText, styles.optionTextWrong];
     return [styles.optionText, styles.optionTextDim];
   };
+
+  if (loadingQ) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={{ color: theme.colors.textMuted, fontSize: 14 }}>Ładowanie pytań...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!loadingQ && dbQuestions !== null && dbQuestions.length === 0) {
+    return (
+      <SafeAreaView style={[styles.safe, { backgroundColor: '#2563EB' }]} edges={['top']}>
+        <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]} edges={['bottom']}>
+          <View style={[styles.resultHero, { backgroundColor: '#2563EB' }]}>
+            <View style={styles.resultIconWrap}>
+              <Ionicons name="book-outline" size={64} color="#fff" />
+            </View>
+            <Text style={styles.resultHeroTitle}>{title ?? 'Szkolenie'}</Text>
+            <Text style={styles.resultHeroSub}>Admin nie dodał jeszcze pytań do tego szkolenia</Text>
+          </View>
+          <View style={[styles.resultBody, isDesktop && { maxWidth: 480, alignSelf: 'center' as const, width: '100%' }]}>
+            <View style={styles.resultScoreCard}>
+              <Ionicons name="information-circle-outline" size={40} color={theme.colors.textMuted} />
+              <Text style={{ fontSize: 15, fontWeight: '700', color: theme.colors.text, textAlign: 'center' }}>
+                Brak pytań quizowych
+              </Text>
+              <Text style={{ fontSize: 13, color: theme.colors.textSecondary, textAlign: 'center', lineHeight: 19 }}>
+                Możesz oznaczyć szkolenie jako ukończone lub poczekać aż admin doda pytania.
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.resultBtnFull, { backgroundColor: theme.colors.primary }]}
+              onPress={async () => {
+                if (trainingId) {
+                  const { data: tr } = await supabase.from('trainings').select('restaurant_id, points, title').eq('id', trainingId).single();
+                  await supabase.from('trainings').update({ progress_percent: 100, status: 'ukonczone' }).eq('id', trainingId);
+                  if (tr && user?.id) {
+                    if ((tr.points ?? 0) > 0) await addPoints(tr.restaurant_id, user.id, tr.points, 'training_completed', trainingId, `Szkolenie ukończone: ${tr.title}`);
+                    await notify(tr.restaurant_id, user.id, 'task', 'Szkolenie ukończone! 🎓', `Ukończyłeś szkolenie "${tr.title}".`, trainingId);
+                  }
+                }
+                router.back();
+              }}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="checkmark-circle" size={20} color="#fff" />
+              <Text style={styles.resultBtnFullText}>Oznacz jako ukończone</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.resultBtnFull, styles.resultBtnOutline]} onPress={() => router.back()} activeOpacity={0.8}>
+              <Text style={[styles.resultBtnFullText, { color: theme.colors.primary }]}>Wróć do szkoleń</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </SafeAreaView>
+    );
+  }
 
   if (finished) {
     const passed = pct >= 80;

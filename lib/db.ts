@@ -781,6 +781,57 @@ export async function clockInWithPin(
   return ci ? { success: true, clockIn: ci } : { success: false, error: 'Błąd rejestracji' };
 }
 
+// ─── Quiz Questions ───────────────────────────────────────────────────────────
+
+export type DbQuizQuestion = {
+  id: string;
+  training_id: string;
+  restaurant_id: string;
+  question: string;
+  options: string[];
+  correct_index: number;
+  explanation: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
+export async function getQuizQuestions(trainingId: string): Promise<DbQuizQuestion[]> {
+  const { data, error } = await supabase
+    .from('quiz_questions')
+    .select('*')
+    .eq('training_id', trainingId)
+    .order('sort_order', { ascending: true });
+  if (error) { console.error('getQuizQuestions', error); return []; }
+  return (data ?? []) as DbQuizQuestion[];
+}
+
+export async function createQuizQuestion(
+  restaurantId: string,
+  trainingId: string,
+  fields: { question: string; options: string[]; correct_index: number; explanation?: string; sort_order?: number },
+): Promise<DbQuizQuestion | null> {
+  const { data, error } = await supabase
+    .from('quiz_questions')
+    .insert({ restaurant_id: restaurantId, training_id: trainingId, ...fields })
+    .select()
+    .single();
+  if (error) { console.error('createQuizQuestion', error); return null; }
+  return data as DbQuizQuestion;
+}
+
+export async function updateQuizQuestion(
+  id: string,
+  fields: Partial<{ question: string; options: string[]; correct_index: number; explanation: string; sort_order: number }>,
+): Promise<boolean> {
+  const { error } = await supabase.from('quiz_questions').update(fields).eq('id', id);
+  return !error;
+}
+
+export async function deleteQuizQuestion(id: string): Promise<boolean> {
+  const { error } = await supabase.from('quiz_questions').delete().eq('id', id);
+  return !error;
+}
+
 // ─── Notifications ────────────────────────────────────────────────────────────
 
 export type AppNotificationType = 'shift' | 'task' | 'leave' | 'swap' | 'absence' | 'system';
