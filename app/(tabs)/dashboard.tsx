@@ -69,6 +69,7 @@ export default function DashboardScreen() {
   const [todayShift, setTodayShift] = useState<DbShift | null>(null);
   const [totalPoints, setTotalPoints] = useState<number>(0);
   const [activeCI, setActiveCI] = useState<DbClockIn | null>(null);
+  const [elapsed, setElapsed] = useState('00:00');
 
   // Manager state
   const [todayShifts, setTodayShifts] = useState<DbShift[]>([]);
@@ -94,6 +95,18 @@ export default function DashboardScreen() {
     }
   }, [rid, user?.id, isManager]));
 
+  // Timer for elapsed work time
+  useEffect(() => {
+    if (!activeCI?.clock_in_at) { setElapsed('00:00'); return; }
+    const interval = setInterval(() => {
+      const diff = Math.floor((Date.now() - new Date(activeCI.clock_in_at!).getTime()) / 1000);
+      const h = String(Math.floor(diff / 3600)).padStart(2, '0');
+      const m = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
+      setElapsed(`${h}:${m}`);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [activeCI]);
+
   const myTasks = isManager ? tasks : tasks.filter((t) => t.assigned_to === user?.id);
   const completedTasks = myTasks.filter((t) => t.completed || t.status === 'zatwierdzone');
   const pendingTasks = myTasks.filter((t) => !t.completed && t.status !== 'zatwierdzone').slice(0, 4);
@@ -107,7 +120,7 @@ export default function DashboardScreen() {
   );
 
   const STAT_CARDS = [
-    { icon: 'time-outline', label: 'Zmiana', iconBg: '#EFF6FF', iconColor: '#2563EB', value: todayShift ? todayShift.start_time : '--:--' },
+    { icon: 'time-outline', label: activeCI ? 'Przepracowano' : 'Zmiana', iconBg: '#EFF6FF', iconColor: '#2563EB', value: activeCI ? elapsed : (todayShift ? todayShift.start_time : '--:--') },
     { icon: 'checkmark-done-outline', label: 'Zadania', iconBg: '#F0FDF4', iconColor: '#16A34A', value: `${completedTasks.length}/${myTasks.length}` },
     { icon: 'trophy-outline', label: 'Punkty', iconBg: '#F5F3FF', iconColor: '#7C3AED', value: String(totalPoints), route: '/(tabs)/szkolenia' },
     { icon: 'cash-outline', label: 'Zarobki', iconBg: '#ECFDF5', iconColor: '#059669', value: '→', route: '/earnings' },
@@ -227,6 +240,14 @@ export default function DashboardScreen() {
               todayShifts.slice(0, 6).map((shift) => {
                 const cs = getClockStatus(shift, todayClockIns);
                 const csInfo = CLOCK_STATUS_LABELS[cs];
+                const activeCI = todayClockIns.find((c) => c.shift_id === shift.id && c.status === 'active');
+                let elapsedText = '';
+                if (activeCI?.clock_in_at) {
+                  const diff = Math.floor((Date.now() - new Date(activeCI.clock_in_at).getTime()) / 1000);
+                  const h = String(Math.floor(diff / 3600)).padStart(2, '0');
+                  const m = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
+                  elapsedText = `${h}:${m}`;
+                }
                 return (
                   <View key={shift.id} style={styles.todayShiftRow}>
                     <View style={[styles.todayAvatar, { backgroundColor: theme.colors.surface }]}>
@@ -235,6 +256,7 @@ export default function DashboardScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.todayName}>{shift.employee_name}</Text>
                       <Text style={styles.todayTime}>{shift.start_time} – {shift.end_time}</Text>
+                      {elapsedText && <Text style={styles.todayElapsed}>Przepracowano: {elapsedText}</Text>}
                     </View>
                     <View style={[styles.csChip, { backgroundColor: csInfo.bg }]}>
                       <Text style={[styles.csChipText, { color: csInfo.color }]}>{csInfo.label}</Text>
@@ -395,6 +417,7 @@ const styles = StyleSheet.create({
   todayAvatarText: { fontSize: 12, fontWeight: '700', color: theme.colors.textSecondary },
   todayName: { fontSize: 13, fontWeight: '600', color: theme.colors.text },
   todayTime: { fontSize: 11, color: theme.colors.textMuted, marginTop: 1 },
+  todayElapsed: { fontSize: 10, color: theme.colors.primary, fontWeight: '600', marginTop: 2 },
   csChip: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
   csChipText: { fontSize: 11, fontWeight: '700' },
 

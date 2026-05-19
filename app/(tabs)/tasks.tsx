@@ -195,6 +195,7 @@ export default function TasksScreen() {
   const [showModal, setShowModal] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [detailTask, setDetailTask] = useState<DbTask | null>(null);
+  const [showMineOnly, setShowMineOnly] = useState(false);
 
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
@@ -289,7 +290,7 @@ export default function TasksScreen() {
   const todoCount = tasks.filter((t) => !t.completed).length;
 
   const empFiltered = !canApprove
-    ? tasks.filter((t) => t.assigned_to === user?.id)
+    ? showMineOnly ? tasks.filter((t) => t.assigned_to === user?.id) : tasks
     : selectedEmployeeId
     ? tasks.filter((t) => t.assigned_to === selectedEmployeeId)
     : tasks;
@@ -371,7 +372,25 @@ export default function TasksScreen() {
           </View>
         </View>
 
-        {/* Employee filter (owners/managers only) */}
+        {/* Employee filter */}
+        {!canApprove && (
+          <View style={styles.filterToggleWrap}>
+            <TouchableOpacity
+              style={[styles.filterToggle, !showMineOnly && styles.filterToggleActive]}
+              onPress={() => setShowMineOnly(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterToggleText, !showMineOnly && styles.filterToggleTextActive]}>Wszystkie</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterToggle, showMineOnly && styles.filterToggleActive]}
+              onPress={() => setShowMineOnly(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterToggleText, showMineOnly && styles.filterToggleTextActive]}>Moje</Text>
+            </TouchableOpacity>
+          </View>
+        )}
         {canApprove && employees.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.empRow}>
               <TouchableOpacity
@@ -828,6 +847,16 @@ const styles = StyleSheet.create({
     width: 18, height: 18, alignItems: 'center', justifyContent: 'center',
   },
   empCountText: { fontSize: 10, fontWeight: '700', color: theme.colors.textMuted },
+
+  filterToggleWrap: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
+  filterToggle: {
+    flex: 1, paddingVertical: 9, paddingHorizontal: 16, borderRadius: theme.borderRadius.full,
+    borderWidth: 1.5, borderColor: theme.colors.border, backgroundColor: theme.colors.card,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  filterToggleActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primary },
+  filterToggleText: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary },
+  filterToggleTextActive: { color: '#fff' },
 });
 
 const mStyles = StyleSheet.create({

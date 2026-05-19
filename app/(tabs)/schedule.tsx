@@ -1132,6 +1132,7 @@ const wv = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 4,
+    marginRight: 8,
     overflow: 'hidden',
     borderLeftWidth: 3,
     borderLeftColor: 'rgba(255,255,255,0.5)',
