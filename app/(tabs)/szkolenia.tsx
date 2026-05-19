@@ -25,11 +25,21 @@ const STATUS_CONFIG = {
   nierozpoczete: { label: 'NOWE', color: theme.colors.orange, bg: theme.colors.orangeLight },
 };
 
-const BADGES = [
-  { icon: '☕', label: 'Mistrz\nLatte', color: theme.colors.yellow },
-  { icon: '🌿', label: 'BHP\nEkspert', color: theme.colors.green },
-  { icon: '😊', label: 'Obsługa\nKlienta', color: theme.colors.purple },
+const LEVELS = [
+  { min: 0,    max: 499,   name: 'Nowicjusz' },
+  { min: 500,  max: 999,   name: 'Adept' },
+  { min: 1000, max: 1999,  name: 'Profesjonalista' },
+  { min: 2000, max: 3999,  name: 'Ekspert' },
+  { min: 4000, max: 99999, name: 'Mistrz' },
 ];
+
+function getLevel(pts: number) {
+  const lvl = LEVELS.findIndex((l) => pts >= l.min && pts <= l.max);
+  const level = LEVELS[lvl >= 0 ? lvl : LEVELS.length - 1];
+  const pct = lvl >= 0 ? Math.round(((pts - level.min) / (level.max - level.min + 1)) * 100) : 100;
+  const toNext = lvl >= 0 && lvl < LEVELS.length - 1 ? level.max - pts + 1 : 0;
+  return { num: lvl + 1, name: level.name, pct, toNext };
+}
 
 const CAT_CONFIG: Record<string, { icon: string; color: string; bg: string }> = {
   'BHP': { icon: 'shield-checkmark-outline', color: '#EF4444', bg: '#FEF2F2' },
@@ -246,44 +256,25 @@ export default function SzkoleniaScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, isDesktop && styles.scrollContentDesktop]}>
         {/* Progress card */}
-        <View style={styles.progressCard}>
-          <Text style={styles.progressCardTitle}>Twoje postępy</Text>
-          <Text style={styles.progressCardSub}>Świetnie ci idzie! Utrzymaj passę.</Text>
-
-          <View style={styles.streakBox}>
-            <View style={styles.streakIcon}>
-              <Ionicons name="flame" size={20} color={theme.colors.orange} />
-            </View>
-            <View>
-              <Text style={styles.streakLabel}>SERIA DNI</Text>
-              <Text style={styles.streakValue}>7 Dni</Text>
-            </View>
-          </View>
-
-          <View style={styles.levelRow}>
-            <Text style={styles.levelLabel}>Poziom 2: Adept</Text>
-            <Text style={styles.levelPct}>65%</Text>
-          </View>
-          <View style={styles.levelBg}>
-            <View style={[styles.levelFill, { width: '65%' }]} />
-          </View>
-          <Text style={styles.levelHint}>Jeszcze 350 pkt do awansu</Text>
-        </View>
-
-        {/* Badges */}
-        <View style={styles.badgesCard}>
-          <Text style={styles.badgesTitle}>Zdobyte odznaki</Text>
-          <View style={styles.badgesRow}>
-            {BADGES.map((b) => (
-              <View key={b.label} style={styles.badge}>
-                <View style={[styles.badgeIcon, { backgroundColor: b.color + '22' }]}>
-                  <Text style={styles.badgeEmoji}>{b.icon}</Text>
-                </View>
-                <Text style={styles.badgeLabel}>{b.label}</Text>
+        {(() => {
+          const lvl = getLevel(totalPoints);
+          return (
+            <View style={styles.progressCard}>
+              <Text style={styles.progressCardTitle}>Twoje postępy</Text>
+              <View style={styles.levelRow}>
+                <Text style={styles.levelLabel}>Poziom {lvl.num}: {lvl.name}</Text>
+                <Text style={styles.levelPct}>{lvl.pct}%</Text>
               </View>
-            ))}
-          </View>
-        </View>
+              <View style={styles.levelBg}>
+                <View style={[styles.levelFill, { width: `${lvl.pct}%` }]} />
+              </View>
+              {lvl.toNext > 0
+                ? <Text style={styles.levelHint}>Jeszcze {lvl.toNext} pkt do awansu</Text>
+                : <Text style={styles.levelHint}>Osiągnięto maksymalny poziom!</Text>
+              }
+            </View>
+          );
+        })()}
 
         {/* Tab filter */}
         <View style={styles.filterRow}>
@@ -315,15 +306,6 @@ export default function SzkoleniaScreen() {
             <Text style={styles.requiredCount}>Wymagane: {requiredCount}</Text>
           </View>
         )}
-
-        {/* Demo mode banner */}
-        <View style={styles.demoBanner}>
-          <Ionicons name="information-circle-outline" size={18} color={theme.colors.primary} />
-          <View style={styles.demoBannerText}>
-            <Text style={styles.demoBannerTitle}>Szkolenia dopasowane do Twojej firmy</Text>
-            <Text style={styles.demoBannerSub}>W trybie demo wyświetlamy ogólne moduły. Po wdrożeniu aplikacji właściciel dodaje szkolenia specyficzne dla swojego lokalu.</Text>
-          </View>
-        </View>
 
         {activeTab === 'szkolenia' ? (
           <>
