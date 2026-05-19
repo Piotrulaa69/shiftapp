@@ -2,20 +2,20 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Animated,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    Animated,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../../context/AlertContext';
-import { supabase } from '../../lib/supabase';
-import { getQuizForTraining } from '../../lib/quiz-data';
 import type { QuizQuestion } from '../../lib/quiz-data';
+import { getQuizForTraining } from '../../lib/quiz-data';
+import { supabase } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
 export default function QuizScreen() {
@@ -93,63 +93,74 @@ export default function QuizScreen() {
 
   if (finished) {
     const passed = pct >= 80;
+    const bgTop = passed ? '#16A34A' : '#DC2626';
+    const bgLight = passed ? '#F0FDF4' : '#FFF1F2';
     return (
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <ScrollView contentContainerStyle={[styles.resultScroll, isDesktop && styles.desktopWrap]}>
-          <View style={styles.resultCard}>
-            <View style={[styles.resultIcon, { backgroundColor: passed ? theme.colors.greenLight : '#FEF2F2' }]}>
+      <SafeAreaView style={[styles.safe, { backgroundColor: bgTop }]} edges={['top']}>
+        <SafeAreaView style={[styles.safe, { backgroundColor: bgLight }]} edges={['bottom']}>
+          {/* Colored top hero */}
+          <View style={[styles.resultHero, { backgroundColor: bgTop }]}>
+            <View style={styles.resultIconWrap}>
               <Ionicons
-                name={passed ? 'trophy' : 'refresh'}
-                size={52}
-                color={passed ? theme.colors.green : theme.colors.error}
+                name={passed ? 'trophy' : 'close-circle'}
+                size={64}
+                color={'#fff'}
               />
             </View>
-            <Text style={styles.resultTitle}>{passed ? 'Gratulacje! 🎉' : 'Spróbuj ponownie'}</Text>
-            <Text style={styles.resultSub}>
-              {passed
-                ? 'Ukończyłeś szkolenie z wynikiem'
-                : 'Nie udało się tym razem. Wynik:'}
+            <Text style={styles.resultHeroTitle}>{passed ? 'Gratulacje! 🎉' : 'Nie tym razem'}</Text>
+            <Text style={styles.resultHeroSub}>
+              {passed ? 'Szkolenie ukończone!' : 'Wymagane 80% poprawnych odpowiedzi'}
             </Text>
-            <Text style={[styles.resultPct, { color: passed ? theme.colors.green : theme.colors.error }]}>
-              {pct}%
-            </Text>
-            <Text style={styles.resultScore}>
-              {finalScore} / {questions.length} poprawnych odpowiedzi
-            </Text>
-
-            {passed && (
-              <View style={styles.xpBadge}>
-                <Ionicons name="star" size={16} color={theme.colors.yellow} />
-                <Text style={styles.xpText}>+{Math.round(pct / 10) * 10} XP zdobyte!</Text>
-              </View>
-            )}
-
-            <View style={styles.resultButtons}>
-              <TouchableOpacity
-                style={[styles.resultBtn, styles.resultBtnSecondary]}
-                onPress={() => {
-                  setCurrent(0);
-                  setSelected(null);
-                  setAnswered(false);
-                  setScore(0);
-                  setFinished(false);
-                }}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="refresh" size={16} color={theme.colors.primary} />
-                <Text style={styles.resultBtnSecondaryText}>Spróbuj ponownie</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.resultBtn, styles.resultBtnPrimary]}
-                onPress={() => router.back()}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="checkmark" size={16} color={theme.colors.white} />
-                <Text style={styles.resultBtnPrimaryText}>Powrót do szkoleń</Text>
-              </TouchableOpacity>
-            </View>
           </View>
-        </ScrollView>
+
+          {/* Score card */}
+          <View style={[styles.resultBody, isDesktop && { maxWidth: 480, alignSelf: 'center' as const, width: '100%' }]}>
+            <View style={styles.resultScoreCard}>
+              <Text style={[styles.resultPct, { color: passed ? theme.colors.green : theme.colors.error }]}>
+                {pct}%
+              </Text>
+              <Text style={styles.resultScoreLabel}>
+                {finalScore} / {questions.length} poprawnych odpowiedzi
+              </Text>
+
+              {/* Progress bar */}
+              <View style={styles.resultBar}>
+                <View style={[styles.resultBarFill, { width: `${pct}%` as any, backgroundColor: passed ? theme.colors.green : theme.colors.error }]} />
+              </View>
+
+              {passed && (
+                <View style={[styles.xpBadge, { backgroundColor: '#FEF9C3' }]}>
+                  <Ionicons name="star" size={16} color={theme.colors.yellow} />
+                  <Text style={styles.xpText}>+{Math.round(pct / 10) * 10} XP zdobyte!</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Buttons */}
+            <TouchableOpacity
+              style={[styles.resultBtnFull, { backgroundColor: theme.colors.primary }]}
+              onPress={() => router.back()}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="checkmark-circle" size={20} color={theme.colors.white} />
+              <Text style={styles.resultBtnFullText}>Powrót do szkoleń</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.resultBtnFull, styles.resultBtnOutline]}
+              onPress={() => {
+                setCurrent(0);
+                setSelected(null);
+                setAnswered(false);
+                setScore(0);
+                setFinished(false);
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="refresh" size={18} color={theme.colors.primary} />
+              <Text style={[styles.resultBtnFullText, { color: theme.colors.primary }]}>Spróbuj ponownie</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
       </SafeAreaView>
     );
   }
@@ -337,39 +348,36 @@ const styles = StyleSheet.create({
     height: 52,
   },
   nextBtnText: { fontSize: 15, fontWeight: '700', color: theme.colors.white },
-  // Result screen
-  resultScroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-  resultCard: {
-    backgroundColor: theme.colors.card,
-    borderRadius: theme.borderRadius.xl,
-    padding: 28,
-    alignItems: 'center',
-    gap: 12,
-    ...theme.shadows.card,
+  resultHero: {
+    alignItems: 'center', paddingTop: 32, paddingBottom: 40, paddingHorizontal: 24, gap: 8,
   },
-  resultIcon: {
-    width: 96, height: 96, borderRadius: 48,
+  resultIconWrap: {
+    width: 104, height: 104, borderRadius: 52,
+    backgroundColor: 'rgba(255,255,255,0.25)',
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 8,
   },
-  resultTitle: { fontSize: 24, fontWeight: '800', color: theme.colors.text },
-  resultSub: { fontSize: 14, color: theme.colors.textSecondary },
-  resultPct: { fontSize: 52, fontWeight: '900' },
-  resultScore: { fontSize: 14, color: theme.colors.textMuted },
+  resultHeroTitle: { fontSize: 26, fontWeight: '900', color: '#fff' },
+  resultHeroSub: { fontSize: 14, color: 'rgba(255,255,255,0.85)', textAlign: 'center' },
+  resultBody: { flex: 1, padding: 20, gap: 12 },
+  resultScoreCard: {
+    backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.xl,
+    padding: 24, alignItems: 'center', gap: 10, ...theme.shadows.card,
+    marginTop: -20,
+  },
+  resultPct: { fontSize: 60, fontWeight: '900', lineHeight: 66 },
+  resultScoreLabel: { fontSize: 14, color: theme.colors.textMuted },
+  resultBar: { width: '100%', height: 8, borderRadius: 4, backgroundColor: theme.colors.border, overflow: 'hidden' },
+  resultBarFill: { height: '100%', borderRadius: 4 },
   xpBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: theme.colors.yellowLight,
-    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
-    marginTop: 4,
+    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginTop: 4,
   },
-  xpText: { fontSize: 14, fontWeight: '700', color: theme.colors.text },
-  resultButtons: { flexDirection: 'row', gap: 10, marginTop: 8, width: '100%' },
-  resultBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, height: 48, borderRadius: theme.borderRadius.md,
+  xpText: { fontSize: 14, fontWeight: '700', color: '#854D0E' },
+  resultBtnFull: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, height: 52, borderRadius: theme.borderRadius.md,
   },
-  resultBtnPrimary: { backgroundColor: theme.colors.primary },
-  resultBtnSecondary: { backgroundColor: theme.colors.background, borderWidth: 1.5, borderColor: theme.colors.primary },
-  resultBtnPrimaryText: { fontSize: 13, fontWeight: '700', color: theme.colors.white },
-  resultBtnSecondaryText: { fontSize: 13, fontWeight: '700', color: theme.colors.primary },
+  resultBtnOutline: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: theme.colors.primary },
+  resultBtnFullText: { fontSize: 15, fontWeight: '700', color: theme.colors.white },
 });
