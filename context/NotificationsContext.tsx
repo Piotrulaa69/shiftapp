@@ -1,8 +1,10 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { deleteNotifDb, getNotifications, markAllNotifsRead, markNotifRead, markNotifUnread } from '../lib/db';
+import { supabase } from '../lib/supabase';
 
 export type AppNotification = {
   id: string;
-  type: 'shift' | 'task' | 'leave' | 'swap' | 'message' | 'system';
+  type: 'shift' | 'task' | 'leave' | 'swap' | 'absence' | 'system';
   title: string;
   body: string;
   read: boolean;
@@ -32,46 +34,72 @@ const NotificationsContext = createContext<NotificationsContextType>({
   refresh: () => {},
 });
 
-function generateMockNotifications(): AppNotification[] {
-  const now = new Date();
-  return [
-    { id: '1', type: 'shift', title: 'Nowa zmiana', body: 'Zaplanowano zmianę na jutro 08:00–16:00', read: false, created_at: new Date(now.getTime() - 30 * 60000).toISOString() },
-    { id: '2', type: 'task', title: 'Zadanie przydzielone', body: 'Sprawdź nowe zadanie: Uzupełnij magazyn', read: false, created_at: new Date(now.getTime() - 2 * 3600000).toISOString() },
-    { id: '3', type: 'leave', title: 'Urlop zatwierdzony', body: 'Twój wniosek urlopowy 15–20 czerwca został zatwierdzony', read: true, created_at: new Date(now.getTime() - 24 * 3600000).toISOString() },
-    { id: '4', type: 'message', title: 'Nowa wiadomość', body: 'Anna K. wysłała Ci wiadomość', read: true, created_at: new Date(now.getTime() - 48 * 3600000).toISOString() },
-    { id: '5', type: 'system', title: 'Witaj w ShiftApp!', body: 'Twoje konto zostało pomyślnie skonfigurowane.', read: true, created_at: new Date(now.getTime() - 72 * 3600000).toISOString() },
-  ];
-}
-
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const loaded = useRef(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  const load = useCallback(() => {
-    setNotifications(generateMockNotifications());
+  const load = useCallback(async (uid: string) => {
+    const data = await getNotifications(uid);
+    setNotifications(data as AppNotification[]);
   }, []);
 
   useEffect(() => {
-    if (!loaded.current) {
-      loaded.current = true;
-      load();
-    }
+    supabase.auth.getSession().then(({ data }) => {
+      const uid = data.session?.user?.id ?? null;
+      setUserId(uid);
+      if (uid) load(uid);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      const uid = session?.user?.id ?? null;
+      setUserId(uid);
+      if (uid) load(uid);
+      else setNotifications([]);
+    });
+
+    return () => { listener.subscription.unsubscribe(); };
   }, [load]);
 
-  const markAllRead = useCallback(() => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  }, []);
+  useEffect(() => {
+    if (!userId) return;
+
+    channelRef.current = supabase
+      .channel(`notifications:${userId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, (payload) => {
+        setNotifications((prev) => [payload.new as AppNotification, ...prev]);
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, (payload) => {
+        setNotifications((prev) => prev.map((n) => n.id === payload.new.id ? { ...n, ...payload.new } as AppNotification : n));
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, (payload) => {
+        setNotifications((prev) => prev.filter((n) => n.id !== payload.old.id));
+      })
+      .subscribe();
+
+    return () => {
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+    };
+  }, [userId]);
 
   const markRead = useCallback((id: string) => {
     setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n));
+    markNotifRead(id);
   }, []);
 
   const markUnread = useCallback((id: string) => {
     setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: false } : n));
+    markNotifUnread(id);
   }, []);
+
+  const markAllRead = useCallback(() => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    if (userId) markAllNotifsRead(userId);
+  }, [userId]);
 
   const deleteNotification = useCallback((id: string) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
+    deleteNotifDb(id);
   }, []);
 
   const restoreNotification = useCallback((n: AppNotification) => {
@@ -81,10 +109,14 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     });
   }, []);
 
+  const refresh = useCallback(() => {
+    if (userId) load(userId);
+  }, [userId, load]);
+
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
-    <NotificationsContext.Provider value={{ notifications, unreadCount, markAllRead, markRead, markUnread, deleteNotification, restoreNotification, refresh: load }}>
+    <NotificationsContext.Provider value={{ notifications, unreadCount, markAllRead, markRead, markUnread, deleteNotification, restoreNotification, refresh }}>
       {children}
     </NotificationsContext.Provider>
   );

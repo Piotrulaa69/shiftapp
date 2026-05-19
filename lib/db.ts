@@ -71,7 +71,9 @@ export async function createShift(
     .select()
     .single();
   if (error) { console.error('createShift', error); return null; }
-  return data as DbShift;
+  const shift = data as DbShift;
+  notify(restaurantId, shift.employee_id, 'shift', 'Nowa zmiana', `Zaplanowano Ci zmianę na ${shift.day} (${shift.start_time}–${shift.end_time})`, shift.id);
+  return shift;
 }
 
 export async function deleteShift(shiftId: string): Promise<boolean> {
@@ -140,7 +142,11 @@ export async function createTask(
     .select()
     .single();
   if (error) { console.error('createTask', error); return null; }
-  return data as DbTask;
+  const task = data as DbTask;
+  if (task.assigned_to) {
+    notify(restaurantId, task.assigned_to, 'task', 'Nowe zadanie', `Przydzielono Ci zadanie: ${task.title}`, task.id);
+  }
+  return task;
 }
 
 export async function deleteTask(taskId: string): Promise<boolean> {
@@ -433,16 +439,28 @@ export async function createLeaveRequest(
     .select()
     .single();
   if (error) { console.error('createLeaveRequest', error); return null; }
-  return data as DbLeaveRequest;
+  const req = data as DbLeaveRequest;
+  const { data: emp } = await supabase.from('profiles').select('first_name, last_name').eq('id', employeeId).single();
+  const empName = emp ? `${emp.first_name} ${emp.last_name}` : 'Pracownik';
+  notifyManagers(restaurantId, 'leave', 'Nowy wniosek urlopowy', `${empName} złożył wniosek na ${req.date_from}–${req.date_to} (${req.days_count} dni)`, req.id);
+  return req;
 }
 
 export async function reviewLeaveRequest(
   id: string, reviewerId: string, status: 'approved' | 'rejected', comment?: string,
 ): Promise<boolean> {
+  const { data: req } = await supabase.from('leave_requests').select('restaurant_id, employee_id, date_from, date_to').eq('id', id).single();
   const { error } = await supabase
     .from('leave_requests')
     .update({ status, reviewed_by: reviewerId, review_comment: comment ?? null, reviewed_at: new Date().toISOString() })
     .eq('id', id);
+  if (!error && req) {
+    const approved = status === 'approved';
+    notify(req.restaurant_id, req.employee_id, 'leave',
+      approved ? 'Urlop zatwierdzony ✅' : 'Urlop odrzucony',
+      `Twój wniosek urlopowy ${req.date_from}–${req.date_to} został ${approved ? 'zatwierdzony' : 'odrzucony'}.${comment ? ' Powód: ' + comment : ''}`,
+      id);
+  }
   return !error;
 }
 
@@ -471,7 +489,11 @@ export async function createAbsence(
     .select()
     .single();
   if (error) { console.error('createAbsence', error); return null; }
-  return data as DbAbsence;
+  const absence = data as DbAbsence;
+  const { data: emp } = await supabase.from('profiles').select('first_name, last_name').eq('id', fields.employee_id).single();
+  const empName = emp ? `${emp.first_name} ${emp.last_name}` : 'Pracownik';
+  notifyManagers(restaurantId, 'absence', 'Zgłoszenie nieobecności', `${empName} zgłosił nieobecność: ${fields.absence_type}`, absence.id);
+  return absence;
 }
 
 export async function getAbsences(restaurantId: string): Promise<DbAbsence[]> {
@@ -492,7 +514,11 @@ export async function createShiftSwap(
     .select()
     .single();
   if (error) { console.error('createShiftSwap', error); return null; }
-  return data as DbShiftSwap;
+  const swap = data as DbShiftSwap;
+  const { data: req } = await supabase.from('profiles').select('first_name, last_name').eq('id', fields.requester_id).single();
+  const reqName = req ? `${req.first_name} ${req.last_name}` : 'Pracownik';
+  notify(restaurantId, fields.responder_id, 'swap', 'Prośba o wymianę zmiany', `${reqName} prosi Cię o wymianę zmiany.`, swap.id);
+  return swap;
 }
 
 export async function getShiftSwaps(restaurantId: string): Promise<DbShiftSwap[]> {
@@ -502,9 +528,19 @@ export async function getShiftSwaps(restaurantId: string): Promise<DbShiftSwap[]
 }
 
 export async function updateSwapStatus(id: string, status: string, managerId?: string): Promise<boolean> {
+  const { data: swap } = await supabase.from('shift_swaps').select('restaurant_id, requester_id, responder_id').eq('id', id).single();
   const updates: any = { status };
   if (managerId) updates.manager_id = managerId;
   const { error } = await supabase.from('shift_swaps').update(updates).eq('id', id);
+  if (!error && swap) {
+    if (status === 'accepted') {
+      notify(swap.restaurant_id, swap.requester_id, 'swap', 'Wymiana zaakceptowana ✅', 'Twoja prośba o wymianę zmiany została zaakceptowana.', id);
+    } else if (status === 'rejected') {
+      notify(swap.restaurant_id, swap.requester_id, 'swap', 'Wymiana odrzucona', 'Twoja prośba o wymianę zmiany została odrzucona.', id);
+    } else if (status === 'pending_manager') {
+      notifyManagers(swap.restaurant_id, 'swap', 'Wymiana zmiany do zatwierdzenia', 'Pracownicy uzgodnili wymianę zmiany — wymagane zatwierdzenie.', id);
+    }
+  }
   return !error;
 }
 
@@ -700,25 +736,35 @@ export async function getPendingCounts(restaurantId: string): Promise<{
 // ─── Task approval flow ───────────────────────────────────────────────────────
 
 export async function submitTaskForApproval(taskId: string, proofPhotoUrl?: string, proofComment?: string): Promise<boolean> {
+  const { data: task } = await supabase.from('tasks').select('restaurant_id, title, assigned_to').eq('id', taskId).single();
   const { error } = await supabase.from('tasks').update({
     status: 'czeka_na_zatwierdzenie',
     proof_photo_url: proofPhotoUrl ?? null,
     proof_comment: proofComment ?? null,
   }).eq('id', taskId);
+  if (!error && task) {
+    notifyManagers(task.restaurant_id, 'task', 'Zadanie do zatwierdzenia', `Pracownik ukończył zadanie: ${task.title}`, taskId);
+  }
   return !error;
 }
 
 export async function approveTask(
   taskId: string, restaurantId: string, employeeId: string, points: number,
 ): Promise<boolean> {
+  const { data: task } = await supabase.from('tasks').select('title').eq('id', taskId).single();
   const { error } = await supabase.from('tasks').update({ status: 'zatwierdzone', completed: true }).eq('id', taskId);
   if (error) return false;
   if (points > 0) await addPoints(restaurantId, employeeId, points, 'task_completed', taskId, 'Zadanie zatwierdzone');
+  notify(restaurantId, employeeId, 'task', 'Zadanie zatwierdzone ✅', `Twoje zadanie "${task?.title ?? ''}" zostało zatwierdzone. +${points} pkt!`, taskId);
   return true;
 }
 
 export async function rejectTask(taskId: string, comment?: string): Promise<boolean> {
+  const { data: task } = await supabase.from('tasks').select('restaurant_id, title, assigned_to').eq('id', taskId).single();
   const { error } = await supabase.from('tasks').update({ status: 'odrzucone', proof_comment: comment ?? null }).eq('id', taskId);
+  if (!error && task?.assigned_to) {
+    notify(task.restaurant_id, task.assigned_to, 'task', 'Zadanie odrzucone', `Zadanie "${task.title}" zostało odrzucone.${comment ? ' Powód: ' + comment : ''}`, taskId);
+  }
   return !error;
 }
 
@@ -733,6 +779,80 @@ export async function clockInWithPin(
   }
   const ci = await clockIn(restaurantId, shiftId, employeeId, 'pin');
   return ci ? { success: true, clockIn: ci } : { success: false, error: 'Błąd rejestracji' };
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+export type AppNotificationType = 'shift' | 'task' | 'leave' | 'swap' | 'absence' | 'system';
+
+export async function notify(
+  restaurantId: string,
+  userId: string,
+  type: AppNotificationType,
+  title: string,
+  body: string,
+  referenceId?: string,
+): Promise<void> {
+  await supabase.from('notifications').insert({
+    restaurant_id: restaurantId,
+    user_id: userId,
+    type,
+    title,
+    body,
+    reference_id: referenceId ?? null,
+  });
+}
+
+export async function notifyManagers(
+  restaurantId: string,
+  type: AppNotificationType,
+  title: string,
+  body: string,
+  referenceId?: string,
+): Promise<void> {
+  const { data: managers } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('restaurant_id', restaurantId)
+    .in('role', ['owner', 'manager'])
+    .eq('is_active', true);
+  if (!managers?.length) return;
+  await supabase.from('notifications').insert(
+    managers.map((m) => ({
+      restaurant_id: restaurantId,
+      user_id: m.id,
+      type,
+      title,
+      body,
+      reference_id: referenceId ?? null,
+    }))
+  );
+}
+
+export async function getNotifications(userId: string): Promise<any[]> {
+  const { data } = await supabase
+    .from('notifications')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(100);
+  return data ?? [];
+}
+
+export async function markNotifRead(id: string): Promise<void> {
+  await supabase.from('notifications').update({ read: true }).eq('id', id);
+}
+
+export async function markNotifUnread(id: string): Promise<void> {
+  await supabase.from('notifications').update({ read: false }).eq('id', id);
+}
+
+export async function markAllNotifsRead(userId: string): Promise<void> {
+  await supabase.from('notifications').update({ read: true }).eq('user_id', userId).eq('read', false);
+}
+
+export async function deleteNotifDb(id: string): Promise<void> {
+  await supabase.from('notifications').delete().eq('id', id);
 }
 
 // ─── Notification preferences ─────────────────────────────────────────────────
@@ -761,6 +881,14 @@ export async function updateProfile(
 // ─── Absences for manager ─────────────────────────────────────────────────────
 
 export async function reviewAbsence(id: string, reviewerId: string, status: 'approved' | 'rejected'): Promise<boolean> {
+  const { data: absence } = await supabase.from('absences').select('restaurant_id, employee_id, absence_type').eq('id', id).single();
   const { error } = await supabase.from('absences').update({ status, reviewed_by: reviewerId }).eq('id', id);
+  if (!error && absence) {
+    const approved = status === 'approved';
+    notify(absence.restaurant_id, absence.employee_id, 'absence',
+      approved ? 'Nieobecność zatwierdzona' : 'Nieobecność odrzucona',
+      `Twoje zgłoszenie nieobecności (${absence.absence_type}) zostało ${approved ? 'zatwierdzone' : 'odrzucone'}.`,
+      id);
+  }
   return !error;
 }
