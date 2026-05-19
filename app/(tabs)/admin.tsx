@@ -101,6 +101,10 @@ export default function AdminScreen() {
   };
 
   const removeEmp = (empId: string, empName: string) => {
+    if (empId === user?.id) {
+      showAlert('Błąd', 'Nie możesz usunąć własnego konta. Skontaktuj się z właścicielem.');
+      return;
+    }
     showConfirm(
       'Usuń pracownika',
       `Czy na pewno chcesz usunąć ${empName} z zespołu?`,
@@ -337,13 +341,15 @@ export default function AdminScreen() {
                       <Text style={s.empName}>{emp.first_name} {emp.last_name}</Text>
                       <Text style={s.empRole}>{emp.job_title}</Text>
                     </View>
-                    <TouchableOpacity
-                      style={s.removeBtn}
-                      onPress={() => removeEmp(emp.id, `${emp.first_name} ${emp.last_name}`)}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name="person-remove-outline" size={16} color={theme.colors.error} />
-                    </TouchableOpacity>
+                    {emp.id !== user?.id && (
+                      <TouchableOpacity
+                        style={s.removeBtn}
+                        onPress={() => removeEmp(emp.id, `${emp.first_name} ${emp.last_name}`)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="person-remove-outline" size={16} color={theme.colors.error} />
+                      </TouchableOpacity>
+                    )}
                   </View>
                 ))
               )}
