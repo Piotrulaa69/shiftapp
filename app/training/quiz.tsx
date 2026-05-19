@@ -13,6 +13,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../../context/AlertContext';
+import { useAuth } from '../../context/AuthContext';
+import { addPoints, notify } from '../../lib/db';
 import type { QuizQuestion } from '../../lib/quiz-data';
 import { getQuizForTraining } from '../../lib/quiz-data';
 import { supabase } from '../../lib/supabase';
@@ -26,6 +28,7 @@ export default function QuizScreen() {
   }>();
   const router = useRouter();
   const { showSuccess } = useAlert();
+  const { user } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
 
@@ -64,12 +67,21 @@ export default function QuizScreen() {
       setAnswered(false);
     } else {
       setFinished(true);
-      const pct = Math.round(((score + (selected === q.correctIndex ? 1 : 0)) / questions.length) * 100);
+      const finalPct = Math.round(((score + (selected === q.correctIndex ? 1 : 0)) / questions.length) * 100);
+      const passed = finalPct >= 80;
       if (trainingId) {
+        const { data: tr } = await supabase.from('trainings').select('restaurant_id, points, title').eq('id', trainingId).single();
         await supabase
           .from('trainings')
-          .update({ progress_percent: pct, status: pct === 100 ? 'ukonczone' : 'w_toku' })
+          .update({ progress_percent: finalPct, status: passed ? 'ukonczone' : 'w_toku' })
           .eq('id', trainingId);
+        if (passed && tr && user?.id) {
+          const pts = tr.points ?? 0;
+          if (pts > 0) {
+            await addPoints(tr.restaurant_id, user.id, pts, 'training_completed', trainingId, `Szkolenie ukończone: ${tr.title}`);
+          }
+          await notify(tr.restaurant_id, user.id, 'task', 'Szkolenie ukończone! 🎓', `Ukończyłeś szkolenie "${tr.title}" z wynikiem ${finalPct}%.${pts > 0 ? ` +${pts} pkt!` : ''}`, trainingId);
+        }
       }
     }
   };
