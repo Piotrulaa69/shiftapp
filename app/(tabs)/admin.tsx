@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Redirect, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { Redirect, useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import {
     Modal,
     Platform,
@@ -63,7 +63,7 @@ export default function AdminScreen() {
     getAbsences(rid).then(setAbsences);
   };
 
-  useEffect(() => { refresh(); }, [rid]);
+  useFocusEffect(useCallback(() => { refresh(); }, [rid]));
 
   useEffect(() => {
     if (restaurant) {

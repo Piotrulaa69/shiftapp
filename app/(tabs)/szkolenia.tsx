@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileHeader from '../../components/MobileHeader';
@@ -182,11 +182,11 @@ export default function SzkoleniaScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!rid) return;
     setLoading(true);
     getTrainings(rid).then((data) => { setTrainings(data); setLoading(false); });
-  }, [rid]);
+  }, [rid]));
 
   useEffect(() => {
     if (!rid || !user || activeTab !== 'punkty') return;

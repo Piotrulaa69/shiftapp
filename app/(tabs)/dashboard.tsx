@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 import {
     ActivityIndicator,
     Platform,
@@ -77,7 +77,7 @@ export default function DashboardScreen() {
 
   const today = fmt(new Date());
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!rid) return;
     getTasks(rid).then(setTasks);
     if (user?.id) {
@@ -92,7 +92,7 @@ export default function DashboardScreen() {
       getClockIns(rid, today).then(setTodayClockIns);
       getPendingCounts(rid).then(setPendingCounts);
     }
-  }, [rid, user?.id, isManager]);
+  }, [rid, user?.id, isManager]));
 
   const myTasks = isManager ? tasks : tasks.filter((t) => t.assigned_to === user?.id);
   const completedTasks = myTasks.filter((t) => t.completed || t.status === 'zatwierdzone');

@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -577,12 +578,12 @@ export default function ScheduleScreen() {
     ...getPolishHolidays(curYear - 1),
   }), [curYear]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!rid) return;
     setLoading(true);
     Promise.all([getShifts(rid), isOwner ? getEmployees(rid) : Promise.resolve([])])
       .then(([shifts, emps]) => { setAllShifts(shifts); setEmployees(emps); setLoading(false); });
-  }, [rid]);
+  }, [rid, isOwner]));
 
   const handleDeleteShift = useCallback(async (id: string) => {
     setAllShifts((prev) => prev.filter((s) => s.id !== id));

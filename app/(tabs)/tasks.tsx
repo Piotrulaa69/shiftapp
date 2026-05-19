@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileHeader from '../../components/MobileHeader';
@@ -204,7 +204,7 @@ export default function TasksScreen() {
   const [newAssignedTo, setNewAssignedTo] = useState<string>('');
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!rid) return;
     setLoading(true);
     Promise.all([
@@ -215,7 +215,7 @@ export default function TasksScreen() {
       setEmployees(empData);
       setLoading(false);
     });
-  }, [rid]);
+  }, [rid, canApprove]));
 
   const reload = async () => {
     if (!rid) return;
