@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
     Modal,
@@ -25,7 +25,7 @@ const JOB_OPTIONS = ['Kelner', 'Kucharz', 'Barista', 'Lider zmiany', 'Hostessa',
 
 export default function AdminScreen() {
   const router = useRouter();
-  const { user, restaurant, refreshRestaurant } = useAuth();
+  const { user, restaurant, refreshRestaurant, isOwner, isManager } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
   const { showAlert, showConfirm } = useAlert();
@@ -72,6 +72,10 @@ export default function AdminScreen() {
       setRPhone(restaurant.phone ?? '');
     }
   }, [restaurant]);
+
+  if (user && !isOwner && !isManager) {
+    return <Redirect href="/(tabs)/dashboard" />;
+  }
 
   const saveRestaurant = async () => {
     if (!restaurant || !rName.trim()) return;
