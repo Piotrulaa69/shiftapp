@@ -219,10 +219,9 @@ function MobileTabBar({ state, navigation }: BottomTabBarProps) {
   const { isOwner, isManager } = useAuth();
   const isAdmin = isOwner || isManager;
 
-  // For admin: exclude 'admin' from regular tabs (it's in FAB), show 4 base tabs
-  // For employee: show 4 base tabs, FAB = shift-detail, admin tab hidden
+  // 'admin' is always excluded from regular tabs - it goes to FAB for admins, hidden for employees
   const visibleRoutes = state.routes.filter((r) =>
-    r.name in TAB_CONFIG && !(isAdmin && r.name === 'admin')
+    r.name in TAB_CONFIG && r.name !== 'admin'
   );
   const leftRoutes = visibleRoutes.slice(0, 2);
   const rightRoutes = visibleRoutes.slice(2);
