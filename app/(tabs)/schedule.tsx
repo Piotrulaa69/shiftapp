@@ -1077,17 +1077,11 @@ export default function ScheduleScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-              <Text style={mStyles.label}>Data (RRRR-MM-DD)</Text>
-              <TextInput style={mStyles.input} value={newDay} onChangeText={setNewDay} placeholder="2025-01-15" placeholderTextColor={theme.colors.textMuted} />
+              <Text style={mStyles.label}>Data</Text>
+              <DatePickerField value={newDay} onChange={setNewDay} />
               <View style={mStyles.row}>
-                <View style={mStyles.half}>
-                  <Text style={mStyles.label}>Od</Text>
-                  <TextInput style={mStyles.input} value={newStart} onChangeText={setNewStart} placeholder="08:00" placeholderTextColor={theme.colors.textMuted} />
-                </View>
-                <View style={mStyles.half}>
-                  <Text style={mStyles.label}>Do</Text>
-                  <TextInput style={mStyles.input} value={newEnd} onChangeText={setNewEnd} placeholder="16:00" placeholderTextColor={theme.colors.textMuted} />
-                </View>
+                <TimePickerRow label="Godzina od" value={newStart} onChange={setNewStart} />
+                <TimePickerRow label="Godzina do" value={newEnd} onChange={setNewEnd} />
               </View>
               <Text style={mStyles.label}>Lokalizacja</Text>
               <TextInput style={mStyles.input} value={newLocation} onChangeText={setNewLocation} placeholder="Restauracja" placeholderTextColor={theme.colors.textMuted} />

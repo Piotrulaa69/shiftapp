@@ -204,9 +204,9 @@ export default function SzkoleniaScreen() {
   const totalPoints = points.reduce((sum, p) => sum + p.points, 0);
 
   const filtered = activeFilter === 'obowiazkowe'
-    ? trainings.filter((t) => t.category === 'BHP')
+    ? trainings.filter((t) => t.required)
     : activeFilter === 'dla_mnie'
-    ? trainings.filter((t) => t.category === 'Procedury' || t.category === 'Obsługa')
+    ? trainings.filter((t) => !t.assigned_role || t.assigned_role === user?.jobTitle)
     : trainings;
 
   return (

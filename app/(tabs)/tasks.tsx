@@ -276,7 +276,9 @@ export default function TasksScreen() {
   const progress = totalCount > 0 ? completedCount / totalCount : 0;
   const todoCount = tasks.filter((t) => !t.completed).length;
 
-  const empFiltered = selectedEmployeeId
+  const empFiltered = !canApprove
+    ? tasks.filter((t) => t.assigned_to === user?.id)
+    : selectedEmployeeId
     ? tasks.filter((t) => t.assigned_to === selectedEmployeeId)
     : tasks;
 

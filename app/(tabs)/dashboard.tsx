@@ -94,9 +94,10 @@ export default function DashboardScreen() {
     }
   }, [rid, user?.id, isManager]);
 
-  const completedTasks = tasks.filter((t) => t.completed || t.status === 'zatwierdzone');
-  const pendingTasks = tasks.filter((t) => !t.completed && t.status !== 'zatwierdzone').slice(0, 4);
-  const progress = tasks.length > 0 ? completedTasks.length / tasks.length : 0;
+  const myTasks = isManager ? tasks : tasks.filter((t) => t.assigned_to === user?.id);
+  const completedTasks = myTasks.filter((t) => t.completed || t.status === 'zatwierdzone');
+  const pendingTasks = myTasks.filter((t) => !t.completed && t.status !== 'zatwierdzone').slice(0, 4);
+  const progress = myTasks.length > 0 ? completedTasks.length / myTasks.length : 0;
   const totalPending = pendingCounts.leaveRequests + pendingCounts.absences + pendingCounts.swaps + pendingCounts.taskApprovals;
 
   if (!user) return (
@@ -107,7 +108,7 @@ export default function DashboardScreen() {
 
   const STAT_CARDS = [
     { icon: 'time-outline', label: 'Zmiana', iconBg: '#EFF6FF', iconColor: '#2563EB', value: todayShift ? todayShift.start_time : '--:--' },
-    { icon: 'checkmark-done-outline', label: 'Zadania', iconBg: '#F0FDF4', iconColor: '#16A34A', value: `${completedTasks.length}/${tasks.length}` },
+    { icon: 'checkmark-done-outline', label: 'Zadania', iconBg: '#F0FDF4', iconColor: '#16A34A', value: `${completedTasks.length}/${myTasks.length}` },
     { icon: 'trophy-outline', label: 'Punkty', iconBg: '#F5F3FF', iconColor: '#7C3AED', value: String(totalPoints), route: '/(tabs)/szkolenia' },
     { icon: 'cash-outline', label: 'Zarobki', iconBg: '#ECFDF5', iconColor: '#059669', value: '→', route: '/earnings' },
   ];

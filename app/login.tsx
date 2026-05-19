@@ -127,13 +127,6 @@ function buildLoginPortal(showPw: boolean, loading: boolean, err: string) {
         <div class="al-fs">Wprowadź dane, aby uzyskać dostęp do panelu.</div>
       </div>
 
-      <div class="al-socials">
-        <button class="al-soc" data-action="google">${GOOGLE_ICO} Google</button>
-        <button class="al-soc" data-action="apple">${APPLE_ICO} Apple</button>
-      </div>
-
-      <div class="al-divider"><span>Lub</span></div>
-
       <div class="al-fields">
         ${err ? `<div class="al-err">${ERR_ICO}${err}</div>` : ''}
         <div class="al-field"><label class="al-lbl">E-mail</label><input class="al-in" id="al-email" type="email" placeholder="jan@restauracja.pl" autocomplete="email"/></div>
