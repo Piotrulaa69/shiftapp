@@ -325,24 +325,20 @@ export default function TasksScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>Moje Zadania</Text>
           <View style={styles.headerRight}>
-            {(isOwner || isManager) && (
-              <TouchableOpacity style={styles.addBtn} onPress={() => setShowModal(true)} activeOpacity={0.8}>
-                <Ionicons name="add" size={18} color={theme.colors.white} />
-                <Text style={styles.addBtnText}>Nowe zadanie</Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity style={styles.addBtn} onPress={() => setShowModal(true)} activeOpacity={0.8}>
+              <Ionicons name="add" size={18} color={theme.colors.white} />
+              <Text style={styles.addBtnText}>Nowe zadanie</Text>
+            </TouchableOpacity>
           </View>
         </View>
       ) : (
         <MobileHeader
           left={<Text style={styles.title}>Moje Zadania</Text>}
           center={
-            (isOwner || isManager) ? (
-              <TouchableOpacity style={styles.addBtn} onPress={() => setShowModal(true)} activeOpacity={0.8}>
-                <Ionicons name="add" size={18} color={theme.colors.white} />
-                <Text style={styles.addBtnText}>Nowe</Text>
-              </TouchableOpacity>
-            ) : undefined
+            <TouchableOpacity style={styles.addBtn} onPress={() => setShowModal(true)} activeOpacity={0.8}>
+              <Ionicons name="add" size={18} color={theme.colors.white} />
+              <Text style={styles.addBtnText}>Nowe</Text>
+            </TouchableOpacity>
           }
         />
       )}
