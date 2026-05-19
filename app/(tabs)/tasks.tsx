@@ -33,13 +33,14 @@ const TABS_EMPLOYEE: { key: string; label: string }[] = [
 
 const TAB_APPROVAL = { key: 'czeka_na_zatwierdzenie', label: 'Do zatwierdzenia' };
 
-function TaskCard({ task, onToggle, onDelete, onDetail, onStart, onFinish }: {
+function TaskCard({ task, onToggle, onDelete, onDetail, onStart, onFinish, assigneeName }: {
   task: DbTask;
   onToggle: () => void;
   onDelete?: () => void;
   onDetail?: () => void;
   onStart?: () => void;
   onFinish?: () => void;
+  assigneeName?: string;
 }) {
   const p = PRIORITY_CONFIG[task.priority as TaskPriority] ?? PRIORITY_CONFIG.normalny;
   const router = useRouter();
@@ -69,6 +70,12 @@ function TaskCard({ task, onToggle, onDelete, onDetail, onStart, onFinish }: {
             <Ionicons name="timer-outline" size={12} color={theme.colors.textMuted} />
             <Text style={tStyles.durationText}>{task.duration_min} min</Text>
           </View>
+          {assigneeName && (
+            <View style={tStyles.assigneeTag}>
+              <Ionicons name="person-outline" size={11} color={theme.colors.textSecondary} />
+              <Text style={tStyles.assigneeText}>{assigneeName}</Text>
+            </View>
+          )}
           {!task.completed && onStart && !inProgress && (
             <TouchableOpacity
               style={[tStyles.actionBtn, { backgroundColor: theme.colors.primaryLight }]}
@@ -161,6 +168,8 @@ const tStyles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 4,
   },
   actionBtnText: { fontSize: 12, fontWeight: '700' },
+  assigneeTag: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.full, paddingHorizontal: 8, paddingVertical: 3 },
+  assigneeText: { fontSize: 11, fontWeight: '600', color: theme.colors.textSecondary },
 });
 
 const PRIORITIES: Array<'wysoki' | 'normalny' | 'niski'> = ['wysoki', 'normalny', 'niski'];
@@ -192,6 +201,7 @@ export default function TasksScreen() {
   const [newPriority, setNewPriority] = useState<'wysoki' | 'normalny' | 'niski'>('normalny');
   const [newDuration, setNewDuration] = useState('30');
   const [newConfirm, setNewConfirm] = useState<'photo' | 'values' | 'description' | null>(null);
+  const [newAssignedTo, setNewAssignedTo] = useState<string>('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -248,10 +258,11 @@ export default function TasksScreen() {
   const handleCreate = async () => {
     if (!newTitle.trim()) return;
     setSaving(true);
+    const assignTo = newAssignedTo || user?.id || null;
     const created = await createTask(rid, {
       title: newTitle.trim(),
       description: newDesc.trim(),
-      assigned_to: user?.id ?? null,
+      assigned_to: assignTo,
       assigned_time: newTime,
       priority: newPriority,
       duration_min: parseInt(newDuration) || 30,
@@ -260,7 +271,7 @@ export default function TasksScreen() {
     if (created) setTasks((prev) => [...prev, created]);
     setSaving(false);
     setShowModal(false);
-    setNewTitle(''); setNewDesc(''); setNewTime('08:00'); setNewPriority('normalny'); setNewDuration('30'); setNewConfirm(null);
+    setNewTitle(''); setNewDesc(''); setNewTime('08:00'); setNewPriority('normalny'); setNewDuration('30'); setNewConfirm(null); setNewAssignedTo('');
   };
 
   if (loading) return (
@@ -439,9 +450,11 @@ export default function TasksScreen() {
                 <Text style={styles.sectionLabel}>W trakcie</Text>
                 <Text style={styles.sectionCount}>{wTrakcie.length}</Text>
               </View>
-              {wTrakcie.map((t) => (
-                <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} onFinish={() => finishTask(t.id)} />
-              ))}
+              {wTrakcie.map((t) => {
+                const emp = employees.find((e) => e.id === t.assigned_to);
+                const name = emp ? `${emp.first_name} ${emp.last_name}` : undefined;
+                return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} onFinish={() => finishTask(t.id)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} />;
+              })}
             </>
           )}
 
@@ -452,9 +465,11 @@ export default function TasksScreen() {
                 <Text style={styles.sectionLabel}>Do zrobienia</Text>
                 <Text style={styles.sectionCount}>{doZrobienia.length}</Text>
               </View>
-              {doZrobienia.map((t) => (
-                <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} onStart={() => startTask(t.id)} />
-              ))}
+              {doZrobienia.map((t) => {
+                const emp = employees.find((e) => e.id === t.assigned_to);
+                const name = emp ? `${emp.first_name} ${emp.last_name}` : undefined;
+                return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} onStart={() => startTask(t.id)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} />;
+              })}
             </>
           )}
 
@@ -465,9 +480,11 @@ export default function TasksScreen() {
                 <Text style={styles.sectionLabel}>Zamknięte</Text>
                 <Text style={styles.sectionCount}>{zamkniete.length}</Text>
               </View>
-              {zamkniete.map((t) => (
-                <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} />
-              ))}
+              {zamkniete.map((t) => {
+                const emp = employees.find((e) => e.id === t.assigned_to);
+                const name = emp ? `${emp.first_name} ${emp.last_name}` : undefined;
+                return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} />;
+              })}
             </>
           )}
 
@@ -542,6 +559,25 @@ export default function TasksScreen() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={mStyles.body}>
+              {canApprove && employees.length > 0 && (
+                <>
+                  <Text style={mStyles.label}>Przypisz do *</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
+                    {employees.map((e) => {
+                      const active = newAssignedTo === e.id;
+                      const initials = `${e.first_name?.[0] ?? ''}${e.last_name?.[0] ?? ''}`.toUpperCase();
+                      return (
+                        <TouchableOpacity key={e.id} style={[mStyles.empChipModal, active && mStyles.empChipModalActive]} onPress={() => setNewAssignedTo(e.id)} activeOpacity={0.75}>
+                          <View style={[mStyles.empAvatarSmall, { backgroundColor: active ? theme.colors.primary : (e.avatar_color ?? theme.colors.primary) }]}>
+                            <Text style={mStyles.empAvatarSmallText}>{initials}</Text>
+                          </View>
+                          <Text style={[mStyles.empChipModalText, active && mStyles.empChipModalTextActive]} numberOfLines={1}>{e.first_name} {e.last_name}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </>
+              )}
               <Text style={mStyles.label}>Tytuł *</Text>
               <TextInput style={mStyles.input} value={newTitle} onChangeText={setNewTitle} placeholder="np. Przygotowanie sali" placeholderTextColor={theme.colors.textMuted} />
 
@@ -836,4 +872,10 @@ const mStyles = StyleSheet.create({
   saveBtn: { flex: 2, height: 50, borderRadius: theme.borderRadius.md, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center' },
   saveBtnDisabled: { opacity: 0.5 },
   saveText: { fontSize: 15, fontWeight: '700', color: theme.colors.white },
+  empChipModal: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
+  empChipModalActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primaryLight },
+  empAvatarSmall: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  empAvatarSmallText: { fontSize: 10, fontWeight: '700', color: theme.colors.white },
+  empChipModalText: { fontSize: 13, fontWeight: '500', color: theme.colors.textSecondary },
+  empChipModalTextActive: { color: theme.colors.primary, fontWeight: '600' },
 });
