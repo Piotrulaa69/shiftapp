@@ -121,6 +121,7 @@ export type DbTraining = {
   material_type: 'pdf' | 'video' | null;
   assigned_to: string | null;
   assigned_role: string | null;
+  assigned_roles: string[];
   deadline: string | null;
   created_at: string;
 };

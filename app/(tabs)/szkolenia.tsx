@@ -213,11 +213,16 @@ export default function SzkoleniaScreen() {
   const requiredCount = trainings.filter((t) => t.required && t.status !== 'ukonczone').length;
   const totalPoints = points.reduce((sum, p) => sum + p.points, 0);
 
+  const visible = trainings.filter((t) => {
+    const roles = t.assigned_roles ?? [];
+    return roles.length === 0 || roles.includes(user?.jobTitle ?? '');
+  });
+
   const filtered = activeFilter === 'obowiazkowe'
-    ? trainings.filter((t) => t.required)
+    ? visible.filter((t) => t.required)
     : activeFilter === 'dla_mnie'
-    ? trainings.filter((t) => !t.assigned_role || t.assigned_role === user?.jobTitle)
-    : trainings;
+    ? visible.filter((t) => t.required || t.status !== 'ukonczone')
+    : visible;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>

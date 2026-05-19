@@ -176,7 +176,7 @@ export async function createTraining(
     points: number;
     material_url: string | null;
     material_type: 'pdf' | 'video' | null;
-    assigned_role: string | null;
+    assigned_roles: string[];
     deadline: string | null;
   }
 ): Promise<DbTraining | null> {
@@ -205,7 +205,7 @@ export async function updateTraining(
     points: number;
     material_url: string | null;
     material_type: 'pdf' | 'video' | null;
-    assigned_role: string | null;
+    assigned_roles: string[];
     deadline: string | null;
   }>
 ): Promise<boolean> {

@@ -17,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileHeader from '../../components/MobileHeader';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
-import { createQuizQuestion, createTraining, DbQuizQuestion, deleteQuizQuestion, deleteTraining, generateInvitation, getAbsences, getEmployees, getInvitations, getLeaveRequests, getQuizQuestions, getTrainings, removeEmployee, reviewAbsence, reviewLeaveRequest, updateRestaurant, updateTraining } from '../../lib/db';
+import { createQuizQuestion, createTraining, deleteQuizQuestion, deleteTraining, generateInvitation, getAbsences, getEmployees, getInvitations, getLeaveRequests, getQuizQuestions, getTrainings, removeEmployee, reviewAbsence, reviewLeaveRequest, updateRestaurant, updateTraining } from '../../lib/db';
 import type { DbAbsence, DbInvitation, DbLeaveRequest, DbProfile, DbTraining } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
@@ -49,45 +49,23 @@ export default function AdminScreen() {
   const [rSaved, setRSaved] = useState(false);
 
   // Training modal state
-  const EMPTY_TRAINING = { title: '', category: 'BHP', duration_min: '30', required: false, points: '50', material_url: '', material_type: null as 'pdf' | 'video' | null, assigned_role: '', deadline: '' };
+  const EMPTY_TRAINING = { title: '', category: 'BHP', duration_min: '30', required: false, points: '50', material_url: '', material_type: null as 'pdf' | 'video' | null, assigned_roles: [] as string[], deadline: '' };
+  const EMPTY_QDRAFT = { question: '', options: ['', '', '', ''], correct_index: 0, explanation: '' };
   const [showTrainingModal, setShowTrainingModal] = useState(false);
   const [editingTraining, setEditingTraining] = useState<DbTraining | null>(null);
   const [tForm, setTForm] = useState(EMPTY_TRAINING);
+  const [hasQuiz, setHasQuiz] = useState(false);
+  const [pendingQs, setPendingQs] = useState<Array<{ question: string; options: string[]; correct_index: number; explanation: string }>>([]);
+  const [qDraft, setQDraft] = useState(EMPTY_QDRAFT);
+  const [addingQDraft, setAddingQDraft] = useState(false);
 
-  // Quiz questions modal state
-  const [showQModal, setShowQModal] = useState(false);
-  const [qTraining, setQTraining] = useState<DbTraining | null>(null);
-  const [quizQs, setQuizQs] = useState<DbQuizQuestion[]>([]);
-  const EMPTY_Q = { question: '', options: ['', '', '', ''], correct_index: 0, explanation: '' };
-  const [qForm, setQForm] = useState(EMPTY_Q);
-  const [addingQ, setAddingQ] = useState(false);
+  const ALL_ROLES = ['Kelner', 'Kucharz', 'Barista', 'Lider zmiany', 'Hostessa', 'Pizzaiolo', 'Sprzątanie'];
 
-  const openQuestionsModal = async (tr: DbTraining) => {
-    setQTraining(tr);
-    const qs = await getQuizQuestions(tr.id);
-    setQuizQs(qs);
-    setQForm(EMPTY_Q);
-    setAddingQ(false);
-    setShowQModal(true);
-  };
-
-  const saveQuestion = async () => {
-    if (!qForm.question.trim()) { showAlert('Błąd', 'Wpisz treść pytania'); return; }
-    if (qForm.options.some((o) => !o.trim())) { showAlert('Błąd', 'Wypełnij wszystkie 4 odpowiedzi'); return; }
-    if (!qTraining || !rid) return;
-    const q = await createQuizQuestion(rid, qTraining.id, {
-      question: qForm.question.trim(),
-      options: qForm.options.map((o) => o.trim()),
-      correct_index: qForm.correct_index,
-      explanation: qForm.explanation.trim() || undefined,
-      sort_order: quizQs.length,
+  const toggleRole = (role: string) => {
+    setTForm((f) => {
+      const roles = f.assigned_roles;
+      return { ...f, assigned_roles: roles.includes(role) ? roles.filter((r) => r !== role) : [...roles, role] };
     });
-    if (q) { setQuizQs((prev) => [...prev, q]); setQForm(EMPTY_Q); setAddingQ(false); }
-  };
-
-  const deleteQuestion = async (id: string) => {
-    await deleteQuizQuestion(id);
-    setQuizQs((prev) => prev.filter((q) => q.id !== id));
   };
 
   const refresh = () => {
@@ -157,10 +135,14 @@ export default function AdminScreen() {
   const openNewTraining = () => {
     setEditingTraining(null);
     setTForm(EMPTY_TRAINING);
+    setHasQuiz(false);
+    setPendingQs([]);
+    setQDraft(EMPTY_QDRAFT);
+    setAddingQDraft(false);
     setShowTrainingModal(true);
   };
 
-  const openEditTraining = (tr: DbTraining) => {
+  const openEditTraining = async (tr: DbTraining) => {
     setEditingTraining(tr);
     setTForm({
       title: tr.title,
@@ -170,14 +152,21 @@ export default function AdminScreen() {
       points: String(tr.points),
       material_url: tr.material_url ?? '',
       material_type: tr.material_type,
-      assigned_role: tr.assigned_role ?? '',
+      assigned_roles: tr.assigned_roles ?? [],
       deadline: tr.deadline ?? '',
     });
+    const existingQs = await getQuizQuestions(tr.id);
+    const mapped = existingQs.map((q) => ({ question: q.question, options: q.options, correct_index: q.correct_index, explanation: q.explanation ?? '' }));
+    setPendingQs(mapped);
+    setHasQuiz(mapped.length > 0);
+    setQDraft(EMPTY_QDRAFT);
+    setAddingQDraft(false);
     setShowTrainingModal(true);
   };
 
   const saveTraining = async () => {
     if (!tForm.title.trim()) { showAlert('Błąd', 'Podaj tytuł szkolenia'); return; }
+    if (addingQDraft) { showAlert('Uwaga', 'Dokończ dodawanie pytania lub kliknij Anuluj'); return; }
     const payload = {
       title: tForm.title.trim(),
       category: tForm.category,
@@ -186,13 +175,17 @@ export default function AdminScreen() {
       points: parseInt(tForm.points) || 0,
       material_url: tForm.material_url.trim() || null,
       material_type: tForm.material_type,
-      assigned_role: tForm.assigned_role.trim() || null,
+      assigned_roles: tForm.assigned_roles,
       deadline: tForm.deadline.trim() || null,
     };
     if (editingTraining) {
       await updateTraining(editingTraining.id, payload);
+      const oldQs = await getQuizQuestions(editingTraining.id);
+      for (const oq of oldQs) await deleteQuizQuestion(oq.id);
+      if (hasQuiz) for (let i = 0; i < pendingQs.length; i++) await createQuizQuestion(rid, editingTraining.id, { ...pendingQs[i], sort_order: i });
     } else {
-      await createTraining(rid, payload);
+      const newTr = await createTraining(rid, payload);
+      if (newTr && hasQuiz) for (let i = 0; i < pendingQs.length; i++) await createQuizQuestion(rid, newTr.id, { ...pendingQs[i], sort_order: i });
     }
     setShowTrainingModal(false);
     refresh();
@@ -550,9 +543,6 @@ export default function AdminScreen() {
                       <Text style={s.trTitle} numberOfLines={1}>{tr.title}</Text>
                       <Text style={s.trMeta}>{tr.category} · {tr.duration_min} min · {tr.points} pkt{tr.required ? ' · Obowiązkowe' : ''}</Text>
                     </View>
-                    <TouchableOpacity style={[s.trEditBtn, { backgroundColor: theme.colors.surface }]} onPress={() => openQuestionsModal(tr)} activeOpacity={0.7}>
-                      <Ionicons name="help-circle-outline" size={16} color={theme.colors.primary} />
-                    </TouchableOpacity>
                     <TouchableOpacity style={s.trEditBtn} onPress={() => openEditTraining(tr)} activeOpacity={0.7}>
                       <Ionicons name="create-outline" size={16} color={theme.colors.primary} />
                     </TouchableOpacity>
@@ -695,205 +685,225 @@ export default function AdminScreen() {
         <View style={s.mOverlay}>
           <View style={[s.mSheet, isDesktop && s.mSheetDesktop]}>
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+              {/* Header */}
               <View style={s.mHeader}>
-                <Text style={s.mTitle}>{editingTraining ? 'Edytuj szkolenie' : 'Nowe szkolenie'}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.mTitle}>{editingTraining ? 'Edytuj szkolenie' : 'Nowe szkolenie'}</Text>
+                  <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 2 }}>
+                    {editingTraining ? 'Zmiany zostan\u0105 od razu zapisane' : 'Uzupe\u0142nij poni\u017csze sekcje'}
+                  </Text>
+                </View>
                 <TouchableOpacity onPress={() => setShowTrainingModal(false)}>
                   <Ionicons name="close" size={24} color={theme.colors.text} />
                 </TouchableOpacity>
               </View>
 
               <View style={s.mBody}>
-                <Text style={s.mLabel}>Tytuł *</Text>
-                <TextInput
-                  style={s.mInput}
-                  value={tForm.title}
-                  onChangeText={(v) => setTForm((f) => ({ ...f, title: v }))}
-                  placeholder="np. Obsługa kasy fiskalnej"
-                  placeholderTextColor={theme.colors.textMuted}
-                />
 
-                <Text style={s.mLabel}>Kategoria</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
-                  <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 4 }}>
-                    {['BHP', 'Obsługa', 'Procedury', 'Jakość', 'Sprzedaż', 'Inne'].map((cat) => (
-                      <TouchableOpacity
-                        key={cat}
-                        style={[s.chip, tForm.category === cat && s.chipActive]}
-                        onPress={() => setTForm((f) => ({ ...f, category: cat }))}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={[s.chipText, tForm.category === cat && s.chipTextActive]}>{cat}</Text>
+                {/* ── SEKCJA 1: PODSTAWOWE ── */}
+                <View style={tm.section}>
+                  <View style={tm.sectionHeader}>
+                    <View style={[tm.sectionDot, { backgroundColor: theme.colors.primary }]} />
+                    <Text style={tm.sectionLabel}>PODSTAWOWE INFO</Text>
+                  </View>
+
+                  <Text style={s.mLabel}>Tytu\u0142 *</Text>
+                  <TextInput style={s.mInput} value={tForm.title} onChangeText={(v) => setTForm((f) => ({ ...f, title: v }))} placeholder="np. Obs\u0142uga kasy fiskalnej" placeholderTextColor={theme.colors.textMuted} />
+
+                  <Text style={s.mLabel}>Kategoria</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
+                    <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 4 }}>
+                      {['BHP', 'Obs\u0142uga', 'Procedury', 'Kuchnia', 'Jako\u015b\u0107', 'Sprzeda\u017c', 'Inne'].map((cat) => (
+                        <TouchableOpacity key={cat} style={[s.chip, tForm.category === cat && s.chipActive]} onPress={() => setTForm((f) => ({ ...f, category: cat }))} activeOpacity={0.7}>
+                          <Text style={[s.chipText, tForm.category === cat && s.chipTextActive]}>{cat}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </ScrollView>
+
+                  <View style={{ flexDirection: 'row', gap: 12 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.mLabel}>Czas (min)</Text>
+                      <TextInput style={s.mInput} value={tForm.duration_min} onChangeText={(v) => setTForm((f) => ({ ...f, duration_min: v }))} keyboardType="numeric" placeholder="30" placeholderTextColor={theme.colors.textMuted} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.mLabel}>Punkty XP</Text>
+                      <TextInput style={s.mInput} value={tForm.points} onChangeText={(v) => setTForm((f) => ({ ...f, points: v }))} keyboardType="numeric" placeholder="50" placeholderTextColor={theme.colors.textMuted} />
+                    </View>
+                  </View>
+
+                  <Text style={s.mLabel}>Link do materia\u0142u (opcjonalnie)</Text>
+                  <TextInput style={s.mInput} value={tForm.material_url} onChangeText={(v) => setTForm((f) => ({ ...f, material_url: v }))} placeholder="https://..." placeholderTextColor={theme.colors.textMuted} autoCapitalize="none" keyboardType="url" />
+
+                  <Text style={s.mLabel}>Typ materia\u0142u</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 4 }}>
+                    {(['pdf', 'video', null] as const).map((mt) => (
+                      <TouchableOpacity key={String(mt)} style={[s.chip, tForm.material_type === mt && s.chipActive]} onPress={() => setTForm((f) => ({ ...f, material_type: mt }))} activeOpacity={0.7}>
+                        <Text style={[s.chipText, tForm.material_type === mt && s.chipTextActive]}>{mt === 'pdf' ? 'PDF' : mt === 'video' ? 'Video' : 'Brak'}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
-                </ScrollView>
-
-                <View style={{ flexDirection: 'row', gap: 12 }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.mLabel}>Czas (min)</Text>
-                    <TextInput
-                      style={s.mInput}
-                      value={tForm.duration_min}
-                      onChangeText={(v) => setTForm((f) => ({ ...f, duration_min: v }))}
-                      keyboardType="numeric"
-                      placeholder="30"
-                      placeholderTextColor={theme.colors.textMuted}
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.mLabel}>Punkty XP</Text>
-                    <TextInput
-                      style={s.mInput}
-                      value={tForm.points}
-                      onChangeText={(v) => setTForm((f) => ({ ...f, points: v }))}
-                      keyboardType="numeric"
-                      placeholder="50"
-                      placeholderTextColor={theme.colors.textMuted}
-                    />
-                  </View>
                 </View>
 
-                <Text style={s.mLabel}>Dla stanowiska (opcjonalnie)</Text>
-                <TextInput
-                  style={s.mInput}
-                  value={tForm.assigned_role}
-                  onChangeText={(v) => setTForm((f) => ({ ...f, assigned_role: v }))}
-                  placeholder="np. Kelner, Kucharz — zostaw puste dla wszystkich"
-                  placeholderTextColor={theme.colors.textMuted}
-                />
+                {/* ── SEKCJA 2: DLA KOGO ── */}
+                <View style={tm.section}>
+                  <View style={tm.sectionHeader}>
+                    <View style={[tm.sectionDot, { backgroundColor: '#8B5CF6' }]} />
+                    <Text style={tm.sectionLabel}>DLA KOGO</Text>
+                  </View>
+                  <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginBottom: 10 }}>
+                    Zaznacz stanowiska — puste = widoczne dla wszystkich
+                  </Text>
 
-                <Text style={s.mLabel}>Link do materiału (opcjonalnie)</Text>
-                <TextInput
-                  style={s.mInput}
-                  value={tForm.material_url}
-                  onChangeText={(v) => setTForm((f) => ({ ...f, material_url: v }))}
-                  placeholder="https://..."
-                  placeholderTextColor={theme.colors.textMuted}
-                  autoCapitalize="none"
-                  keyboardType="url"
-                />
-
-                <Text style={s.mLabel}>Typ materiału</Text>
-                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 4 }}>
-                  {(['pdf', 'video', null] as const).map((mt) => (
+                  <View style={tm.rolesWrap}>
                     <TouchableOpacity
-                      key={String(mt)}
-                      style={[s.chip, tForm.material_type === mt && s.chipActive]}
-                      onPress={() => setTForm((f) => ({ ...f, material_type: mt }))}
+                      style={[tm.roleChip, tForm.assigned_roles.length === 0 && tm.roleChipActive]}
+                      onPress={() => setTForm((f) => ({ ...f, assigned_roles: [] }))}
                       activeOpacity={0.7}
                     >
-                      <Text style={[s.chipText, tForm.material_type === mt && s.chipTextActive]}>{mt ?? 'Brak'}</Text>
+                      <Ionicons name="people" size={13} color={tForm.assigned_roles.length === 0 ? '#fff' : theme.colors.textSecondary} />
+                      <Text style={[tm.roleChipText, tForm.assigned_roles.length === 0 && tm.roleChipTextActive]}>Wszyscy</Text>
                     </TouchableOpacity>
-                  ))}
-                </View>
-
-                <Text style={s.mLabel}>Termin (YYYY-MM-DD, opcjonalnie)</Text>
-                <TextInput
-                  style={s.mInput}
-                  value={tForm.deadline}
-                  onChangeText={(v) => setTForm((f) => ({ ...f, deadline: v }))}
-                  placeholder="np. 2025-12-31"
-                  placeholderTextColor={theme.colors.textMuted}
-                />
-
-                <TouchableOpacity
-                  style={[s.chip, tForm.required && s.chipActive, { alignSelf: 'flex-start', marginBottom: 4 }]}
-                  onPress={() => setTForm((f) => ({ ...f, required: !f.required }))}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[s.chipText, tForm.required && s.chipTextActive]}>
-                    {tForm.required ? '✓ Obowiązkowe' : 'Obowiązkowe?'}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={[s.inviteBtn, { marginTop: 12 }]} onPress={saveTraining} activeOpacity={0.85}>
-                  <Ionicons name={editingTraining ? 'save-outline' : 'add-circle-outline'} size={20} color={theme.colors.white} />
-                  <Text style={s.inviteBtnText}>{editingTraining ? 'Zapisz zmiany' : 'Dodaj szkolenie'}</Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ─── QUIZ QUESTIONS MODAL ─── */}
-      <Modal visible={showQModal} animationType="fade" transparent onRequestClose={() => setShowQModal(false)}>
-        <View style={s.mOverlay}>
-          <View style={[s.mSheet, isDesktop && s.mSheetDesktop]}>
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              <View style={s.mHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.mTitle}>Pytania quizowe</Text>
-                  <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 2 }}>{qTraining?.title}</Text>
-                </View>
-                <TouchableOpacity onPress={() => setShowQModal(false)}>
-                  <Ionicons name="close" size={24} color={theme.colors.text} />
-                </TouchableOpacity>
-              </View>
-
-              <View style={{ padding: 16, gap: 12 }}>
-                {quizQs.length === 0 && !addingQ && (
-                  <View style={s.emptyState}>
-                    <Ionicons name="help-circle-outline" size={36} color={theme.colors.border} />
-                    <Text style={s.emptyText}>Brak pytań</Text>
-                    <Text style={s.emptySub}>Dodaj pytania do tego szkolenia</Text>
-                  </View>
-                )}
-
-                {quizQs.map((q, i) => (
-                  <View key={q.id} style={{ backgroundColor: theme.colors.surface, borderRadius: 12, padding: 12, gap: 6 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-                      <View style={{ backgroundColor: theme.colors.primaryLight, borderRadius: 6, width: 22, height: 22, alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
-                        <Text style={{ fontSize: 11, fontWeight: '800', color: theme.colors.primary }}>{i + 1}</Text>
-                      </View>
-                      <Text style={{ flex: 1, fontSize: 13, fontWeight: '600', color: theme.colors.text }}>{q.question}</Text>
-                      <TouchableOpacity onPress={() => deleteQuestion(q.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <Ionicons name="trash-outline" size={16} color={theme.colors.error} />
-                      </TouchableOpacity>
-                    </View>
-                    {q.options.map((opt, oi) => (
-                      <View key={oi} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 30 }}>
-                        <Ionicons name={oi === q.correct_index ? 'checkmark-circle' : 'ellipse-outline'} size={14} color={oi === q.correct_index ? theme.colors.green : theme.colors.textMuted} />
-                        <Text style={{ fontSize: 12, color: oi === q.correct_index ? theme.colors.green : theme.colors.textSecondary, fontWeight: oi === q.correct_index ? '700' : '400' }}>{opt}</Text>
-                      </View>
-                    ))}
-                  </View>
-                ))}
-
-                {addingQ ? (
-                  <View style={{ backgroundColor: theme.colors.card, borderRadius: 12, padding: 14, gap: 10, borderWidth: 1, borderColor: theme.colors.primary + '40' }}>
-                    <Text style={s.mLabel}>Treść pytania *</Text>
-                    <TextInput style={s.mInput} value={qForm.question} onChangeText={(v) => setQForm((f) => ({ ...f, question: v }))} placeholder="Wpisz pytanie..." placeholderTextColor={theme.colors.textMuted} multiline />
-
-                    <Text style={s.mLabel}>Odpowiedzi (zaznacz poprawną)</Text>
-                    {qForm.options.map((opt, oi) => (
-                      <View key={oi} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <TouchableOpacity onPress={() => setQForm((f) => ({ ...f, correct_index: oi }))} style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: oi === qForm.correct_index ? theme.colors.primary : theme.colors.border, backgroundColor: oi === qForm.correct_index ? theme.colors.primary : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
-                          {oi === qForm.correct_index && <Ionicons name="checkmark" size={13} color="#fff" />}
+                    {ALL_ROLES.map((role) => {
+                      const active = tForm.assigned_roles.includes(role);
+                      return (
+                        <TouchableOpacity key={role} style={[tm.roleChip, active && tm.roleChipActive]} onPress={() => toggleRole(role)} activeOpacity={0.7}>
+                          <Text style={[tm.roleChipText, active && tm.roleChipTextActive]}>{role}</Text>
                         </TouchableOpacity>
-                        <TextInput style={[s.mInput, { flex: 1, marginBottom: 0 }]} value={opt} onChangeText={(v) => setQForm((f) => { const opts = [...f.options]; opts[oi] = v; return { ...f, options: opts }; })} placeholder={`Odpowiedź ${String.fromCharCode(65 + oi)}`} placeholderTextColor={theme.colors.textMuted} />
-                      </View>
-                    ))}
-
-                    <Text style={s.mLabel}>Wyjaśnienie (opcjonalne)</Text>
-                    <TextInput style={s.mInput} value={qForm.explanation} onChangeText={(v) => setQForm((f) => ({ ...f, explanation: v }))} placeholder="Dlaczego ta odpowiedź jest poprawna?" placeholderTextColor={theme.colors.textMuted} />
-
-                    <View style={{ flexDirection: 'row', gap: 8 }}>
-                      <TouchableOpacity style={[s.inviteBtn, { flex: 1 }]} onPress={saveQuestion} activeOpacity={0.85}>
-                        <Ionicons name="checkmark" size={18} color="#fff" />
-                        <Text style={s.inviteBtnText}>Dodaj pytanie</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={{ paddingHorizontal: 16, justifyContent: 'center', borderWidth: 1, borderColor: theme.colors.border, borderRadius: 10 }} onPress={() => setAddingQ(false)} activeOpacity={0.7}>
-                        <Text style={{ fontSize: 13, color: theme.colors.textMuted }}>Anuluj</Text>
-                      </TouchableOpacity>
-                    </View>
+                      );
+                    })}
                   </View>
-                ) : (
-                  <TouchableOpacity style={[s.inviteBtn, { backgroundColor: theme.colors.surface, borderWidth: 1.5, borderColor: theme.colors.primary, borderStyle: 'dashed' }]} onPress={() => setAddingQ(true)} activeOpacity={0.85}>
-                    <Ionicons name="add-circle-outline" size={20} color={theme.colors.primary} />
-                    <Text style={[s.inviteBtnText, { color: theme.colors.primary }]}>Dodaj pytanie</Text>
+
+                  <TouchableOpacity
+                    style={[tm.requiredToggle, tForm.required && tm.requiredToggleActive]}
+                    onPress={() => setTForm((f) => ({ ...f, required: !f.required }))}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[tm.requiredDot, tForm.required && { backgroundColor: theme.colors.error }]} />
+                    <Text style={[tm.requiredText, tForm.required && { color: theme.colors.error, fontWeight: '700' }]}>
+                      {tForm.required ? 'Obowi\u0105zkowe szkolenie' : 'Opcjonalne szkolenie'}
+                    </Text>
+                    <Ionicons name={tForm.required ? 'alert-circle' : 'checkmark-circle-outline'} size={16} color={tForm.required ? theme.colors.error : theme.colors.textMuted} />
                   </TouchableOpacity>
-                )}
+                </View>
+
+                {/* ── SEKCJA 3: QUIZ ── */}
+                <View style={tm.section}>
+                  <View style={tm.sectionHeader}>
+                    <View style={[tm.sectionDot, { backgroundColor: '#F97316' }]} />
+                    <Text style={tm.sectionLabel}>PYTANIA QUIZOWE</Text>
+                  </View>
+                  <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginBottom: 10 }}>
+                    Pracownicy odpowiadaj\u0105 na pytania po przegl\u0105dni\u0119ciu materia\u0142\u00f3w
+                  </Text>
+
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 4 }}>
+                    <TouchableOpacity
+                      style={[tm.quizToggle, !hasQuiz && tm.quizToggleInactive]}
+                      onPress={() => { setHasQuiz(false); setPendingQs([]); setAddingQDraft(false); }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="close-circle-outline" size={16} color={!hasQuiz ? theme.colors.textSecondary : theme.colors.textMuted} />
+                      <Text style={[tm.quizToggleText, !hasQuiz && { color: theme.colors.text, fontWeight: '700' }]}>Bez quizu</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[tm.quizToggle, hasQuiz && tm.quizToggleActive]}
+                      onPress={() => setHasQuiz(true)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="help-circle" size={16} color={hasQuiz ? '#fff' : theme.colors.textMuted} />
+                      <Text style={[tm.quizToggleText, hasQuiz && { color: '#fff', fontWeight: '700' }]}>Dodaj quiz</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {hasQuiz && (
+                    <View style={{ marginTop: 8, gap: 8 }}>
+                      {pendingQs.map((q, i) => (
+                        <View key={i} style={tm.qCard}>
+                          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
+                            <View style={tm.qNum}><Text style={tm.qNumText}>{i + 1}</Text></View>
+                            <Text style={{ flex: 1, fontSize: 13, fontWeight: '600', color: theme.colors.text }}>{q.question}</Text>
+                            <TouchableOpacity onPress={() => setPendingQs((prev) => prev.filter((_, idx) => idx !== i))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                              <Ionicons name="trash-outline" size={15} color={theme.colors.error} />
+                            </TouchableOpacity>
+                          </View>
+                          {q.options.map((opt, oi) => (
+                            <View key={oi} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 30, marginBottom: 2 }}>
+                              <Ionicons name={oi === q.correct_index ? 'checkmark-circle' : 'ellipse-outline'} size={13} color={oi === q.correct_index ? theme.colors.green : theme.colors.textMuted} />
+                              <Text style={{ fontSize: 12, color: oi === q.correct_index ? theme.colors.green : theme.colors.textSecondary, fontWeight: oi === q.correct_index ? '700' : '400' }}>{opt}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      ))}
+
+                      {addingQDraft ? (
+                        <View style={tm.qDraftCard}>
+                          <Text style={[s.mLabel, { marginBottom: 6 }]}>Tre\u015b\u0107 pytania *</Text>
+                          <TextInput style={[s.mInput, { minHeight: 60 }]} value={qDraft.question} onChangeText={(v) => setQDraft((f) => ({ ...f, question: v }))} placeholder="Wpisz pytanie..." placeholderTextColor={theme.colors.textMuted} multiline />
+
+                          <Text style={[s.mLabel, { marginTop: 4 }]}>Odpowiedzi — kliknij k\u00f3\u0142ko \u017ceby zaznaczy\u0107 poprawn\u0105</Text>
+                          {qDraft.options.map((opt, oi) => (
+                            <View key={oi} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                              <TouchableOpacity
+                                onPress={() => setQDraft((f) => ({ ...f, correct_index: oi }))}
+                                style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: oi === qDraft.correct_index ? theme.colors.green : theme.colors.border, backgroundColor: oi === qDraft.correct_index ? theme.colors.green : 'transparent', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                              >
+                                {oi === qDraft.correct_index && <Ionicons name="checkmark" size={13} color="#fff" />}
+                              </TouchableOpacity>
+                              <TextInput
+                                style={[s.mInput, { flex: 1, marginBottom: 0 }]}
+                                value={opt}
+                                onChangeText={(v) => setQDraft((f) => { const opts = [...f.options]; opts[oi] = v; return { ...f, options: opts }; })}
+                                placeholder={`Odpowied\u017a ${String.fromCharCode(65 + oi)}`}
+                                placeholderTextColor={theme.colors.textMuted}
+                              />
+                            </View>
+                          ))}
+
+                          <Text style={[s.mLabel, { marginTop: 4 }]}>Wyja\u015bnienie (opcjonalne)</Text>
+                          <TextInput style={s.mInput} value={qDraft.explanation} onChangeText={(v) => setQDraft((f) => ({ ...f, explanation: v }))} placeholder="Dlaczego ta odpowied\u017a jest poprawna?" placeholderTextColor={theme.colors.textMuted} />
+
+                          <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                            <TouchableOpacity
+                              style={[s.inviteBtn, { flex: 1 }]}
+                              onPress={() => {
+                                if (!qDraft.question.trim()) { showAlert('B\u0142\u0105d', 'Wpisz tre\u015b\u0107 pytania'); return; }
+                                if (qDraft.options.some((o) => !o.trim())) { showAlert('B\u0142\u0105d', 'Wype\u0142nij wszystkie 4 odpowiedzi'); return; }
+                                setPendingQs((prev) => [...prev, { ...qDraft, options: qDraft.options.map((o) => o.trim()) }]);
+                                setQDraft(EMPTY_QDRAFT);
+                                setAddingQDraft(false);
+                              }}
+                              activeOpacity={0.85}
+                            >
+                              <Ionicons name="checkmark-circle" size={18} color="#fff" />
+                              <Text style={s.inviteBtnText}>Dodaj pytanie</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={{ paddingHorizontal: 16, justifyContent: 'center', borderWidth: 1, borderColor: theme.colors.border, borderRadius: 10 }} onPress={() => { setQDraft(EMPTY_QDRAFT); setAddingQDraft(false); }} activeOpacity={0.7}>
+                              <Text style={{ fontSize: 13, color: theme.colors.textMuted }}>Anuluj</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          style={tm.addQBtn}
+                          onPress={() => { setQDraft(EMPTY_QDRAFT); setAddingQDraft(true); }}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="add-circle-outline" size={18} color={theme.colors.primary} />
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: theme.colors.primary }}>
+                            Dodaj pytanie{pendingQs.length > 0 ? ` (${pendingQs.length} dodanych)` : ''}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+                </View>
+
+                <TouchableOpacity style={[s.inviteBtn, { marginTop: 4 }]} onPress={saveTraining} activeOpacity={0.85}>
+                  <Ionicons name={editingTraining ? 'save-outline' : 'add-circle-outline'} size={20} color={theme.colors.white} />
+                  <Text style={s.inviteBtnText}>{editingTraining ? 'Zapisz zmiany' : 'Utw\u00f3rz szkolenie'}</Text>
+                </TouchableOpacity>
               </View>
             </ScrollView>
           </View>
@@ -1108,5 +1118,58 @@ const s = StyleSheet.create({
   rejectBtn: {
     width: 32, height: 32, borderRadius: 8, backgroundColor: theme.colors.error,
     alignItems: 'center', justifyContent: 'center',
+  },
+});
+
+const tm = StyleSheet.create({
+  section: {
+    backgroundColor: theme.colors.surface, borderRadius: 14, padding: 16,
+    marginBottom: 12,
+  },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  sectionDot: { width: 8, height: 8, borderRadius: 4 },
+  sectionLabel: { fontSize: 11, fontWeight: '800', color: theme.colors.textMuted, letterSpacing: 0.8 },
+  rolesWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  roleChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    borderRadius: 20, borderWidth: 1.5, borderColor: theme.colors.border,
+    paddingHorizontal: 12, paddingVertical: 7, backgroundColor: theme.colors.card,
+  },
+  roleChipActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primary },
+  roleChipText: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary },
+  roleChipTextActive: { color: '#fff' },
+  requiredToggle: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: theme.colors.card, borderRadius: 10, padding: 12,
+    borderWidth: 1.5, borderColor: theme.colors.border,
+  },
+  requiredToggleActive: { borderColor: theme.colors.error + '60', backgroundColor: '#FEF2F2' },
+  requiredDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: theme.colors.border },
+  requiredText: { flex: 1, fontSize: 14, fontWeight: '500', color: theme.colors.textSecondary },
+  quizToggle: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+    borderRadius: 10, borderWidth: 1.5, borderColor: theme.colors.border,
+    paddingVertical: 12, backgroundColor: theme.colors.card,
+  },
+  quizToggleInactive: { borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
+  quizToggleActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primary },
+  quizToggleText: { fontSize: 14, color: theme.colors.textMuted },
+  qCard: {
+    backgroundColor: theme.colors.card, borderRadius: 10, padding: 12,
+    borderWidth: 1, borderColor: theme.colors.border,
+  },
+  qNum: {
+    width: 22, height: 22, borderRadius: 6, backgroundColor: theme.colors.primaryLight,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  qNumText: { fontSize: 11, fontWeight: '800', color: theme.colors.primary },
+  qDraftCard: {
+    backgroundColor: theme.colors.card, borderRadius: 12, padding: 14,
+    borderWidth: 1.5, borderColor: theme.colors.primary + '40', gap: 0,
+  },
+  addQBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    borderRadius: 10, borderWidth: 1.5, borderColor: theme.colors.primary,
+    borderStyle: 'dashed', paddingVertical: 12, backgroundColor: theme.colors.primaryLight + '50',
   },
 });
