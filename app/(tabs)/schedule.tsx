@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileHeader from '../../components/MobileHeader';
+import TimePickerRow from '../../components/TimePickerRow';
 import { useAuth } from '../../context/AuthContext';
 import { createShift, deleteShift as dbDeleteShift, updateShift as dbUpdateShift, getEmployees, getShifts } from '../../lib/db';
 import type { DbShift } from '../../lib/supabase';
@@ -136,30 +137,6 @@ const DEFAULT_LOCATIONS = ['Restauracja', 'Bar', 'Kuchnia', 'Sala', 'Taras', 'Re
 const FIXED_STATUSES: ShiftStatus[] = ['zaplanowana', 'do_potwierdzenia', 'potwierdzona', 'urlop'];
 
 /* ── tiny sub-components ── */
-function TimePickerRow({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
-  return (
-    <View style={{ flex: 1 }}>
-      <Text style={sm.label}>{label}</Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={Platform.OS !== 'web'}
-        style={[sm.timeScroll, Platform.OS === 'web' && { overflowX: 'auto' } as any]}
-        contentContainerStyle={{ gap: 6, paddingHorizontal: 2 }}
-      >
-        {TIME_SLOTS.map(t => (
-          <TouchableOpacity
-            key={t}
-            style={[sm.timeChip, value === t && sm.timeChipActive]}
-            onPress={() => onChange(t)}
-            activeOpacity={0.7}
-          >
-            <Text style={[sm.timeChipText, value === t && sm.timeChipTextActive]}>{t}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-    </View>
-  );
-}
 
 function DatePickerField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   if (Platform.OS === 'web') {

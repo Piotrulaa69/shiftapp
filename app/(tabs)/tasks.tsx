@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileHeader from '../../components/MobileHeader';
+import TimePickerRow from '../../components/TimePickerRow';
 import { useAuth } from '../../context/AuthContext';
 import { createTask, approveTask as dbApproveTask, deleteTask as dbDeleteTask, rejectTask as dbRejectTask, toggleTask as dbToggleTask, getEmployees, getTasks, submitTaskForApproval } from '../../lib/db';
 import type { DbProfile, DbTask } from '../../lib/supabase';
@@ -584,11 +585,8 @@ export default function TasksScreen() {
               <Text style={mStyles.label}>Opis</Text>
               <TextInput style={[mStyles.input, mStyles.inputMulti]} value={newDesc} onChangeText={setNewDesc} placeholder="Szczegóły zadania..." placeholderTextColor={theme.colors.textMuted} multiline numberOfLines={3} />
 
-              <View style={mStyles.row}>
-                <View style={mStyles.half}>
-                  <Text style={mStyles.label}>Godzina</Text>
-                  <TextInput style={mStyles.input} value={newTime} onChangeText={setNewTime} placeholder="08:00" placeholderTextColor={theme.colors.textMuted} />
-                </View>
+              <TimePickerRow label="Godzina" value={newTime} onChange={setNewTime} />
+              <View style={[mStyles.row, { marginTop: 8 }]}>
                 <View style={mStyles.half}>
                   <Text style={mStyles.label}>Czas (min)</Text>
                   <TextInput style={mStyles.input} value={newDuration} onChangeText={setNewDuration} keyboardType="numeric" placeholder="30" placeholderTextColor={theme.colors.textMuted} />
