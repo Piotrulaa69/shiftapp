@@ -373,11 +373,11 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
   scroll: { paddingBottom: 40 },
-  scrollDesktop: { paddingBottom: 48 },
+  scrollDesktop: { paddingBottom: 48, paddingHorizontal: 20 },
   gridRow: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 20, gap: 16, marginTop: 4 },
   gridLeft: { flex: 1 },
   gridRight: { flex: 1 },
-  cardDesktop: { marginHorizontal: 0, marginTop: 16 },
+  cardDesktop: { marginHorizontal: 0, marginTop: 16, maxWidth: 720, alignSelf: 'center' as any },
 
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
