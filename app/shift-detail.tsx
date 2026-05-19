@@ -11,7 +11,7 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
@@ -62,6 +62,16 @@ export default function ShiftDetailScreen() {
   }, [shiftId, rid, user]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Refresh when app comes back from background
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active') {
+        loadData();
+      }
+    });
+    return () => subscription.remove();
+  }, [loadData]);
 
   // Timer for active clock-in
   useEffect(() => {
