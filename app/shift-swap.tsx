@@ -82,8 +82,12 @@ export default function ShiftSwapScreen() {
 
   const handleCreate = async () => {
     if (!myShift || !selResponder) return;
+    if (swapType === 'swap' && !responderShift) {
+      alert('Wybierz zmianę do wymiany');
+      return;
+    }
     setSaving(true);
-    await createShiftSwap(rid, {
+    const result = await createShiftSwap(rid, {
       requester_id: uid,
       responder_id: selResponder,
       requester_shift: myShift,
@@ -91,6 +95,10 @@ export default function ShiftSwapScreen() {
       swap_type: swapType,
     });
     setSaving(false);
+    if (!result) {
+      alert('Nie udało się utworzyć wniosku. Spróbuj ponownie.');
+      return;
+    }
     setShowModal(false);
     load();
   };
@@ -368,9 +376,9 @@ export default function ShiftSwapScreen() {
               )}
 
               <TouchableOpacity
-                style={[mStyles.saveBtn, (!myShift || !selResponder) && { opacity: 0.5 }]}
+                style={[mStyles.saveBtn, (!myShift || !selResponder || (swapType === 'swap' && !responderShift)) && { opacity: 0.5 }]}
                 onPress={handleCreate}
-                disabled={saving || !myShift || !selResponder}
+                disabled={saving || !myShift || !selResponder || (swapType === 'swap' && !responderShift)}
                 activeOpacity={0.85}
               >
                 {saving ? <ActivityIndicator color={theme.colors.white} /> : <Text style={mStyles.saveBtnText}>Złóż wniosek</Text>}

@@ -513,7 +513,10 @@ export async function createShiftSwap(
     .insert({ restaurant_id: restaurantId, ...fields })
     .select()
     .single();
-  if (error) { console.error('createShiftSwap', error); return null; }
+  if (error) {
+    console.error('createShiftSwap error:', error);
+    return null;
+  }
   const swap = data as DbShiftSwap;
   const { data: req } = await supabase.from('profiles').select('first_name, last_name').eq('id', fields.requester_id).single();
   const reqName = req ? `${req.first_name} ${req.last_name}` : 'Pracownik';
