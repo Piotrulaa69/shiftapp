@@ -691,7 +691,7 @@ export default function AdminScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={s.mTitle}>{editingTraining ? 'Edytuj szkolenie' : 'Nowe szkolenie'}</Text>
                   <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 2 }}>
-                    {editingTraining ? 'Zmiany zostan\u0105 od razu zapisane' : 'Uzupe\u0142nij poni\u017csze sekcje'}
+                    {editingTraining ? 'Zmiany zostaną od razu zapisane' : 'Uzupełnij poniższe sekcje'}
                   </Text>
                 </View>
                 <TouchableOpacity onPress={() => setShowTrainingModal(false)}>
@@ -708,13 +708,13 @@ export default function AdminScreen() {
                     <Text style={tm.sectionLabel}>PODSTAWOWE INFO</Text>
                   </View>
 
-                  <Text style={s.mLabel}>Tytu\u0142 *</Text>
-                  <TextInput style={s.mInput} value={tForm.title} onChangeText={(v) => setTForm((f) => ({ ...f, title: v }))} placeholder="np. Obs\u0142uga kasy fiskalnej" placeholderTextColor={theme.colors.textMuted} />
+                  <Text style={s.mLabel}>Tytuł *</Text>
+                  <TextInput style={s.mInput} value={tForm.title} onChangeText={(v) => setTForm((f) => ({ ...f, title: v }))} placeholder="np. Obsługa kasy fiskalnej" placeholderTextColor={theme.colors.textMuted} />
 
                   <Text style={s.mLabel}>Kategoria</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
                     <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 4 }}>
-                      {['BHP', 'Obs\u0142uga', 'Procedury', 'Kuchnia', 'Jako\u015b\u0107', 'Sprzeda\u017c', 'Inne'].map((cat) => (
+                      {['BHP', 'Obsługa', 'Procedury', 'Kuchnia', 'Jakość', 'Sprzedaż', 'Inne'].map((cat) => (
                         <TouchableOpacity key={cat} style={[s.chip, tForm.category === cat && s.chipActive]} onPress={() => setTForm((f) => ({ ...f, category: cat }))} activeOpacity={0.7}>
                           <Text style={[s.chipText, tForm.category === cat && s.chipTextActive]}>{cat}</Text>
                         </TouchableOpacity>
@@ -733,10 +733,10 @@ export default function AdminScreen() {
                     </View>
                   </View>
 
-                  <Text style={s.mLabel}>Link do materia\u0142u (opcjonalnie)</Text>
+                  <Text style={s.mLabel}>Link do materiału (opcjonalnie)</Text>
                   <TextInput style={s.mInput} value={tForm.material_url} onChangeText={(v) => setTForm((f) => ({ ...f, material_url: v }))} placeholder="https://..." placeholderTextColor={theme.colors.textMuted} autoCapitalize="none" keyboardType="url" />
 
-                  <Text style={s.mLabel}>Typ materia\u0142u</Text>
+                  <Text style={s.mLabel}>Typ materiału</Text>
                   <View style={{ flexDirection: 'row', gap: 8, marginBottom: 4 }}>
                     {(['pdf', 'video', null] as const).map((mt) => (
                       <TouchableOpacity key={String(mt)} style={[s.chip, tForm.material_type === mt && s.chipActive]} onPress={() => setTForm((f) => ({ ...f, material_type: mt }))} activeOpacity={0.7}>
@@ -782,7 +782,7 @@ export default function AdminScreen() {
                   >
                     <View style={[tm.requiredDot, tForm.required && { backgroundColor: theme.colors.error }]} />
                     <Text style={[tm.requiredText, tForm.required && { color: theme.colors.error, fontWeight: '700' }]}>
-                      {tForm.required ? 'Obowi\u0105zkowe szkolenie' : 'Opcjonalne szkolenie'}
+                      {tForm.required ? 'Obowiązkowe szkolenie' : 'Opcjonalne szkolenie'}
                     </Text>
                     <Ionicons name={tForm.required ? 'alert-circle' : 'checkmark-circle-outline'} size={16} color={tForm.required ? theme.colors.error : theme.colors.textMuted} />
                   </TouchableOpacity>
@@ -795,7 +795,7 @@ export default function AdminScreen() {
                     <Text style={tm.sectionLabel}>PYTANIA QUIZOWE</Text>
                   </View>
                   <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginBottom: 10 }}>
-                    Pracownicy odpowiadaj\u0105 na pytania po przegl\u0105dni\u0119ciu materia\u0142\u00f3w
+                    Pracownicy odpowiadają na pytania po przeglądnięciu materiałów
                   </Text>
 
                   <View style={{ flexDirection: 'row', gap: 8, marginBottom: 4 }}>
@@ -839,10 +839,10 @@ export default function AdminScreen() {
 
                       {addingQDraft ? (
                         <View style={tm.qDraftCard}>
-                          <Text style={[s.mLabel, { marginBottom: 6 }]}>Tre\u015b\u0107 pytania *</Text>
+                          <Text style={[s.mLabel, { marginBottom: 6 }]}>Treść pytania *</Text>
                           <TextInput style={[s.mInput, { minHeight: 60 }]} value={qDraft.question} onChangeText={(v) => setQDraft((f) => ({ ...f, question: v }))} placeholder="Wpisz pytanie..." placeholderTextColor={theme.colors.textMuted} multiline />
 
-                          <Text style={[s.mLabel, { marginTop: 4 }]}>Odpowiedzi — kliknij k\u00f3\u0142ko \u017ceby zaznaczy\u0107 poprawn\u0105</Text>
+                          <Text style={[s.mLabel, { marginTop: 4 }]}>Odpowiedzi — kliknij kółko żeby zaznaczyć poprawną</Text>
                           {qDraft.options.map((opt, oi) => (
                             <View key={oi} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                               <TouchableOpacity
@@ -855,21 +855,21 @@ export default function AdminScreen() {
                                 style={[s.mInput, { flex: 1, marginBottom: 0 }]}
                                 value={opt}
                                 onChangeText={(v) => setQDraft((f) => { const opts = [...f.options]; opts[oi] = v; return { ...f, options: opts }; })}
-                                placeholder={`Odpowied\u017a ${String.fromCharCode(65 + oi)}`}
+                                placeholder={`Odpowiedź ${String.fromCharCode(65 + oi)}`}
                                 placeholderTextColor={theme.colors.textMuted}
                               />
                             </View>
                           ))}
 
-                          <Text style={[s.mLabel, { marginTop: 4 }]}>Wyja\u015bnienie (opcjonalne)</Text>
-                          <TextInput style={s.mInput} value={qDraft.explanation} onChangeText={(v) => setQDraft((f) => ({ ...f, explanation: v }))} placeholder="Dlaczego ta odpowied\u017a jest poprawna?" placeholderTextColor={theme.colors.textMuted} />
+                          <Text style={[s.mLabel, { marginTop: 4 }]}>Wyjaśnienie (opcjonalne)</Text>
+                          <TextInput style={s.mInput} value={qDraft.explanation} onChangeText={(v) => setQDraft((f) => ({ ...f, explanation: v }))} placeholder="Dlaczego ta odpowiedź jest poprawna?" placeholderTextColor={theme.colors.textMuted} />
 
                           <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
                             <TouchableOpacity
                               style={[s.inviteBtn, { flex: 1 }]}
                               onPress={() => {
-                                if (!qDraft.question.trim()) { showAlert('B\u0142\u0105d', 'Wpisz tre\u015b\u0107 pytania'); return; }
-                                if (qDraft.options.some((o) => !o.trim())) { showAlert('B\u0142\u0105d', 'Wype\u0142nij wszystkie 4 odpowiedzi'); return; }
+                                if (!qDraft.question.trim()) { showAlert('Błąd', 'Wpisz treść pytania'); return; }
+                                if (qDraft.options.some((o) => !o.trim())) { showAlert('Błąd', 'Wypełnij wszystkie 4 odpowiedzi'); return; }
                                 setPendingQs((prev) => [...prev, { ...qDraft, options: qDraft.options.map((o) => o.trim()) }]);
                                 setQDraft(EMPTY_QDRAFT);
                                 setAddingQDraft(false);
@@ -902,7 +902,7 @@ export default function AdminScreen() {
 
                 <TouchableOpacity style={[s.inviteBtn, { marginTop: 4 }]} onPress={saveTraining} activeOpacity={0.85}>
                   <Ionicons name={editingTraining ? 'save-outline' : 'add-circle-outline'} size={20} color={theme.colors.white} />
-                  <Text style={s.inviteBtnText}>{editingTraining ? 'Zapisz zmiany' : 'Utw\u00f3rz szkolenie'}</Text>
+                  <Text style={s.inviteBtnText}>{editingTraining ? 'Zapisz zmiany' : 'Utwórz szkolenie'}</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
