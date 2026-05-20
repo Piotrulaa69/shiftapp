@@ -152,9 +152,9 @@ export default function DashboardScreen() {
         </View>
 
         {/* Stat Cards */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statsRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.statsRow, isDesktop && styles.statsRowDesktop]}>
           {STAT_CARDS.map((card) => (
-            <TouchableOpacity key={card.label} style={styles.statCard}
+            <TouchableOpacity key={card.label} style={[styles.statCard, isDesktop && styles.statCardDesktop]}
               onPress={card.route ? () => router.push(card.route as any) : undefined}
               activeOpacity={card.route ? 0.7 : 1}
             >
@@ -377,7 +377,9 @@ const styles = StyleSheet.create({
   gridRow: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 20, gap: 16, marginTop: 4 },
   gridLeft: { flex: 1 },
   gridRight: { flex: 1 },
-  cardDesktop: { marginHorizontal: 0, marginTop: 16, maxWidth: 720, alignSelf: 'center' as any },
+  cardDesktop: { marginHorizontal: 0, marginTop: 16 },
+  statsRowDesktop: { paddingHorizontal: 20, gap: 12, width: '100%', justifyContent: 'space-between' as any },
+  statCardDesktop: { flex: 1, minWidth: 140, maxWidth: '24%' },
 
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
