@@ -1590,10 +1590,16 @@ const HTML = `${NAV}${HERO}${HTML_FEATURES}${HTML_STEPS}${DEMO}${PRICING}${CALC}
 /* ────────── COMPONENT ────────── */
 export default function Landing() {
   const router = useRouter();
-
-  if (Platform.OS !== 'web') return <MobileLanding />;
+  const [mobileBrowser, setMobileBrowser] = useState(false);
 
   useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.innerWidth < 900) {
+      setMobileBrowser(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || mobileBrowser) return;
     if (typeof document === 'undefined') return;
 
     const portal = document.createElement('div');
@@ -1750,7 +1756,8 @@ export default function Landing() {
       body.style.margin = orig.bm; body.style.padding = orig.bp; body.style.background = orig.bg;
       body.style.display = orig.bd;
     };
-  }, [router]);
+  }, [router, mobileBrowser]);
 
+  if (Platform.OS !== 'web' || mobileBrowser) return <MobileLanding />;
   return null;
 }
