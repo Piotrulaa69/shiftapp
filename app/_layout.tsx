@@ -10,6 +10,7 @@ export default function RootLayout() {
         <NotificationsProvider>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />
+          <Stack.Screen name="landing" />
           <Stack.Screen name="login" />
           <Stack.Screen name="forgot-password" />
           <Stack.Screen name="(tabs)" />
