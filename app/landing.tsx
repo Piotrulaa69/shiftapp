@@ -1,221 +1,312 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { theme } from '../styles/theme';
+import { useEffect, useState } from 'react';
+import { Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-// Mobile landing component
+const BLUE = '#0084FF';
+const DARK = '#0f172a';
+const MUTED = '#64748b';
+const BG = '#F5F7FA';
+
+const FEATURES = [
+  { icon: 'calendar-outline' as const, bg: '#DBEAFE', color: '#1D4ED8', title: 'Grafik pracy AI', desc: 'Automatyczne tworzenie grafików z uwzględnieniem dostępności i preferencji. Drag & drop. Powiadomienia push.' },
+  { icon: 'list-outline' as const, bg: '#FCE7F3', color: '#BE185D', title: 'Zadania dla pracowników', desc: 'Przydzielaj codzienne zadania z deadline i potwierdzeniem wykonania. Czyszczenie, inwentaryzacja — wszystko pod kontrolą.' },
+  { icon: 'time-outline' as const, bg: '#DCFCE7', color: '#16A34A', title: 'Ewidencja czasu', desc: 'Rejestracja wejść/wyjść (GPS/QR), liczenie godzinówki, nadgodziny, raporty dla księgowości. Wszystko automatycznie.' },
+  { icon: 'trophy-outline' as const, bg: '#FEF3C7', color: '#D97706', title: 'Szkolenia & Gamifikacja', desc: 'Wewnętrzne szkolenia video, quizy, certyfikaty. System punktowy, ranking i nagrody motywujące zespół.' },
+  { icon: 'document-text-outline' as const, bg: '#F3E8FF', color: '#7C3AED', title: 'Dokumenty', desc: 'Cyfrowa teczka pracownika: umowy, badania, certyfikaty. Automatyczne generowanie i przypomnienia o terminach.' },
+];
+
+const STEPS = [
+  { n: '01', label: 'Krok 1', title: 'Zarejestruj restaurację', desc: 'Załóż konto, dodaj lokalizację i zaproś swój zespół jednym linkiem.' },
+  { n: '02', label: 'Krok 2', title: 'Skonfiguruj grafik', desc: 'AI utworzy optymalny grafik na podstawie dostępności i preferencji pracowników.' },
+  { n: '03', label: 'Krok 3', title: 'Zarządzaj z telefonu', desc: 'Zadania, dokumenty, szkolenia. Wszystko w jednym miejscu. Twój zespół wie co, kiedy i jak.' },
+];
+
+const PRICE_FEATS = ['Grafik pracy z AI', 'Ewidencja czasu (GPS/QR)', 'Zadania z deadline i zdjęciami', 'Dokumenty pracownika', 'Powiadomienia push + SMS', 'Panel web dla właściciela', 'Aplikacja mobilna dla pracowników'];
+
+const FAQS = [
+  { q: 'Dla kogo jest ShiftApp?', a: 'Dla restauracji, kawiarni i food trucków zatrudniających od 3 do 100 pracowników. Idealny tam, gdzie grafiki powstają w Excelu lub na kartce.' },
+  { q: 'Na jakich platformach działa?', a: 'Panel właściciela w przeglądarce. Pracownicy korzystają z aplikacji mobilnej na iOS i Android. Wszystko synchronizuje się w czasie rzeczywistym.' },
+  { q: 'Ile kosztuje ShiftApp?', a: '99 zł / mies. za lokal (do 5 pracowników w cenie). Każdy dodatkowy pracownik to 19 zł / mies. Pierwsze 20 restauracji dostaje 50% zniżki na 3 miesiące.' },
+  { q: 'Kiedy startuje aplikacja?', a: 'Aplikacja startuje w Q2 2026. Osoby z whitelisty otrzymają wcześniejszy dostęp i specjalne warunki cenowe.' },
+  { q: 'Czym ShiftApp różni się od Kadromierza?', a: 'ShiftApp jest stworzony specjalnie dla gastronomii. Mamy AI tworzące grafiki, zadania z potwierdzeniem zdjęciem, gamifikację i teczkę dokumentów.' },
+];
+
 function MobileLanding() {
   const router = useRouter();
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [hours, setHours] = useState(5);
+  const [rate, setRate] = useState(70);
+  const [emps, setEmps] = useState(5);
+
+  const calcSave = () => {
+    const val = hours * 4 * rate;
+    const cost = 99 + Math.max(0, emps - 5) * 19;
+    return Math.max(0, val - cost);
+  };
 
   return (
-    <ScrollView style={styles.mobileContainer} contentContainerStyle={styles.mobileContent}>
-      {/* Hero */}
-      <View style={styles.mobileHero}>
-        <View style={styles.mobileLogo}>
-          <Text style={styles.mobileLogoText}>S</Text>
-        </View>
-        <Text style={styles.mobileTitle}>ShiftApp</Text>
-        <Text style={styles.mobileSubtitle}>Zarządzaj grafikiem i zespołem</Text>
-        
-        <TouchableOpacity 
-          style={styles.mobileButton}
-          onPress={() => router.push('/join' as any)}
-        >
-          <Text style={styles.mobileButtonText}>Dołącz za darmo</Text>
-          <Ionicons name="arrow-forward" size={18} color="#FFF" />
-        </TouchableOpacity>
-        
-        <TouchableOpacity onPress={() => router.push('/login' as any)}>
-          <Text style={styles.mobileLink}>Masz już konto? Zaloguj się</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Features */}
-      <View style={styles.mobileSection}>
-        <Text style={styles.mobileSectionTitle}>Kluczowe funkcje</Text>
-        
-        <View style={styles.mobileFeature}>
-          <View style={[styles.mobileFeatureIcon, { backgroundColor: '#EFF6FF' }]}>
-            <Ionicons name="calendar-outline" size={24} color="#2563EB" />
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top']}>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* NAV */}
+        <View style={ms.nav}>
+          <View style={ms.navBrand}>
+            <View style={ms.navMark}><Text style={ms.navMarkTxt}>S</Text></View>
+            <Text style={ms.navName}>ShiftApp</Text>
           </View>
-          <View style={styles.mobileFeatureText}>
-            <Text style={styles.mobileFeatureTitle}>Grafik</Text>
-            <Text style={styles.mobileFeatureDesc}>Twórz i zarządzaj harmonogramem zmian</Text>
-          </View>
+          <TouchableOpacity style={ms.navCta} onPress={() => router.push('/login' as any)}>
+            <Text style={ms.navCtaTxt}>Zaloguj się</Text>
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.mobileFeature}>
-          <View style={[styles.mobileFeatureIcon, { backgroundColor: '#F0FDF4' }]}>
-            <Ionicons name="time-outline" size={24} color="#16A34A" />
-          </View>
-          <View style={styles.mobileFeatureText}>
-            <Text style={styles.mobileFeatureTitle}>Czas pracy</Text>
-            <Text style={styles.mobileFeatureDesc}>Śledź czas i automatycznie obliczaj wynagrodzenie</Text>
+        {/* HERO */}
+        <View style={ms.hero}>
+          <View style={ms.badge}><Text style={ms.badgeTxt}>Stworzona dla gastronomii · Q2 2026</Text></View>
+          <Text style={ms.h1}>{'Odzyskaj '}
+            <Text style={ms.grad}>13h tygodniowo</Text>
+            {'\ni obniż koszty pracy o '}
+            <Text style={ms.grad}>1300 zł/mies.</Text>
+          </Text>
+          <Text style={ms.sub}>Grafik AI, ewidencja czasu, zadania i szkolenia w jednej aplikacji. Koniec z chaosem w Excelu.</Text>
+          <TouchableOpacity style={ms.btnBlue} onPress={() => router.push('/join' as any)} activeOpacity={0.85}>
+            <Text style={ms.btnBlueTxt}>Dołącz do Whitelisty</Text>
+            <Ionicons name="arrow-forward" size={16} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/login' as any)}>
+            <Text style={ms.loginLink}>Masz już konto? <Text style={{ color: BLUE }}>Zaloguj się</Text></Text>
+          </TouchableOpacity>
+          <View style={ms.metaRow}>
+            <View style={ms.avatars}>
+              {[['A','#0084FF'],['M','#F28482'],['K','#F5C344'],['T','#B567C2']].map(([l,c], i) => (
+                <View key={l} style={[ms.av, { marginLeft: i === 0 ? 0 : -8, backgroundColor: c }]}>
+                  <Text style={ms.avTxt}>{l}</Text>
+                </View>
+              ))}
+            </View>
+            <Text style={ms.metaTxt}>Dołączyło już <Text style={{ color: DARK, fontWeight: '700' }}>50 restauratorów</Text></Text>
           </View>
         </View>
 
-        <View style={styles.mobileFeature}>
-          <View style={[styles.mobileFeatureIcon, { backgroundColor: '#FEF3C7' }]}>
-            <Ionicons name="list-outline" size={24} color="#D97706" />
-          </View>
-          <View style={styles.mobileFeatureText}>
-            <Text style={styles.mobileFeatureTitle}>Zadania</Text>
-            <Text style={styles.mobileFeatureDesc}>Przypisuj zadania i śledź postęp</Text>
+        {/* FEATURES */}
+        <View style={ms.section}>
+          <Text style={ms.eyebrow}>Funkcje</Text>
+          <Text style={ms.sH2}>Wszystko czego <Text style={ms.grad}>potrzebujesz</Text></Text>
+          <Text style={ms.sLead}>Jedna aplikacja zamiast pięciu. Grafik, zadania, dokumenty, szkolenia i gamifikacja.</Text>
+          {FEATURES.map((f) => (
+            <View key={f.title} style={ms.featCard}>
+              <View style={[ms.featIcon, { backgroundColor: f.bg }]}>
+                <Ionicons name={f.icon} size={26} color={f.color} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={ms.featTitle}>{f.title}</Text>
+                <Text style={ms.featDesc}>{f.desc}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        {/* STEPS */}
+        <View style={[ms.section, { backgroundColor: '#fff' }]}>
+          <Text style={[ms.eyebrow, { color: BLUE }]}>Jak zacząć</Text>
+          <Text style={ms.sH2}>3 proste <Text style={ms.grad}>kroki</Text></Text>
+          <Text style={ms.sLead}>Od rejestracji do pełnej kontroli nad zespołem w mniej niż 15 minut.</Text>
+          {STEPS.map((step) => (
+            <View key={step.n} style={ms.stepCard}>
+              <Text style={ms.stepN}>{step.n}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={ms.stepLabel}>{step.label}</Text>
+                <Text style={ms.stepTitle}>{step.title}</Text>
+                <Text style={ms.stepDesc}>{step.desc}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        {/* PRICING */}
+        <View style={[ms.section, { backgroundColor: BG }]}>
+          <Text style={ms.eyebrow}>Cennik</Text>
+          <Text style={ms.sH2}>Prosty i <Text style={ms.grad}>przejrzysty</Text></Text>
+          <Text style={ms.sLead}>Płacisz za lokal + liczbę pracowników. Bez ukrytych opłat.</Text>
+          <View style={ms.priceCard}>
+            <View style={ms.priceBadge}><Text style={ms.priceBadgeTxt}>EARLY ADOPTER</Text></View>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>
+              <Text style={ms.priceAmt}>99 zł</Text>
+              <Text style={ms.pricePer}>/ mies. bazowa</Text>
+            </View>
+            <Text style={ms.priceSmall}>do 5 pracowników w cenie</Text>
+            <Text style={ms.priceAdd}>+ 19 zł / dodatkowy pracownik / mies.</Text>
+            <View style={ms.pricePromo}>
+              <Text style={ms.pricePromoTxt}>🔥 Pierwsze 20 restauracji: −50% przez 3 miesiące</Text>
+            </View>
+            {PRICE_FEATS.map((f) => (
+              <View key={f} style={ms.priceFeat}>
+                <View style={ms.priceCheck}><Ionicons name="checkmark" size={11} color={BLUE} /></View>
+                <Text style={ms.priceFeatTxt}>{f}</Text>
+              </View>
+            ))}
+            <TouchableOpacity style={[ms.btnBlue, { marginTop: 20 }]} onPress={() => router.push('/join' as any)} activeOpacity={0.85}>
+              <Text style={ms.btnBlueTxt}>Zapisz się na Whitelistę</Text>
+              <Ionicons name="arrow-forward" size={16} color="#fff" />
+            </TouchableOpacity>
           </View>
         </View>
 
-        <View style={styles.mobileFeature}>
-          <View style={[styles.mobileFeatureIcon, { backgroundColor: '#F3E8FF' }]}>
-            <Ionicons name="swap-horizontal-outline" size={24} color="#7C3AED" />
-          </View>
-          <View style={styles.mobileFeatureText}>
-            <Text style={styles.mobileFeatureTitle}>Wymiany zmian</Text>
-            <Text style={styles.mobileFeatureDesc}>Ułatw pracownikom wymianę zmian</Text>
+        {/* CALCULATOR */}
+        <View style={[ms.section, { backgroundColor: '#fff' }]}>
+          <Text style={[ms.eyebrow, { color: BLUE }]}>Kalkulator</Text>
+          <Text style={ms.sH2}>Ile jest dla Ciebie wart <Text style={ms.grad}>Twój czas?</Text></Text>
+          <Text style={ms.sLead}>Sprawdź, ile oszczędzisz z ShiftApp każdego miesiąca.</Text>
+          <View style={ms.calcCard}>
+            <Text style={ms.calcLbl}>Godziny/tydzień na grafiki i ewidencję</Text>
+            <View style={ms.calcRow}>
+              <TouchableOpacity style={ms.calcBtn} onPress={() => setHours(Math.max(1, hours - 1))}><Text style={ms.calcBtnTxt}>−</Text></TouchableOpacity>
+              <Text style={ms.calcVal}>{hours} godz.</Text>
+              <TouchableOpacity style={ms.calcBtn} onPress={() => setHours(Math.min(40, hours + 1))}><Text style={ms.calcBtnTxt}>+</Text></TouchableOpacity>
+            </View>
+            <Text style={ms.calcLbl}>Wartość Twojej godziny</Text>
+            <View style={ms.calcRow}>
+              <TouchableOpacity style={ms.calcBtn} onPress={() => setRate(Math.max(20, rate - 10))}><Text style={ms.calcBtnTxt}>−</Text></TouchableOpacity>
+              <Text style={ms.calcVal}>{rate} zł/godz.</Text>
+              <TouchableOpacity style={ms.calcBtn} onPress={() => setRate(Math.min(500, rate + 10))}><Text style={ms.calcBtnTxt}>+</Text></TouchableOpacity>
+            </View>
+            <Text style={ms.calcLbl}>Liczba pracowników</Text>
+            <View style={ms.calcRow}>
+              <TouchableOpacity style={ms.calcBtn} onPress={() => setEmps(Math.max(1, emps - 1))}><Text style={ms.calcBtnTxt}>−</Text></TouchableOpacity>
+              <Text style={ms.calcVal}>{emps} os.</Text>
+              <TouchableOpacity style={ms.calcBtn} onPress={() => setEmps(Math.min(100, emps + 1))}><Text style={ms.calcBtnTxt}>+</Text></TouchableOpacity>
+            </View>
+            <View style={ms.calcResult}>
+              <Text style={ms.calcResultLbl}>Miesięczny zysk z ShiftApp</Text>
+              <Text style={ms.calcResultVal}>{calcSave().toLocaleString('pl-PL')} zł</Text>
+              <TouchableOpacity style={[ms.btnBlue, { marginTop: 16 }]} onPress={() => router.push('/join' as any)} activeOpacity={0.85}>
+                <Text style={ms.btnBlueTxt}>Zapisz się na Whitelistę</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </View>
 
-      {/* CTA */}
-      <View style={styles.mobileCta}>
-        <Text style={styles.mobileCtaTitle}>Gotowy do rozpoczęcia?</Text>
-        <Text style={styles.mobileCtaDesc}>Dołącz do restauracji korzystających z ShiftApp</Text>
-        <TouchableOpacity 
-          style={[styles.mobileButton, styles.mobileButtonFull]}
-          onPress={() => router.push('/join' as any)}
-        >
-          <Text style={styles.mobileButtonText}>Rozpocznij za darmo</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+        {/* FAQ */}
+        <View style={[ms.section, { backgroundColor: BG }]}>
+          <Text style={ms.eyebrow}>FAQ</Text>
+          <Text style={ms.sH2}>Najczęściej <Text style={ms.grad}>zadawane pytania</Text></Text>
+          {FAQS.map((faq, i) => (
+            <TouchableOpacity key={i} style={ms.faqItem} onPress={() => setOpenFaq(openFaq === i ? null : i)} activeOpacity={0.85}>
+              <View style={ms.faqQ}>
+                <Text style={ms.faqQTxt}>{faq.q}</Text>
+                <View style={[ms.faqIcon, openFaq === i && { backgroundColor: BLUE }]}>
+                  <Ionicons name={openFaq === i ? 'remove' : 'add'} size={14} color={openFaq === i ? '#fff' : BLUE} />
+                </View>
+              </View>
+              {openFaq === i && <Text style={ms.faqA}>{faq.a}</Text>}
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* CONTACT */}
+        <View style={[ms.section, { backgroundColor: '#fff', alignItems: 'center' }]}>
+          <Text style={[ms.eyebrow, { color: BLUE }]}>Kontakt</Text>
+          <Text style={[ms.sH2, { textAlign: 'center' }]}>Porozmawiajmy</Text>
+          <Text style={[ms.sLead, { textAlign: 'center' }]}>Chcesz dowiedzieć się więcej? Zadzwoń lub napisz.</Text>
+          <TouchableOpacity onPress={() => Linking.openURL('tel:+48884184352')}>
+            <Text style={ms.phone}>884 184 352</Text>
+          </TouchableOpacity>
+          <Text style={ms.hours}>Pon – Pt, 9:00 – 18:00</Text>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <TouchableOpacity style={ms.btnBlue} onPress={() => Linking.openURL('tel:+48884184352')} activeOpacity={0.85}>
+              <Ionicons name="call-outline" size={15} color="#fff" />
+              <Text style={ms.btnBlueTxt}>Zadzwoń</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={ms.btnGhost} onPress={() => Linking.openURL('https://wa.me/48884184352')} activeOpacity={0.85}>
+              <Ionicons name="chatbubble-outline" size={15} color={DARK} />
+              <Text style={ms.btnGhostTxt}>WhatsApp</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* FOOTER */}
+        <View style={ms.footer}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <View style={ms.navMark}><Text style={ms.navMarkTxt}>S</Text></View>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: DARK }}>ShiftApp</Text>
+          </View>
+          <Text style={ms.footerDesc}>Aplikacja do zarządzania zespołem dla gastronomii.</Text>
+          <Text style={ms.footerCopy}>© 2026 ShiftApp · Kontakt: 884-184-352</Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
-const mobileStyles = StyleSheet.create({
-  mobileContainer: {
-    backgroundColor: theme.colors.background,
-  },
-  mobileContent: {
-    paddingBottom: 40,
-  },
-  mobileHero: {
-    alignItems: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 24,
-  },
-  mobileLogo: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
-    backgroundColor: theme.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  mobileLogoText: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#FFF',
-  },
-  mobileTitle: {
-    fontSize: 36,
-    fontWeight: '700',
-    color: theme.colors.text,
-    marginBottom: 8,
-  },
-  mobileSubtitle: {
-    fontSize: 16,
-    color: theme.colors.textMuted,
-    textAlign: 'center',
-    marginBottom: 32,
-  },
-  mobileButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: theme.colors.primary,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  mobileButtonFull: {
-    width: '100%',
-  },
-  mobileButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFF',
-  },
-  mobileLink: {
-    fontSize: 14,
-    color: theme.colors.primary,
-    fontWeight: '500',
-  },
-  mobileSection: {
-    paddingHorizontal: 24,
-    marginBottom: 40,
-  },
-  mobileSectionTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: theme.colors.text,
-    marginBottom: 24,
-  },
-  mobileFeature: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.card,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    ...theme.shadows.card,
-  },
-  mobileFeatureIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
-  },
-  mobileFeatureText: {
-    flex: 1,
-  },
-  mobileFeatureTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: theme.colors.text,
-    marginBottom: 4,
-  },
-  mobileFeatureDesc: {
-    fontSize: 14,
-    color: theme.colors.textMuted,
-  },
-  mobileCta: {
-    backgroundColor: theme.colors.card,
-    marginHorizontal: 24,
-    padding: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    ...theme.shadows.card,
-  },
-  mobileCtaTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: theme.colors.text,
-    marginBottom: 8,
-  },
-  mobileCtaDesc: {
-    fontSize: 14,
-    color: theme.colors.textMuted,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
+const ms = StyleSheet.create({
+  nav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  navBrand: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  navMark: { width: 32, height: 32, borderRadius: 9, backgroundColor: BLUE, alignItems: 'center', justifyContent: 'center' },
+  navMarkTxt: { fontSize: 15, fontWeight: '800', color: '#fff' },
+  navName: { fontSize: 17, fontWeight: '800', color: DARK },
+  navCta: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: BLUE, borderRadius: 10 },
+  navCtaTxt: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  hero: { backgroundColor: '#fff', paddingHorizontal: 24, paddingTop: 48, paddingBottom: 40, alignItems: 'center' },
+  badge: { backgroundColor: '#F1F5F9', borderRadius: 99, paddingHorizontal: 14, paddingVertical: 6, marginBottom: 20 },
+  badgeTxt: { fontSize: 12, color: MUTED, fontWeight: '500' },
+  h1: { fontSize: 28, fontWeight: '700', color: DARK, textAlign: 'center', lineHeight: 36, marginBottom: 14, letterSpacing: -0.5 },
+  grad: { color: BLUE },
+  sub: { fontSize: 15, color: MUTED, textAlign: 'center', lineHeight: 22, marginBottom: 28 },
+  btnBlue: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: BLUE, paddingVertical: 15, paddingHorizontal: 24, borderRadius: 13 },
+  btnBlueTxt: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  btnGhost: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#fff', paddingVertical: 15, paddingHorizontal: 20, borderRadius: 13, borderWidth: 1, borderColor: '#E2E8F0' },
+  btnGhostTxt: { fontSize: 15, fontWeight: '600', color: DARK },
+  loginLink: { fontSize: 14, color: MUTED, marginTop: 14 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 24 },
+  avatars: { flexDirection: 'row' },
+  av: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
+  avTxt: { fontSize: 10, fontWeight: '700', color: '#fff' },
+  metaTxt: { fontSize: 13, color: MUTED },
+  section: { backgroundColor: BG, paddingHorizontal: 20, paddingVertical: 48 },
+  eyebrow: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.5, color: '#B567C2', marginBottom: 8 },
+  sH2: { fontSize: 26, fontWeight: '700', color: DARK, marginBottom: 10, lineHeight: 32, letterSpacing: -0.3 },
+  sLead: { fontSize: 14, color: MUTED, lineHeight: 21, marginBottom: 28 },
+  featCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12, gap: 14, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  featIcon: { width: 52, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  featTitle: { fontSize: 15, fontWeight: '700', color: DARK, marginBottom: 4 },
+  featDesc: { fontSize: 13, color: MUTED, lineHeight: 19 },
+  stepCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#fff', borderRadius: 16, padding: 20, marginBottom: 12, gap: 16, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  stepN: { fontSize: 36, fontWeight: '800', color: '#E2E8F0', lineHeight: 42, width: 52 },
+  stepLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.2, color: BLUE, marginBottom: 4 },
+  stepTitle: { fontSize: 17, fontWeight: '700', color: DARK, marginBottom: 6 },
+  stepDesc: { fontSize: 13, color: MUTED, lineHeight: 19 },
+  priceCard: { backgroundColor: '#fff', borderRadius: 20, padding: 28, shadowColor: BLUE, shadowOpacity: 0.08, shadowRadius: 20, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
+  priceBadge: { alignSelf: 'flex-start', backgroundColor: BLUE, borderRadius: 99, paddingHorizontal: 12, paddingVertical: 5, marginBottom: 18 },
+  priceBadgeTxt: { fontSize: 11, fontWeight: '700', color: '#fff', letterSpacing: 1 },
+  priceAmt: { fontSize: 48, fontWeight: '800', color: DARK, letterSpacing: -1 },
+  pricePer: { fontSize: 15, color: MUTED },
+  priceSmall: { fontSize: 13, color: MUTED, marginBottom: 4 },
+  priceAdd: { fontSize: 13, color: MUTED, marginBottom: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  pricePromo: { backgroundColor: '#FFF7ED', borderRadius: 10, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: '#FDDCB2' },
+  pricePromoTxt: { fontSize: 13, color: '#C2410C', fontWeight: '600' },
+  priceFeat: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  priceCheck: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center' },
+  priceFeatTxt: { fontSize: 14, color: DARK },
+  calcCard: { backgroundColor: '#F8FAFC', borderRadius: 20, padding: 24, borderWidth: 1, borderColor: '#E2E8F0' },
+  calcLbl: { fontSize: 13, color: MUTED, marginBottom: 10, marginTop: 16 },
+  calcRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  calcBtn: { width: 42, height: 42, borderRadius: 10, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E2E8F0' },
+  calcBtnTxt: { fontSize: 22, fontWeight: '600', color: DARK },
+  calcVal: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '700', color: BLUE },
+  calcResult: { marginTop: 24, backgroundColor: BLUE, borderRadius: 16, padding: 24, alignItems: 'center' },
+  calcResultLbl: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,0.7)', marginBottom: 8 },
+  calcResultVal: { fontSize: 44, fontWeight: '800', color: '#fff', letterSpacing: -1 },
+  faqItem: { backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
+  faqQ: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, gap: 10 },
+  faqQTxt: { flex: 1, fontSize: 14, fontWeight: '600', color: DARK },
+  faqIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center' },
+  faqA: { fontSize: 14, color: MUTED, lineHeight: 21, paddingHorizontal: 16, paddingBottom: 16 },
+  phone: { fontSize: 36, fontWeight: '800', color: DARK, marginTop: 12, marginBottom: 4, letterSpacing: -0.5 },
+  hours: { fontSize: 14, color: MUTED, marginBottom: 20 },
+  footer: { backgroundColor: '#F5F7FA', padding: 24, borderTopWidth: 1, borderTopColor: '#E2E8F0' },
+  footerDesc: { fontSize: 13, color: MUTED, lineHeight: 20, marginBottom: 16 },
+  footerCopy: { fontSize: 12, color: MUTED },
 });
-
-const styles = { ...mobileStyles };
 
 /* ══════════════════════════════════════════════════════════════════════════
    ShiftApp — Landing (Liquid Glass Premium)
@@ -1165,7 +1256,7 @@ const HERO = `
   </div>
 </section>`;
 
-const FEATURES = `
+const HTML_FEATURES = `
 <section class="features-wrap section" id="funkcje">
   <div class="features-glow"></div>
   <div class="c">
@@ -1250,7 +1341,7 @@ const FEATURES = `
   </div>
 </section>`;
 
-const STEPS = `
+const HTML_STEPS = `
 <section class="steps-wrap section" id="kroki">
   <div class="steps-glow"></div>
   <div class="c">
@@ -1494,7 +1585,7 @@ const FOOT = `
   </div>
 </footer>`;
 
-const HTML = `${NAV}${HERO}${FEATURES}${STEPS}${DEMO}${PRICING}${CALC}${FAQ}${CONTACT}${FOOT}`;
+const HTML = `${NAV}${HERO}${HTML_FEATURES}${HTML_STEPS}${DEMO}${PRICING}${CALC}${FAQ}${CONTACT}${FOOT}`;
 
 /* ────────── COMPONENT ────────── */
 export default function Landing() {
