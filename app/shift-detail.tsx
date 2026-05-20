@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    AppState,
     Modal,
     Platform,
     ScrollView,
@@ -65,7 +66,7 @@ export default function ShiftDetailScreen() {
 
   // Refresh when app comes back from background
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+    const subscription = AppState.addEventListener('change', (nextAppState: string) => {
       if (nextAppState === 'active') {
         loadData();
       }
