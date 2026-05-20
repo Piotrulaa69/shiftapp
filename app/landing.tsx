@@ -1,6 +1,221 @@
-import { Redirect, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { theme } from '../styles/theme';
+
+// Mobile landing component
+function MobileLanding() {
+  const router = useRouter();
+
+  return (
+    <ScrollView style={styles.mobileContainer} contentContainerStyle={styles.mobileContent}>
+      {/* Hero */}
+      <View style={styles.mobileHero}>
+        <View style={styles.mobileLogo}>
+          <Text style={styles.mobileLogoText}>S</Text>
+        </View>
+        <Text style={styles.mobileTitle}>ShiftApp</Text>
+        <Text style={styles.mobileSubtitle}>Zarządzaj grafikiem i zespołem</Text>
+        
+        <TouchableOpacity 
+          style={styles.mobileButton}
+          onPress={() => router.push('/join' as any)}
+        >
+          <Text style={styles.mobileButtonText}>Dołącz za darmo</Text>
+          <Ionicons name="arrow-forward" size={18} color="#FFF" />
+        </TouchableOpacity>
+        
+        <TouchableOpacity onPress={() => router.push('/login' as any)}>
+          <Text style={styles.mobileLink}>Masz już konto? Zaloguj się</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Features */}
+      <View style={styles.mobileSection}>
+        <Text style={styles.mobileSectionTitle}>Kluczowe funkcje</Text>
+        
+        <View style={styles.mobileFeature}>
+          <View style={[styles.mobileFeatureIcon, { backgroundColor: '#EFF6FF' }]}>
+            <Ionicons name="calendar-outline" size={24} color="#2563EB" />
+          </View>
+          <View style={styles.mobileFeatureText}>
+            <Text style={styles.mobileFeatureTitle}>Grafik</Text>
+            <Text style={styles.mobileFeatureDesc}>Twórz i zarządzaj harmonogramem zmian</Text>
+          </View>
+        </View>
+
+        <View style={styles.mobileFeature}>
+          <View style={[styles.mobileFeatureIcon, { backgroundColor: '#F0FDF4' }]}>
+            <Ionicons name="time-outline" size={24} color="#16A34A" />
+          </View>
+          <View style={styles.mobileFeatureText}>
+            <Text style={styles.mobileFeatureTitle}>Czas pracy</Text>
+            <Text style={styles.mobileFeatureDesc}>Śledź czas i automatycznie obliczaj wynagrodzenie</Text>
+          </View>
+        </View>
+
+        <View style={styles.mobileFeature}>
+          <View style={[styles.mobileFeatureIcon, { backgroundColor: '#FEF3C7' }]}>
+            <Ionicons name="list-outline" size={24} color="#D97706" />
+          </View>
+          <View style={styles.mobileFeatureText}>
+            <Text style={styles.mobileFeatureTitle}>Zadania</Text>
+            <Text style={styles.mobileFeatureDesc}>Przypisuj zadania i śledź postęp</Text>
+          </View>
+        </View>
+
+        <View style={styles.mobileFeature}>
+          <View style={[styles.mobileFeatureIcon, { backgroundColor: '#F3E8FF' }]}>
+            <Ionicons name="swap-horizontal-outline" size={24} color="#7C3AED" />
+          </View>
+          <View style={styles.mobileFeatureText}>
+            <Text style={styles.mobileFeatureTitle}>Wymiany zmian</Text>
+            <Text style={styles.mobileFeatureDesc}>Ułatw pracownikom wymianę zmian</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* CTA */}
+      <View style={styles.mobileCta}>
+        <Text style={styles.mobileCtaTitle}>Gotowy do rozpoczęcia?</Text>
+        <Text style={styles.mobileCtaDesc}>Dołącz do restauracji korzystających z ShiftApp</Text>
+        <TouchableOpacity 
+          style={[styles.mobileButton, styles.mobileButtonFull]}
+          onPress={() => router.push('/join' as any)}
+        >
+          <Text style={styles.mobileButtonText}>Rozpocznij za darmo</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
+  );
+}
+
+const mobileStyles = StyleSheet.create({
+  mobileContainer: {
+    backgroundColor: theme.colors.background,
+  },
+  mobileContent: {
+    paddingBottom: 40,
+  },
+  mobileHero: {
+    alignItems: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 24,
+  },
+  mobileLogo: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  mobileLogoText: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#FFF',
+  },
+  mobileTitle: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: theme.colors.text,
+    marginBottom: 8,
+  },
+  mobileSubtitle: {
+    fontSize: 16,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    marginBottom: 32,
+  },
+  mobileButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: theme.colors.primary,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  mobileButtonFull: {
+    width: '100%',
+  },
+  mobileButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  mobileLink: {
+    fontSize: 14,
+    color: theme.colors.primary,
+    fontWeight: '500',
+  },
+  mobileSection: {
+    paddingHorizontal: 24,
+    marginBottom: 40,
+  },
+  mobileSectionTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: theme.colors.text,
+    marginBottom: 24,
+  },
+  mobileFeature: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.card,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    ...theme.shadows.card,
+  },
+  mobileFeatureIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  mobileFeatureText: {
+    flex: 1,
+  },
+  mobileFeatureTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.text,
+    marginBottom: 4,
+  },
+  mobileFeatureDesc: {
+    fontSize: 14,
+    color: theme.colors.textMuted,
+  },
+  mobileCta: {
+    backgroundColor: theme.colors.card,
+    marginHorizontal: 24,
+    padding: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    ...theme.shadows.card,
+  },
+  mobileCtaTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: theme.colors.text,
+    marginBottom: 8,
+  },
+  mobileCtaDesc: {
+    fontSize: 14,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+});
+
+const styles = { ...mobileStyles };
 
 /* ══════════════════════════════════════════════════════════════════════════
    ShiftApp — Landing (Liquid Glass Premium)
@@ -1285,7 +1500,7 @@ const HTML = `${NAV}${HERO}${FEATURES}${STEPS}${DEMO}${PRICING}${CALC}${FAQ}${CO
 export default function Landing() {
   const router = useRouter();
 
-  if (Platform.OS !== 'web') return <Redirect href="/" />;
+  if (Platform.OS !== 'web') return <MobileLanding />;
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
