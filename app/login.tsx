@@ -147,13 +147,16 @@ function useAuthPortal({
   cssFn,
   htmlFn,
   onAction,
+  disabled,
 }: {
   portalId: string;
   cssFn: () => string;
   htmlFn: () => string;
   onAction: (action: string, portal: HTMLElement, rerender: () => void) => void;
+  disabled?: boolean;
 }) {
   useEffect(() => {
+    if (disabled) return;
     if (typeof document === 'undefined') return;
 
     const portal = document.createElement('div');
@@ -212,9 +215,17 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isMobileBrowser, setIsMobileBrowser] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.innerWidth < 900) {
+      setIsMobileBrowser(true);
+    }
+  }, []);
 
   /* ── WEB: portal pattern ── */
   useAuthPortal({
+    disabled: isMobileBrowser,
     portalId: 'sa-login',
     cssFn: () => AUTH_CSS,
     htmlFn: () => buildLoginPortal(showPassword, isLoading, ''),
@@ -268,8 +279,8 @@ export default function LoginScreen() {
     },
   });
 
-  /* ── MOBILE fallback ── */
-  if (Platform.OS !== 'web') {
+  /* ── MOBILE fallback (native + mobile browser) ── */
+  if (Platform.OS !== 'web' || isMobileBrowser) {
     const handleLogin = async () => {
       if (!email.trim() || !password.trim()) {
         showAlert('Brakujące dane', 'Wprowadź e-mail i hasło.');
@@ -307,7 +318,7 @@ export default function LoginScreen() {
     );
   }
 
-  /* ── WEB: portal renders via useAuthPortal, return null ── */
+  /* ── WEB desktop: portal renders via useAuthPortal, return null ── */
   return null;
 }
 
