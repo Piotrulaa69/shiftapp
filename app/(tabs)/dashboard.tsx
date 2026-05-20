@@ -436,7 +436,7 @@ const styles = StyleSheet.create({
   checkinBtn: { flexDirection: 'row', backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.md, height: 46, alignItems: 'center', justifyContent: 'center', gap: 8, ...theme.shadows.fab },
   checkinBtnText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
 
-  quickActionsWrap: { marginHorizontal: 16, marginTop: 20 },
+  quickActionsWrap: { marginHorizontal: 16, marginTop: 20, marginBottom: 16 },
   quickActionsTitle: { fontSize: 15, fontWeight: '700', color: theme.colors.text, marginBottom: 12 },
   quickActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   quickAction: { alignItems: 'center', gap: 6, flexBasis: '30.5%', flexGrow: 1, maxWidth: '32%', paddingVertical: 14, backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.md, ...theme.shadows.card },
