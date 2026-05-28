@@ -209,7 +209,8 @@ function useAuthPortal({
 }
 
 export default function LoginScreen() {
-  const { login, isLoading } = useAuth();
+  const { login } = useAuth();
+  const [localLoading, setLocalLoading] = useState(false);
   const { showAlert } = useAlert();
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -228,7 +229,7 @@ export default function LoginScreen() {
     disabled: isMobileBrowser,
     portalId: 'sa-login',
     cssFn: () => AUTH_CSS,
-    htmlFn: () => buildLoginPortal(showPassword, isLoading, ''),
+    htmlFn: () => buildLoginPortal(showPassword, localLoading, ''),
     onAction: async (action, portal, rerender) => {
       if (action === 'back') { router.push('/landing' as any); return; }
       if (action === 'register') { router.push('/join' as any); return; }
@@ -262,8 +263,10 @@ export default function LoginScreen() {
           }, 0);
           return;
         }
+        setLocalLoading(true);
         portal.innerHTML = buildLoginPortal(showPassword, true, '');
         const success = await login(emailVal, pwVal);
+        setLocalLoading(false);
         if (success) {
           router.replace('/(tabs)/dashboard');
         } else {
@@ -286,7 +289,9 @@ export default function LoginScreen() {
         showAlert('Brakujące dane', 'Wprowadź e-mail i hasło.');
         return;
       }
+      setLocalLoading(true);
       const success = await login(email, password);
+      setLocalLoading(false);
       if (success) {
         router.replace('/(tabs)/dashboard');
       } else {
@@ -309,8 +314,8 @@ export default function LoginScreen() {
                 <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#94a3b8" />
               </TouchableOpacity>
             </View>
-            <TouchableOpacity style={mob.btn} onPress={handleLogin} disabled={isLoading} activeOpacity={0.88}>
-              {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={mob.btnTxt}>Zaloguj się</Text>}
+            <TouchableOpacity style={mob.btn} onPress={handleLogin} disabled={localLoading} activeOpacity={0.88}>
+              {localLoading ? <ActivityIndicator color="#fff" /> : <Text style={mob.btnTxt}>Zaloguj się</Text>}
             </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
