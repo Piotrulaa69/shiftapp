@@ -11,7 +11,7 @@ type ReportType = 'shifts' | 'attendance' | 'tasks' | 'hours';
 
 const REPORTS: { key: ReportType; icon: string; label: string; desc: string; color: string }[] = [
   { key: 'shifts', icon: 'calendar-outline', label: 'Zmiany', desc: 'Podsumowanie zmian w okresie', color: theme.colors.primary },
-  { key: 'attendance', icon: 'time-outline', label: 'Frekwencja', desc: 'Clock-in/out i spóźnienia', color: '#22C55E' },
+  { key: 'attendance', icon: 'time-outline', label: 'Frekwencja', desc: 'Zameldowania i spóźnienia', color: '#22C55E' },
   { key: 'tasks', icon: 'list-outline', label: 'Zadania', desc: 'Wykonanie zadań przez zespół', color: '#F97316' },
   { key: 'hours', icon: 'bar-chart-outline', label: 'Godziny', desc: 'Przepracowane godziny', color: '#A855F7' },
 ];

@@ -16,6 +16,8 @@ import { useAlert } from '../context/AlertContext';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 type Step = 'code' | 'register';
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -250,6 +252,14 @@ export default function JoinScreen() {
           }, 0);
           return;
         }
+        if (!EMAIL_REGEX.test(em)) {
+          render(currentStep, false, 'Podaj poprawny adres e-mail.', currentRestaurant, currentJob);
+          return;
+        }
+        if (pw.length < 6) {
+          render(currentStep, false, 'Hasło musi mieć minimum 6 znaków.', currentRestaurant, currentJob);
+          return;
+        }
         render(currentStep, true, '', currentRestaurant, currentJob);
         const success = await joinWithCode(currentCode, { firstName: fn, lastName: ln, email: em, password: pw });
         if (success) {
@@ -312,6 +322,8 @@ export default function JoinScreen() {
 
     const register = async () => {
       if (!mFn.trim() || !mLn.trim() || !mEmail.trim() || !mPw.trim()) { showAlert('Błąd', 'Uzupełnij wszystkie pola.'); return; }
+      if (!EMAIL_REGEX.test(mEmail.trim())) { showAlert('Nieprawidłowy e-mail', 'Podaj poprawny adres e-mail.'); return; }
+      if (mPw.trim().length < 6) { showAlert('Za krótkie hasło', 'Hasło musi mieć minimum 6 znaków.'); return; }
       const success = await joinWithCode(mCode.trim().toUpperCase(), { firstName: mFn.trim(), lastName: mLn.trim(), email: mEmail.trim(), password: mPw.trim() });
       if (success) { router.replace('/(tabs)/dashboard'); }
       else { showAlert('Błąd', 'Nie udało się dołączyć. Spróbuj ponownie.'); }

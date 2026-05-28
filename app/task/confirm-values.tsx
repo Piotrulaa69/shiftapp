@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
+    ActivityIndicator,
     Platform,
     ScrollView,
     StyleSheet,
@@ -13,6 +14,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../../context/AlertContext';
+import { useAuth } from '../../context/AuthContext';
+import { createTaskConfirmation, submitTaskForApproval } from '../../lib/db';
 import type { DbTask } from '../../lib/supabase';
 import { supabase } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
@@ -56,8 +59,10 @@ export default function ConfirmValuesScreen() {
   const { taskId } = useLocalSearchParams<{ taskId: string }>();
   const router = useRouter();
   const { showAlert, showSuccess, showConfirm } = useAlert();
+  const { user } = useAuth();
   const [task, setTask] = useState<DbTask | null>(null);
   const [items, setItems] = useState<CheckItem[]>(TEMP_ITEMS);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!taskId) return;
@@ -79,6 +84,41 @@ export default function ConfirmValuesScreen() {
     setItems((prev) => prev.map((item) => (item.id === id ? { ...item, value } : item)));
   };
 
+  const doSubmit = async (): Promise<boolean> => {
+    if (!user || !task) return false;
+    setSubmitting(true);
+
+    const valuesData = items.map((item) => ({
+      name: item.name,
+      value: parseFloat(item.value.replace(',', '.')),
+      unit: item.unit,
+      min: item.min,
+      max: item.max,
+      status: getStatus(item),
+    }));
+
+    const saved = await createTaskConfirmation({
+      restaurant_id: task.restaurant_id,
+      task_id: task.id,
+      employee_id: user.id,
+      confirmation_type: 'values',
+      values_data: valuesData,
+    });
+
+    if (!saved) {
+      setSubmitting(false);
+      showAlert('Błąd', 'Nie udało się zapisać potwierdzenia. Spróbuj ponownie.');
+      return false;
+    }
+
+    const hasWarningsNow = valuesData.some((v: any) => v.status !== 'ok' && v.status !== 'empty');
+    const comment = hasWarningsNow ? 'Wykryto odchylenia w pomiarach HACCP' : 'Pomiary OK';
+    await submitTaskForApproval(task.id, undefined, comment);
+
+    setSubmitting(false);
+    return true;
+  };
+
   const handleConfirm = () => {
     const unfilled = items.filter((i) => !i.value.trim());
     if (unfilled.length > 0) {
@@ -90,11 +130,16 @@ export default function ConfirmValuesScreen() {
       showConfirm(
         '⚠️ Wykryto odchylenia',
         `${warnings.length} urządzenie(a) poza normą. Czy potwierdzić i zgłosić do kierownika?`,
-        () => showSuccess('Zgłoszono!', 'Wyniki zostały zapisane i przesłane do kierownika.', () => router.back()),
+        async () => {
+          const ok = await doSubmit();
+          if (ok) showSuccess('Zgłoszono!', 'Wyniki zostały zapisane i przesłane do kierownika.', () => router.back());
+        },
         'Potwierdź i zgłoś'
       );
     } else {
-      showSuccess('Wszystkie temperatury w normie!', 'Wyniki zostały zapisane.', () => router.back());
+      doSubmit().then((ok) => {
+        if (ok) showSuccess('Wszystkie temperatury w normie!', 'Wyniki zostały zapisane.', () => router.back());
+      });
     }
   };
 
@@ -219,16 +264,23 @@ export default function ConfirmValuesScreen() {
 
         {/* Confirm */}
         <TouchableOpacity
-          style={[s.confirmBtn, filled.length < items.length && s.confirmBtnDisabled]}
+          style={[s.confirmBtn, (filled.length < items.length || submitting) && s.confirmBtnDisabled]}
           onPress={handleConfirm}
           activeOpacity={0.85}
+          disabled={submitting}
         >
-          <Ionicons name="checkmark-circle" size={22} color={theme.colors.white} />
-          <Text style={s.confirmBtnText}>
-            {filled.length < items.length
-              ? `Uzupełnij brakujące (${items.length - filled.length})`
-              : 'Zatwierdź pomiary'}
-          </Text>
+          {submitting ? (
+            <ActivityIndicator color={theme.colors.white} />
+          ) : (
+            <>
+              <Ionicons name="checkmark-circle" size={22} color={theme.colors.white} />
+              <Text style={s.confirmBtnText}>
+                {filled.length < items.length
+                  ? `Uzupełnij brakujące (${items.length - filled.length})`
+                  : 'Zatwierdź pomiary'}
+              </Text>
+            </>
+          )}
         </TouchableOpacity>
 
         <Text style={s.footerNote}>

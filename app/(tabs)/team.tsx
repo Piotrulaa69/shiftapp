@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Modal,
     Platform,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
@@ -13,6 +14,7 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { TeamSkeleton } from '../../components/Skeleton';
 import { useAuth } from '../../context/AuthContext';
 import { getEmployees, getPointsForEmployee, updateProfile } from '../../lib/db';
 import type { DbProfile } from '../../lib/supabase';
@@ -44,11 +46,25 @@ export default function TeamScreen() {
   const [editActive, setEditActive] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadTeam = useCallback(async () => {
+    if (!rid) return;
+    const data = await getEmployees(rid);
+    setEmployees(data);
+  }, [rid]);
+
   useEffect(() => {
     if (!rid) return;
     setLoading(true);
-    getEmployees(rid).then((data) => { setEmployees(data); setLoading(false); });
+    loadTeam().then(() => setLoading(false));
   }, [rid]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadTeam();
+    setRefreshing(false);
+  }, [loadTeam]);
 
   const openProfile = (emp: DbProfile) => {
     setSelectedEmp(emp);
@@ -84,9 +100,7 @@ export default function TeamScreen() {
 
   if (loading) return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
+      <TeamSkeleton />
     </SafeAreaView>
   );
 
@@ -124,7 +138,7 @@ export default function TeamScreen() {
         )}
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.list, isDesktop && styles.listDesktop]}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.list, isDesktop && styles.listDesktop]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}>
         {filtered.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="people-outline" size={48} color={theme.colors.border} />

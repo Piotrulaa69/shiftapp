@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
+    ActivityIndicator,
     Platform,
     ScrollView,
     StyleSheet,
@@ -13,6 +14,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../../context/AlertContext';
+import { useAuth } from '../../context/AuthContext';
+import { createTaskConfirmation, submitTaskForApproval } from '../../lib/db';
 import type { DbTask } from '../../lib/supabase';
 import { supabase } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
@@ -30,8 +33,10 @@ export default function ConfirmDescriptionScreen() {
   const { taskId } = useLocalSearchParams<{ taskId: string }>();
   const router = useRouter();
   const { showAlert, showSuccess } = useAlert();
+  const { user } = useAuth();
   const [task, setTask] = useState<DbTask | null>(null);
   const [description, setDescription] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!taskId) return;
@@ -54,11 +59,34 @@ export default function ConfirmDescriptionScreen() {
     );
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (description.trim().length < 20) {
       showAlert('Za krótki opis', 'Opisz szczegółowo przebieg zadania (minimum 20 znaków).');
       return;
     }
+    if (!user || !task) return;
+    setSubmitting(true);
+
+    const checklistData = checklist.map((c) => ({ label: c.label, checked: c.checked }));
+
+    const saved = await createTaskConfirmation({
+      restaurant_id: task.restaurant_id,
+      task_id: task.id,
+      employee_id: user.id,
+      confirmation_type: 'description',
+      description: description.trim(),
+      checklist_data: checklistData,
+    });
+
+    if (!saved) {
+      setSubmitting(false);
+      showAlert('Błąd', 'Nie udało się zapisać potwierdzenia. Spróbuj ponownie.');
+      return;
+    }
+
+    await submitTaskForApproval(task.id, undefined, description.trim());
+
+    setSubmitting(false);
     showSuccess('Zadanie potwierdzone!', 'Opis został zapisany. Kierownik zmiany zostanie powiadomiony.', () => router.back());
   };
 
@@ -210,12 +238,19 @@ export default function ConfirmDescriptionScreen() {
 
         {/* Confirm button */}
         <TouchableOpacity
-          style={[s.confirmBtn, !isReady && s.confirmBtnDisabled]}
+          style={[s.confirmBtn, (!isReady || submitting) && s.confirmBtnDisabled]}
           onPress={handleConfirm}
           activeOpacity={0.85}
+          disabled={submitting}
         >
-          <Ionicons name="checkmark-circle" size={22} color={theme.colors.white} />
-          <Text style={s.confirmBtnText}>Potwierdź wykonanie zadania</Text>
+          {submitting ? (
+            <ActivityIndicator color={theme.colors.white} />
+          ) : (
+            <>
+              <Ionicons name="checkmark-circle" size={22} color={theme.colors.white} />
+              <Text style={s.confirmBtnText}>Potwierdź wykonanie zadania</Text>
+            </>
+          )}
         </TouchableOpacity>
 
         <Text style={s.footerNote}>

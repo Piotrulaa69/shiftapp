@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
     Modal,
     Platform,
+    RefreshControl,
     ScrollView,
     Share,
     StyleSheet,
@@ -68,6 +69,8 @@ export default function AdminScreen() {
     });
   };
 
+  const [refreshing, setRefreshing] = useState(false);
+
   const refresh = () => {
     if (!rid) return;
     getEmployees(rid).then(setEmployees);
@@ -78,6 +81,12 @@ export default function AdminScreen() {
   };
 
   useFocusEffect(useCallback(() => { refresh(); }, [rid]));
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    refresh();
+    setTimeout(() => setRefreshing(false), 800);
+  }, [rid]);
 
   useEffect(() => {
     if (restaurant) {
@@ -262,6 +271,7 @@ export default function AdminScreen() {
         contentContainerStyle={[s.content, isDesktop && s.contentDesktop]}
         showsVerticalScrollIndicator={false}
         style={isDesktop ? { width: '100%' } : undefined}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
       >
         {/* ─── TEAM TAB ─── */}
         {tab === 'team' && (

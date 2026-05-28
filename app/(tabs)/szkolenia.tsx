@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileHeader from '../../components/MobileHeader';
+import { CardSkeleton, Skeleton } from '../../components/Skeleton';
 import { useAuth } from '../../context/AuthContext';
 import { getPointsForEmployee, getTeamPoints, getTrainings } from '../../lib/db';
 import type { DbPointsLedger, DbTraining } from '../../lib/supabase';
@@ -13,7 +14,7 @@ type FilterKey = 'wszystkie' | 'dla_mnie' | 'obowiazkowe' | 'nowe';
 type TabKey = 'szkolenia' | 'punkty';
 
 const POINT_EVENT_LABELS: Record<string, { label: string; icon: string; color: string }> = {
-  clock_in_on_time: { label: 'Clock-in na czas', icon: 'time-outline', color: '#22C55E' },
+  clock_in_on_time: { label: 'Zameldowanie na czas', icon: 'time-outline', color: '#22C55E' },
   task_completed: { label: 'Zadanie wykonane', icon: 'checkmark-circle-outline', color: theme.colors.primary },
   training_completed: { label: 'Szkolenie ukończone', icon: 'school-outline', color: '#A855F7' },
   quiz_score: { label: 'Wynik quizu', icon: 'trophy-outline', color: '#F97316' },
@@ -182,11 +183,25 @@ export default function SzkoleniaScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
 
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadTrainings = useCallback(async () => {
+    if (!rid) return;
+    const data = await getTrainings(rid);
+    setTrainings(data);
+  }, [rid]);
+
   useFocusEffect(useCallback(() => {
     if (!rid) return;
     setLoading(true);
-    getTrainings(rid).then((data) => { setTrainings(data); setLoading(false); });
+    loadTrainings().then(() => setLoading(false));
   }, [rid]));
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadTrainings();
+    setRefreshing(false);
+  }, [loadTrainings]);
 
   useEffect(() => {
     if (!rid || !user || activeTab !== 'punkty') return;
@@ -204,8 +219,11 @@ export default function SzkoleniaScreen() {
 
   if (loading) return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }} edges={['top']}>
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+      <View style={{ padding: 16, gap: 12 }}>
+        <Skeleton width="40%" height={18} borderRadius={8} />
+        <CardSkeleton />
+        <CardSkeleton />
+        <CardSkeleton />
       </View>
     </SafeAreaView>
   );
@@ -259,7 +277,7 @@ export default function SzkoleniaScreen() {
         ))}
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, isDesktop && styles.scrollContentDesktop]}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, isDesktop && styles.scrollContentDesktop]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}>
         {/* Progress card */}
         {(() => {
           const lvl = getLevel(totalPoints);

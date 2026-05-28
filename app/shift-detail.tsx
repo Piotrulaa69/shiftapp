@@ -102,7 +102,7 @@ export default function ShiftDetailScreen() {
       setActiveCI(result.clockIn);
       setShowPinModal(false);
     } else {
-      setPinError(result.error ?? 'Błąd clock-in');
+      setPinError(result.error ?? 'Błąd zameldowania');
     }
     setClockLoading(false);
   };
@@ -127,7 +127,7 @@ export default function ShiftDetailScreen() {
     if (Platform.OS === 'web') {
       if (confirm('Potwierdzasz zakończenie zmiany?')) doClockOut();
     } else {
-      Alert.alert('Clock-out', 'Potwierdzasz zakończenie zmiany?', [
+      Alert.alert('Wymeldowanie', 'Potwierdzasz zakończenie zmiany?', [
         { text: 'Anuluj', style: 'cancel' },
         { text: 'Potwierdź', onPress: doClockOut },
       ]);
@@ -225,17 +225,61 @@ export default function ShiftDetailScreen() {
                 </View>
                 <TouchableOpacity style={[styles.clockBtn, styles.clockOutBtn]} onPress={handleClockOut} disabled={clockLoading} activeOpacity={0.85}>
                   {clockLoading ? <ActivityIndicator color={theme.colors.white} /> : (
-                    <><Ionicons name="log-out-outline" size={18} color={theme.colors.white} /><Text style={styles.clockBtnText}>Clock-out</Text></>
+                    <><Ionicons name="log-out-outline" size={18} color={theme.colors.white} /><Text style={styles.clockBtnText}>Wymelduj się</Text></>
                   )}
                 </TouchableOpacity>
               </>
             ) : (
               <TouchableOpacity style={styles.clockBtn} onPress={handleClockIn} disabled={clockLoading} activeOpacity={0.85}>
                 {clockLoading ? <ActivityIndicator color={theme.colors.white} /> : (
-                  <><Ionicons name="log-in-outline" size={18} color={theme.colors.white} /><Text style={styles.clockBtnText}>Clock-in — Rozpocznij zmianę</Text></>
+                  <><Ionicons name="log-in-outline" size={18} color={theme.colors.white} /><Text style={styles.clockBtnText}>Zamelduj się — Rozpocznij zmianę</Text></>
                 )}
               </TouchableOpacity>
             )}
+          </View>
+        )}
+
+        {/* Confirm / Reject shift */}
+        {isMyShift && shift.status === 'do_potwierdzenia' && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Potwierdzenie zmiany</Text>
+            <Text style={{ fontSize: 13, color: theme.colors.textSecondary, marginBottom: 12 }}>
+              Twój pracodawca prosi o potwierdzenie Twojej dostępności na tę zmianę.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: theme.colors.green, height: 44, borderRadius: theme.borderRadius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                activeOpacity={0.85}
+                onPress={async () => {
+                  await supabase.from('shifts').update({ status: 'potwierdzona' }).eq('id', shift.id);
+                  setShift({ ...shift, status: 'potwierdzona' });
+                }}
+              >
+                <Ionicons name="checkmark-circle" size={18} color={theme.colors.white} />
+                <Text style={{ color: theme.colors.white, fontWeight: '700', fontSize: 14 }}>Potwierdź</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: theme.colors.error, height: 44, borderRadius: theme.borderRadius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                activeOpacity={0.85}
+                onPress={() => {
+                  const doReject = async () => {
+                    await supabase.from('shifts').update({ status: 'zaplanowana' }).eq('id', shift.id);
+                    setShift({ ...shift, status: 'zaplanowana' });
+                  };
+                  if (Platform.OS === 'web') {
+                    if (confirm('Czy na pewno chcesz odrzucić tę zmianę?')) doReject();
+                  } else {
+                    Alert.alert('Odrzuć zmianę', 'Czy na pewno chcesz odrzucić tę zmianę?', [
+                      { text: 'Anuluj', style: 'cancel' },
+                      { text: 'Odrzuć', style: 'destructive', onPress: doReject },
+                    ]);
+                  }
+                }}
+              >
+                <Ionicons name="close-circle" size={18} color={theme.colors.white} />
+                <Text style={{ color: theme.colors.white, fontWeight: '700', fontSize: 14 }}>Odrzuć</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 

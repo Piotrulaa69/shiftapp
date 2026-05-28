@@ -40,6 +40,15 @@ type AuthContextType = {
     code: string,
     data: { firstName: string; lastName: string; email: string; password: string }
   ) => Promise<boolean>;
+  registerRestaurant: (data: {
+    restaurantName: string;
+    address: string;
+    phone: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    password: string;
+  }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   refreshRestaurant: () => Promise<void>;
 };
@@ -77,7 +86,7 @@ function toRestaurant(r: DbRestaurant): Restaurant {
   };
 }
 
-async function loadUserData(userId: string, email: string): Promise<{ user: AuthUser; restaurant: Restaurant } | null> {
+async function loadUserData(userId: string, email: string): Promise<{ user: AuthUser; restaurant: Restaurant | null } | null> {
   const { data: profile, error: pErr } = await supabase
     .from('profiles')
     .select('*, restaurants(*)')
@@ -87,11 +96,10 @@ async function loadUserData(userId: string, email: string): Promise<{ user: Auth
   if (pErr || !profile) return null;
 
   const restaurant = (profile as any).restaurants;
-  if (!restaurant) return null;
 
   return {
     user: toAuthUser(profile as DbProfile, email),
-    restaurant: toRestaurant(restaurant as DbRestaurant),
+    restaurant: restaurant ? toRestaurant(restaurant as DbRestaurant) : null,
   };
 }
 
@@ -193,6 +201,71 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return true;
   };
 
+  const registerRestaurant = async (data: {
+    restaurantName: string;
+    address: string;
+    phone: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    password: string;
+  }): Promise<{ success: boolean; error?: string }> => {
+    setIsLoading(true);
+
+    // 1. Create Supabase Auth user
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: data.email.trim(),
+      password: data.password,
+    });
+    if (authError || !authData.user) {
+      setIsLoading(false);
+      return { success: false, error: authError?.message ?? 'Nie udało się utworzyć konta.' };
+    }
+    const userId = authData.user.id;
+
+    // 2. Create restaurant
+    const { data: restData, error: restError } = await supabase
+      .from('restaurants')
+      .insert({
+        name: data.restaurantName.trim(),
+        address: data.address.trim(),
+        phone: data.phone.trim(),
+        owner_id: userId,
+      })
+      .select()
+      .single();
+    if (restError || !restData) {
+      setIsLoading(false);
+      return { success: false, error: 'Nie udało się utworzyć restauracji.' };
+    }
+
+    // 3. Create owner profile
+    const avatarColors = ['#2196C9','#22C55E','#F97316','#A855F7','#EAB308','#EF4444','#0F172A'];
+    const avatarColor = avatarColors[Math.floor(Math.random() * avatarColors.length)];
+    const { error: profileError } = await supabase.from('profiles').insert({
+      id: userId,
+      restaurant_id: restData.id,
+      first_name: data.firstName.trim(),
+      last_name: data.lastName.trim(),
+      role: 'owner',
+      job_title: 'Właściciel',
+      avatar_color: avatarColor,
+    });
+    if (profileError) {
+      setIsLoading(false);
+      return { success: false, error: 'Nie udało się utworzyć profilu.' };
+    }
+
+    // 4. Load user data
+    const result = await loadUserData(userId, data.email.trim());
+    setIsLoading(false);
+    if (!result) return { success: false, error: 'Nie udało się załadować danych.' };
+    setUser(result.user);
+    setRestaurant(result.restaurant);
+    setHasSession(true);
+    return { success: true };
+  };
+
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -210,7 +283,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   return (
     <AuthContext.Provider
-      value={{ user, restaurant, isAuthenticated: hasSession, isOwner, isManager, isLoading, login, joinWithCode, logout, refreshRestaurant }}
+      value={{ user, restaurant, isAuthenticated: hasSession, isOwner, isManager, isLoading, login, joinWithCode, registerRestaurant, logout, refreshRestaurant }}
     >
       {children}
     </AuthContext.Provider>

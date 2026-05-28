@@ -16,6 +16,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../context/AlertContext';
 import { useAuth } from '../context/AuthContext';
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 /* ═══════════════════════════════════════════════════════════════════════════
    WEB PORTAL — dark two-column auth design
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -138,6 +140,13 @@ function buildLoginPortal(showPw: boolean, loading: boolean, err: string) {
       </div>
 
       <button class="al-sub" data-action="login" ${loading ? 'disabled' : ''}>${loading ? 'Logowanie…' : 'Zaloguj się'}</button>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:20px;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:14px;color:#64748b;">Nie masz konta?</span>
+          <button data-action="register-restaurant" type="button" style="background:none;border:none;color:#2563EB;font-size:14px;font-weight:600;cursor:pointer;padding:0;">Zarejestruj restaurację</button>
+        </div>
+        <button data-action="register" type="button" style="background:none;border:none;color:#64748b;font-size:13px;cursor:pointer;padding:0;">Mam kod aktywacyjny →</button>
+      </div>
     </div>
   </div>`;
 }
@@ -232,7 +241,8 @@ export default function LoginScreen() {
     htmlFn: () => buildLoginPortal(showPassword, localLoading, ''),
     onAction: async (action, portal, rerender) => {
       if (action === 'back') { router.push('/landing' as any); return; }
-      if (action === 'register') { router.push('/join' as any); return; }
+      if (action === 'register') { window.location.href = '/join'; return; }
+      if (action === 'register-restaurant') { window.location.href = '/register'; return; }
       if (action === 'forgot') { router.push('/forgot-password' as any); return; }
       if (action === 'togglepw') {
         const emailVal = (portal.querySelector('#al-email') as HTMLInputElement)?.value || '';
@@ -255,6 +265,16 @@ export default function LoginScreen() {
         const pwVal = (portal.querySelector('#al-pw') as HTMLInputElement)?.value?.trim() || '';
         if (!emailVal || !pwVal) {
           portal.innerHTML = buildLoginPortal(showPassword, false, 'Wprowadź e-mail i hasło.');
+          setTimeout(() => {
+            const e = portal.querySelector('#al-email') as HTMLInputElement;
+            const p = portal.querySelector('#al-pw') as HTMLInputElement;
+            if (e) e.value = emailVal;
+            if (p) p.value = pwVal;
+          }, 0);
+          return;
+        }
+        if (!EMAIL_REGEX.test(emailVal)) {
+          portal.innerHTML = buildLoginPortal(showPassword, false, 'Podaj poprawny adres e-mail.');
           setTimeout(() => {
             const e = portal.querySelector('#al-email') as HTMLInputElement;
             const p = portal.querySelector('#al-pw') as HTMLInputElement;
@@ -289,6 +309,10 @@ export default function LoginScreen() {
         showAlert('Brakujące dane', 'Wprowadź e-mail i hasło.');
         return;
       }
+      if (!EMAIL_REGEX.test(email.trim())) {
+        showAlert('Nieprawidłowy e-mail', 'Podaj poprawny adres e-mail.');
+        return;
+      }
       setLocalLoading(true);
       const success = await login(email, password);
       setLocalLoading(false);
@@ -317,6 +341,12 @@ export default function LoginScreen() {
             <TouchableOpacity style={mob.btn} onPress={handleLogin} disabled={localLoading} activeOpacity={0.88}>
               {localLoading ? <ActivityIndicator color="#fff" /> : <Text style={mob.btnTxt}>Zaloguj się</Text>}
             </TouchableOpacity>
+            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 20 }}>
+              <Text style={{ fontSize: 14, color: '#64748b' }}>Nie masz konta?</Text>
+              <TouchableOpacity onPress={() => router.push('/register' as any)}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#0084FF' }}>Zarejestruj restaurację</Text>
+              </TouchableOpacity>
+            </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>

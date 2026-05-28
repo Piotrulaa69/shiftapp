@@ -408,6 +408,17 @@ export async function setAvailability(
 
 // ─── Leave Types ─────────────────────────────────────────────────────────────
 
+const LEAVE_TYPE_DEFAULTS = [
+  { name: 'Urlop wypoczynkowy', days_per_year: 26, requires_attachment: false, requires_comment: false },
+  { name: 'L4 – Zwolnienie lekarskie', days_per_year: 0, requires_attachment: false, requires_comment: false },
+  { name: 'Urlop na żądanie', days_per_year: 4, requires_attachment: false, requires_comment: false },
+  { name: 'Urlop okolicznościowy', days_per_year: 2, requires_attachment: false, requires_comment: true },
+  { name: 'Urlop macierzyński', days_per_year: 0, requires_attachment: false, requires_comment: false },
+  { name: 'Urlop ojcowski', days_per_year: 14, requires_attachment: false, requires_comment: false },
+  { name: 'Urlop bezpłatny', days_per_year: 0, requires_attachment: false, requires_comment: true },
+  { name: 'Urlop szkoleniowy', days_per_year: 0, requires_attachment: false, requires_comment: false },
+];
+
 export async function getLeaveTypes(restaurantId: string): Promise<DbLeaveType[]> {
   const { data, error } = await supabase
     .from('leave_types')
@@ -416,6 +427,17 @@ export async function getLeaveTypes(restaurantId: string): Promise<DbLeaveType[]
     .order('name');
   if (error) { console.error('getLeaveTypes', error); return []; }
   return data as DbLeaveType[];
+}
+
+export async function ensureDefaultLeaveTypes(restaurantId: string): Promise<DbLeaveType[]> {
+  const existing = await getLeaveTypes(restaurantId);
+  if (existing.length > 0) return existing;
+  const { data, error } = await supabase
+    .from('leave_types')
+    .insert(LEAVE_TYPE_DEFAULTS.map((t) => ({ ...t, restaurant_id: restaurantId })))
+    .select();
+  if (error) { console.error('ensureDefaultLeaveTypes', error); return []; }
+  return (data ?? []) as DbLeaveType[];
 }
 
 // ─── Leave Requests ──────────────────────────────────────────────────────────
@@ -764,7 +786,11 @@ export async function approveTask(
 
 export async function rejectTask(taskId: string, comment?: string): Promise<boolean> {
   const { data: task } = await supabase.from('tasks').select('restaurant_id, title, assigned_to').eq('id', taskId).single();
-  const { error } = await supabase.from('tasks').update({ status: 'odrzucone', proof_comment: comment ?? null }).eq('id', taskId);
+  const { error } = await supabase.from('tasks').update({
+    status: 'do_zrobienia',
+    proof_comment: comment ?? null,
+    proof_photo_url: null,
+  }).eq('id', taskId);
   if (!error && task?.assigned_to) {
     notify(task.restaurant_id, task.assigned_to, 'task', 'Zadanie odrzucone', `Zadanie "${task.title}" zostało odrzucone.${comment ? ' Powód: ' + comment : ''}`, taskId);
   }
@@ -782,6 +808,45 @@ export async function clockInWithPin(
   }
   const ci = await clockIn(restaurantId, shiftId, employeeId, 'pin');
   return ci ? { success: true, clockIn: ci } : { success: false, error: 'Błąd rejestracji' };
+}
+
+// ─── Task Confirmations ──────────────────────────────────────────────────────
+
+export type TaskConfirmationInput = {
+  restaurant_id: string;
+  task_id: string;
+  employee_id: string;
+  confirmation_type: 'photo' | 'values' | 'description';
+  photo_url?: string | null;
+  photo_notes?: string | null;
+  values_data?: any | null;
+  description?: string | null;
+  checklist_data?: any | null;
+};
+
+export async function createTaskConfirmation(input: TaskConfirmationInput): Promise<boolean> {
+  const { error } = await supabase.from('task_confirmations').insert(input);
+  if (error) { console.error('createTaskConfirmation', error); return false; }
+  return true;
+}
+
+export async function uploadTaskPhoto(
+  restaurantId: string,
+  taskId: string,
+  fileUri: string,
+): Promise<string | null> {
+  try {
+    const path = `${restaurantId}/tasks/${taskId}_${Date.now()}.jpg`;
+    const response = await fetch(fileUri);
+    const blob = await response.blob();
+    const { error } = await supabase.storage.from('documents').upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+    if (error) { console.error('uploadTaskPhoto', error); return null; }
+    const { data } = supabase.storage.from('documents').getPublicUrl(path);
+    return data.publicUrl;
+  } catch (e) {
+    console.error('uploadTaskPhoto', e);
+    return null;
+  }
 }
 
 // ─── Quiz Questions ───────────────────────────────────────────────────────────

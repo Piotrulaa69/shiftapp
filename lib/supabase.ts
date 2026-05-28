@@ -103,6 +103,7 @@ export type DbTask = {
   points: number;
   proof_photo_url: string | null;
   proof_comment: string | null;
+  rejection_comment: string | null;
   is_cyclic: boolean;
   created_at: string;
 };

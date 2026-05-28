@@ -5,12 +5,12 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { getPointsForEmployee, getTeamPoints } from '../lib/db';
+import type { DbPointsLedger } from '../lib/supabase';
 import { supabase } from '../lib/supabase';
-import type { DbPointsLedger, DbProfile } from '../lib/supabase';
 import { theme } from '../styles/theme';
 
 const EVENT_LABELS: Record<string, { label: string; icon: string; color: string }> = {
-  clock_in_on_time: { label: 'Clock-in na czas', icon: 'time-outline', color: '#22C55E' },
+  clock_in_on_time: { label: 'Zameldowanie na czas', icon: 'time-outline', color: '#22C55E' },
   task_completed: { label: 'Zadanie wykonane', icon: 'checkmark-circle-outline', color: theme.colors.primary },
   training_completed: { label: 'Szkolenie ukończone', icon: 'school-outline', color: '#A855F7' },
   quiz_score: { label: 'Wynik quizu', icon: 'trophy-outline', color: '#F97316' },

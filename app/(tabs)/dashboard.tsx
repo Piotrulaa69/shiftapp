@@ -2,16 +2,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
     Platform,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     useWindowDimensions,
-    View,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { DashboardSkeleton } from '../../components/Skeleton';
 import { useAuth } from '../../context/AuthContext';
 import {
     getActiveClockIn,
@@ -51,7 +52,7 @@ function getClockStatus(shift: DbShift, clockIns: DbClockIn[]): ClockStatus {
 const CLOCK_STATUS_LABELS: Record<ClockStatus, { label: string; color: string; bg: string }> = {
   on_time: { label: 'Na czas', color: '#16A34A', bg: '#F0FDF4' },
   late: { label: 'Spóźnienie', color: '#F59E0B', bg: '#FFFBEB' },
-  no_clockin: { label: 'Brak clock-in', color: '#EF4444', bg: '#FEF2F2' },
+  no_clockin: { label: 'Niezameldowany', color: '#EF4444', bg: '#FEF2F2' },
   active: { label: 'Nadal pracuje', color: '#2563EB', bg: '#EFF6FF' },
   done: { label: 'Zakończona', color: '#6B7280', bg: '#F3F4F6' },
 };
@@ -75,10 +76,11 @@ export default function DashboardScreen() {
   const [todayShifts, setTodayShifts] = useState<DbShift[]>([]);
   const [todayClockIns, setTodayClockIns] = useState<DbClockIn[]>([]);
   const [pendingCounts, setPendingCounts] = useState({ leaveRequests: 0, absences: 0, swaps: 0, taskApprovals: 0 });
+  const [refreshing, setRefreshing] = useState(false);
 
   const today = fmt(new Date());
 
-  useFocusEffect(useCallback(() => {
+  const loadAll = useCallback(async () => {
     if (!rid) return;
     getTasks(rid).then(setTasks);
     if (user?.id) {
@@ -93,7 +95,15 @@ export default function DashboardScreen() {
       getClockIns(rid, today).then(setTodayClockIns);
       getPendingCounts(rid).then(setPendingCounts);
     }
-  }, [rid, user?.id, isManager]));
+  }, [rid, user?.id, isManager]);
+
+  useFocusEffect(useCallback(() => { loadAll(); }, [loadAll]));
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadAll();
+    setRefreshing(false);
+  }, [loadAll]);
 
   // Timer for elapsed work time
   useEffect(() => {
@@ -114,9 +124,9 @@ export default function DashboardScreen() {
   const totalPending = pendingCounts.leaveRequests + pendingCounts.absences + pendingCounts.swaps + pendingCounts.taskApprovals;
 
   if (!user) return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.background }}>
-      <ActivityIndicator size="large" color={theme.colors.primary} />
-    </View>
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <DashboardSkeleton />
+    </SafeAreaView>
   );
 
   const STAT_CARDS = [
@@ -128,7 +138,7 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scroll, isDesktop && styles.scrollDesktop]}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scroll, isDesktop && styles.scrollDesktop]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}>
 
         {/* Header */}
         <View style={styles.header}>

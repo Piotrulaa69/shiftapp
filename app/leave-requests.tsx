@@ -1,12 +1,89 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
-import { createLeaveRequest, deleteLeaveRequest, getEmployees, getLeaveRequests, getLeaveTypes, reviewLeaveRequest, updateLeaveRequest } from '../lib/db';
+import { createLeaveRequest, deleteLeaveRequest, ensureDefaultLeaveTypes, getEmployees, getLeaveRequests, reviewLeaveRequest, updateLeaveRequest } from '../lib/db';
 import type { DbLeaveRequest, DbLeaveType, DbProfile } from '../lib/supabase';
 import { theme } from '../styles/theme';
+
+const MONTHS = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
+const DAY_NAMES = ['Pn','Wt','Śr','Cz','Pt','Sb','Nd'];
+const pad = (n: number) => String(n).padStart(2, '0');
+
+function CalendarPicker({ value, onChange, minDate }: { value: string; onChange: (d: string) => void; minDate?: string }) {
+  const [open, setOpen] = useState(false);
+  const today = new Date();
+  const initDate = value ? new Date(value) : today;
+  const [vy, setVy] = useState(initDate.getFullYear());
+  const [vm, setVm] = useState(initDate.getMonth());
+
+  useEffect(() => {
+    if (value) { const d = new Date(value); setVy(d.getFullYear()); setVm(d.getMonth()); }
+  }, [value]);
+
+  const daysInMonth = new Date(vy, vm + 1, 0).getDate();
+  const firstDay = new Date(vy, vm, 1).getDay();
+  const startOffset = (firstDay + 6) % 7;
+
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < startOffset; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const weeks: (number | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+
+  const toISO = (d: number) => `${vy}-${pad(vm + 1)}-${pad(d)}`;
+  const todayISO = `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
+
+  const prevM = () => { if (vm === 0) { setVy(y => y-1); setVm(11); } else setVm(m => m-1); };
+  const nextM = () => { if (vm === 11) { setVy(y => y+1); setVm(0); } else setVm(m => m+1); };
+
+  const displayVal = value ? value.split('-').reverse().join('.') : 'Wybierz datę';
+
+  return (
+    <View>
+      <TouchableOpacity style={[mStyles.input, { flexDirection:'row', alignItems:'center', justifyContent:'space-between' }]} onPress={() => setOpen(o => !o)} activeOpacity={0.8}>
+        <Text style={{ fontSize:14, color: value ? theme.colors.text : theme.colors.textMuted }}>{displayVal}</Text>
+        <Ionicons name={open ? 'chevron-up' : 'calendar-outline'} size={18} color={theme.colors.textMuted} />
+      </TouchableOpacity>
+      {open && (
+        <View style={calSt.wrap}>
+          <View style={calSt.header}>
+            <TouchableOpacity onPress={prevM} style={calSt.nav}><Ionicons name="chevron-back" size={20} color={theme.colors.text} /></TouchableOpacity>
+            <Text style={calSt.month}>{MONTHS[vm]} {vy}</Text>
+            <TouchableOpacity onPress={nextM} style={calSt.nav}><Ionicons name="chevron-forward" size={20} color={theme.colors.text} /></TouchableOpacity>
+          </View>
+          <View style={{ flexDirection:'row', marginBottom:4 }}>
+            {DAY_NAMES.map(d => <Text key={d} style={calSt.dayName}>{d}</Text>)}
+          </View>
+          {weeks.map((week, wi) => (
+            <View key={wi} style={{ flexDirection:'row' }}>
+              {week.map((day, di) => {
+                if (!day) return <View key={di} style={calSt.cell} />;
+                const iso = toISO(day);
+                const isSel = value === iso;
+                const isToday = iso === todayISO;
+                const isDisabled = !!(minDate && iso < minDate);
+                return (
+                  <TouchableOpacity key={di} style={[calSt.cell, isSel && calSt.cellSel, isToday && !isSel && calSt.cellToday, isDisabled && calSt.cellDisabled]}
+                    onPress={() => { if (!isDisabled) { onChange(iso); setOpen(false); } }} activeOpacity={0.7} disabled={isDisabled}>
+                    <Text style={[calSt.cellText, isSel && calSt.cellTextSel, isToday && !isSel && calSt.cellTextToday, isDisabled && calSt.cellTextDisabled]}>{day}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ))}
+          <TouchableOpacity onPress={() => { onChange(todayISO); setOpen(false); }} style={calSt.todayBtn}>
+            <Text style={calSt.todayBtnText}>Dzisiaj</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+}
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
   pending: { label: 'Oczekujący', color: '#F97316', bg: '#FFF4E5' },
@@ -29,7 +106,8 @@ export default function LeaveRequestsScreen() {
   const isDesktop = Platform.OS === 'web' && width >= 768;
 
   const [requests, setRequests] = useState<DbLeaveRequest[]>([]);
-  const [leaveTypes, setLeaveTypes] = useState<DbLeaveType[]>([]);
+  const [leaveTypes, setLeaveTypes] = useState<DbLeaveType[]>([]); // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _ = useMemo(() => null, []);
   const [employees, setEmployees] = useState<DbProfile[]>([]);
   const [teamRequests, setTeamRequests] = useState<DbLeaveRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,7 +134,7 @@ export default function LeaveRequestsScreen() {
     setLoading(true);
     const [reqs, types] = await Promise.all([
       getLeaveRequests(rid, user.id),
-      getLeaveTypes(rid),
+      ensureDefaultLeaveTypes(rid),
     ]);
     setRequests(reqs);
     setLeaveTypes(types);
@@ -312,10 +390,10 @@ export default function LeaveRequestsScreen() {
               ))}
 
               <Text style={mStyles.label}>DATA OD</Text>
-              <TextInput style={mStyles.input} value={dateFrom} onChangeText={setDateFrom} placeholder="2026-06-01" placeholderTextColor={theme.colors.textMuted} />
+              <CalendarPicker value={dateFrom} onChange={setDateFrom} />
 
               <Text style={mStyles.label}>DATA DO</Text>
-              <TextInput style={mStyles.input} value={dateTo} onChangeText={setDateTo} placeholder="2026-06-14" placeholderTextColor={theme.colors.textMuted} />
+              <CalendarPicker value={dateTo} onChange={setDateTo} minDate={dateFrom || undefined} />
 
               {dateFrom && dateTo && new Date(dateTo) >= new Date(dateFrom) && (
                 <View style={mStyles.daysPreview}>
@@ -422,6 +500,24 @@ const styles = StyleSheet.create({
   actionApproveText: { fontSize: 12, fontWeight: '600', color: theme.colors.green },
   actionReject: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: theme.colors.errorLight },
   actionRejectText: { fontSize: 12, fontWeight: '600', color: theme.colors.error },
+});
+
+const calSt = StyleSheet.create({
+  wrap: { backgroundColor: theme.colors.card, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.border, padding: 12, marginTop: 4, marginBottom: 4 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  nav: { padding: 6, borderRadius: 8, backgroundColor: theme.colors.surface },
+  month: { fontSize: 15, fontWeight: '700', color: theme.colors.text },
+  dayName: { flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '700', color: theme.colors.textMuted },
+  cell: { flex: 1, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 8, margin: 1 },
+  cellSel: { backgroundColor: theme.colors.primary },
+  cellToday: { borderWidth: 1.5, borderColor: theme.colors.primary },
+  cellDisabled: { opacity: 0.3 },
+  cellText: { fontSize: 13, fontWeight: '500', color: theme.colors.text },
+  cellTextSel: { color: '#fff', fontWeight: '700' },
+  cellTextToday: { color: theme.colors.primary, fontWeight: '700' },
+  cellTextDisabled: { color: theme.colors.textMuted },
+  todayBtn: { marginTop: 8, alignItems: 'center', paddingVertical: 8, borderTopWidth: 1, borderTopColor: theme.colors.border },
+  todayBtnText: { fontSize: 13, fontWeight: '600', color: theme.colors.primary },
 });
 
 const mStyles = StyleSheet.create({

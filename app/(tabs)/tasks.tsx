@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileHeader from '../../components/MobileHeader';
+import { TasksSkeleton } from '../../components/Skeleton';
 import TimePickerRow from '../../components/TimePickerRow';
 import { useAuth } from '../../context/AuthContext';
 import { createTask, approveTask as dbApproveTask, deleteTask as dbDeleteTask, rejectTask as dbRejectTask, toggleTask as dbToggleTask, getEmployees, getTasks, submitTaskForApproval } from '../../lib/db';
@@ -65,6 +66,12 @@ function TaskCard({ task, onToggle, onDelete, onDetail, onStart, onFinish, assig
           </View>
         </View>
         <Text style={[tStyles.title, task.completed && tStyles.titleDone]}>{task.title}</Text>
+        {task.status === 'do_zrobienia' && task.proof_comment ? (
+          <View style={tStyles.rejectionBanner}>
+            <Ionicons name="alert-circle" size={13} color={theme.colors.error} />
+            <Text style={tStyles.rejectionText} numberOfLines={2}>Odrzucono: {task.proof_comment}</Text>
+          </View>
+        ) : null}
         <Text style={tStyles.desc} numberOfLines={2}>{task.description}</Text>
         <View style={tStyles.footer}>
           <View style={tStyles.duration}>
@@ -171,6 +178,8 @@ const tStyles = StyleSheet.create({
   actionBtnText: { fontSize: 12, fontWeight: '700' },
   assigneeTag: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.full, paddingHorizontal: 8, paddingVertical: 3 },
   assigneeText: { fontSize: 11, fontWeight: '600', color: theme.colors.textSecondary },
+  rejectionBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FFF0EF', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginTop: 4, marginBottom: 2, borderLeftWidth: 3, borderLeftColor: theme.colors.error },
+  rejectionText: { fontSize: 12, fontWeight: '600', color: theme.colors.error, flex: 1 },
 });
 
 const PRIORITIES: Array<'wysoki' | 'normalny' | 'niski'> = ['wysoki', 'normalny', 'niski'];
@@ -182,6 +191,7 @@ const CONFIRM_TYPES: Array<{ value: 'photo' | 'values' | 'description' | null; l
 ];
 
 export default function TasksScreen() {
+  const router = useRouter();
   const { user, isOwner, isManager } = useAuth();
   const canApprove = isOwner || isManager;
   const TABS = canApprove ? [...TABS_EMPLOYEE, TAB_APPROVAL] : TABS_EMPLOYEE;
@@ -203,8 +213,13 @@ export default function TasksScreen() {
   const [newPriority, setNewPriority] = useState<'wysoki' | 'normalny' | 'niski'>('normalny');
   const [newDuration, setNewDuration] = useState('30');
   const [newConfirm, setNewConfirm] = useState<'photo' | 'values' | 'description' | null>(null);
-  const [newAssignedTo, setNewAssignedTo] = useState<string>('');
+  const [newAssignedTo, setNewAssignedTo] = useState<string>('ALL');
   const [saving, setSaving] = useState(false);
+  const [approvalDetailTask, setApprovalDetailTask] = useState<DbTask | null>(null);
+  const [approvalConfirmation, setApprovalConfirmation] = useState<any | null>(null);
+  const [loadingConfirmation, setLoadingConfirmation] = useState(false);
+  const [rejectingTask, setRejectingTask] = useState<DbTask | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
 
   useFocusEffect(useCallback(() => {
     if (!rid) return;
@@ -219,16 +234,25 @@ export default function TasksScreen() {
     });
   }, [rid, canApprove]));
 
+  const [refreshing, setRefreshing] = useState(false);
+
   const reload = async () => {
     if (!rid) return;
     const taskData = await getTasks(rid);
     setTasks(taskData);
   };
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await reload();
+    setRefreshing(false);
+  }, [rid]);
+
   const toggleTask = async (id: string) => {
     const task = tasks.find((t) => t.id === id);
     if (!task) return;
     const newCompleted = !task.completed;
+    if (newCompleted && task.confirmation_type && (task.status as string) !== 'zatwierdzone') return;
     setTasks((prev) => prev.map((t) => t.id === id ? { ...t, completed: newCompleted, status: newCompleted ? 'zamkniete' : 'do_zrobienia' } : t));
     await dbToggleTask(id, newCompleted);
   };
@@ -260,7 +284,7 @@ export default function TasksScreen() {
   const handleCreate = async () => {
     if (!newTitle.trim()) return;
     setSaving(true);
-    const assignTo = newAssignedTo || user?.id || null;
+    const assignTo = newAssignedTo === 'ALL' ? null : (newAssignedTo || user?.id || null);
     const created = await createTask(rid, {
       title: newTitle.trim(),
       description: newDesc.trim(),
@@ -278,9 +302,7 @@ export default function TasksScreen() {
 
   if (loading) return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }} edges={['top']}>
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
+      <TasksSkeleton />
     </SafeAreaView>
   );
 
@@ -314,9 +336,26 @@ export default function TasksScreen() {
     await dbApproveTask(id, rid, task.assigned_to ?? '', task.points ?? 20);
   };
 
-  const rejectTask = async (id: string) => {
-    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'odrzucone' as TaskStatus } : t));
-    await dbRejectTask(id);
+  const rejectTask = async (id: string, comment?: string) => {
+    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'do_zrobienia' as TaskStatus, proof_comment: comment ?? null } : t));
+    await dbRejectTask(id, comment);
+    setRejectingTask(null);
+    setRejectReason('');
+  };
+
+  const openRejectModal = (task: DbTask) => {
+    setRejectingTask(task);
+    setRejectReason('');
+  };
+
+  const openApprovalDetail = async (task: DbTask) => {
+    setApprovalDetailTask(task);
+    setApprovalConfirmation(null);
+    setLoadingConfirmation(true);
+    const { data, error } = await supabase.from('task_confirmations').select('*').eq('task_id', task.id).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (error) console.error('[openApprovalDetail] task_confirmations fetch error:', error);
+    setApprovalConfirmation(data);
+    setLoadingConfirmation(false);
   };
 
   return (
@@ -344,7 +383,7 @@ export default function TasksScreen() {
         />
       )}
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, isDesktop && styles.scrollContentDesktop]}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, isDesktop && styles.scrollContentDesktop]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}>
         {/* Progress card */}
         <View style={styles.progressCard}>
           <View style={styles.progressTop}>
@@ -522,7 +561,7 @@ export default function TasksScreen() {
                 {pendingApproval.map((t) => {
                   const p = PRIORITY_CONFIG[t.priority as TaskPriority] ?? PRIORITY_CONFIG.normalny;
                   return (
-                    <View key={t.id} style={[tStyles.card, { flexDirection: 'column' }]}>
+                    <TouchableOpacity key={t.id} style={[tStyles.card, { flexDirection: 'column' }]} onPress={() => openApprovalDetail(t)} activeOpacity={0.85}>
                       <View style={{ flexDirection: 'row' }}>
                         <View style={[tStyles.priorityAccent, { backgroundColor: p.color }]} />
                         <View style={[tStyles.body, { paddingBottom: 8 }]}>
@@ -547,14 +586,14 @@ export default function TasksScreen() {
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={{ flex: 1, paddingVertical: 10, borderRadius: 8, backgroundColor: theme.colors.errorLight, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
-                          onPress={() => rejectTask(t.id)}
+                          onPress={(e) => { e.stopPropagation?.(); openRejectModal(t); }}
                           activeOpacity={0.8}
                         >
                           <Ionicons name="close-circle" size={16} color={theme.colors.error} />
                           <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.error }}>Odrzuć</Text>
                         </TouchableOpacity>
                       </View>
-                    </View>
+                    </TouchableOpacity>
                   );
                 })}
               </>
@@ -579,6 +618,12 @@ export default function TasksScreen() {
                 <>
                   <Text style={mStyles.label}>Przypisz do *</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
+                    <TouchableOpacity key="all" style={[mStyles.empChipModal, newAssignedTo === 'ALL' && mStyles.empChipModalActive]} onPress={() => setNewAssignedTo('ALL')} activeOpacity={0.75}>
+                      <View style={[mStyles.empAvatarSmall, { backgroundColor: newAssignedTo === 'ALL' ? theme.colors.primary : theme.colors.textMuted }]}>
+                        <Text style={mStyles.empAvatarSmallText}>Ws</Text>
+                      </View>
+                      <Text style={[mStyles.empChipModalText, newAssignedTo === 'ALL' && mStyles.empChipModalTextActive]}>Wszyscy</Text>
+                    </TouchableOpacity>
                     {employees.map((e) => {
                       const active = newAssignedTo === e.id;
                       const initials = `${e.first_name?.[0] ?? ''}${e.last_name?.[0] ?? ''}`.toUpperCase();
@@ -656,6 +701,15 @@ export default function TasksScreen() {
                     </TouchableOpacity>
                   </View>
                   <ScrollView contentContainerStyle={mStyles.body}>
+                    {detailTask.status === 'do_zrobienia' && detailTask.proof_comment ? (
+                      <View style={{ backgroundColor: '#FFF0EF', borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1.5, borderColor: theme.colors.error, gap: 6 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                          <Ionicons name="alert-circle" size={18} color={theme.colors.error} />
+                          <Text style={{ fontSize: 14, fontWeight: '700', color: theme.colors.error }}>Zadanie odrzucone — wymaga poprawy</Text>
+                        </View>
+                        <Text style={{ fontSize: 13, color: '#C0392B', lineHeight: 18 }}>{detailTask.proof_comment}</Text>
+                      </View>
+                    ) : null}
                     <View style={[mStyles.detailRow, { flexWrap: 'wrap', gap: 8 }]}>
                       <View style={[mStyles.badge, { backgroundColor: p.bg }]}>
                         <Text style={[mStyles.badgeText, { color: p.color }]}>{p.label}</Text>
@@ -688,12 +742,142 @@ export default function TasksScreen() {
                     <TouchableOpacity style={mStyles.cancelBtn} onPress={() => setDetailTask(null)} activeOpacity={0.7}>
                       <Text style={mStyles.cancelText}>Zamknij</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[mStyles.saveBtn, detailTask.completed && { backgroundColor: theme.colors.green }]}
-                      onPress={() => { toggleTask(detailTask.id); setDetailTask(null); }}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={mStyles.saveText}>{detailTask.completed ? 'Otwórz ponownie' : 'Oznacz jako zrobione'}</Text>
+                    {detailTask.completed ? (
+                      <TouchableOpacity style={[mStyles.saveBtn, { backgroundColor: theme.colors.green }]} onPress={() => { toggleTask(detailTask.id); setDetailTask(null); }} activeOpacity={0.85}>
+                        <Text style={mStyles.saveText}>Otwórz ponownie</Text>
+                      </TouchableOpacity>
+                    ) : (detailTask.status as string) === 'czeka_na_zatwierdzenie' ? (
+                      <View style={[mStyles.saveBtn, { backgroundColor: theme.colors.textMuted, flexDirection: 'row', gap: 6 }]}>
+                        <Ionicons name="hourglass-outline" size={15} color="#fff" />
+                        <Text style={mStyles.saveText}>Czeka na zatwierdzenie</Text>
+                      </View>
+                    ) : confirmCfg ? (
+                      <TouchableOpacity
+                        style={[mStyles.saveBtn, { backgroundColor: confirmCfg.color, flexDirection: 'row', gap: 6 }]}
+                        onPress={() => { setDetailTask(null); router.push({ pathname: confirmCfg.route as any, params: { taskId: detailTask.id } }); }}
+                        activeOpacity={0.85}
+                      >
+                        <Ionicons name={confirmCfg.icon as any} size={15} color="#fff" />
+                        <Text style={mStyles.saveText}>Prześlij potwierdzenie</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity style={mStyles.saveBtn} onPress={() => { toggleTask(detailTask.id); setDetailTask(null); }} activeOpacity={0.85}>
+                        <Text style={mStyles.saveText}>Oznacz jako zrobione</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Approval Detail Modal */}
+      <Modal visible={!!approvalDetailTask} animationType="fade" transparent onRequestClose={() => setApprovalDetailTask(null)}>
+        <View style={mStyles.overlay}>
+          <View style={[mStyles.sheet, isDesktop && mStyles.sheetDesktop]}>
+            {approvalDetailTask && (() => {
+              const p = PRIORITY_CONFIG[approvalDetailTask.priority as TaskPriority] ?? PRIORITY_CONFIG.normalny;
+              const confirmCfg = approvalDetailTask.confirmation_type ? CONFIRM_CONFIG[approvalDetailTask.confirmation_type as ConfirmationType] : null;
+              const assignee = employees.find((e) => e.id === approvalDetailTask.assigned_to);
+              return (
+                <>
+                  <View style={mStyles.header}>
+                    <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: p.color }} />
+                    <Text style={mStyles.headerTitle} numberOfLines={1}>{approvalDetailTask.title}</Text>
+                    <TouchableOpacity onPress={() => setApprovalDetailTask(null)}>
+                      <Ionicons name="close" size={24} color={theme.colors.text} />
+                    </TouchableOpacity>
+                  </View>
+                  <ScrollView contentContainerStyle={mStyles.body}>
+                    <View style={[mStyles.detailRow, { flexWrap: 'wrap', gap: 8, marginBottom: 16 }]}>
+                      <View style={[mStyles.badge, { backgroundColor: p.bg }]}>
+                        <Text style={[mStyles.badgeText, { color: p.color }]}>{p.label}</Text>
+                      </View>
+                      {confirmCfg && (
+                        <View style={[mStyles.badge, { backgroundColor: confirmCfg.bg }]}>
+                          <Ionicons name={confirmCfg.icon as any} size={11} color={confirmCfg.color} />
+                          <Text style={[mStyles.badgeText, { color: confirmCfg.color }]}>{confirmCfg.label}</Text>
+                        </View>
+                      )}
+                      {assignee && (
+                        <View style={[mStyles.badge, { backgroundColor: theme.colors.surface }]}>
+                          <Ionicons name="person-outline" size={11} color={theme.colors.textSecondary} />
+                          <Text style={[mStyles.badgeText, { color: theme.colors.textSecondary }]}>{assignee.first_name} {assignee.last_name}</Text>
+                        </View>
+                      )}
+                    </View>
+                    {approvalDetailTask.description ? (
+                      <View style={mStyles.detailSection}>
+                        <Text style={mStyles.detailLabel}>Opis zadania</Text>
+                        <Text style={mStyles.detailText}>{approvalDetailTask.description}</Text>
+                      </View>
+                    ) : null}
+                    {loadingConfirmation && <ActivityIndicator color={theme.colors.primary} style={{ marginVertical: 20 }} />}
+                    {!loadingConfirmation && (() => {
+                      const photoUrl = approvalConfirmation?.photo_url ?? (approvalDetailTask as any).proof_photo_url;
+                      const proofText = approvalConfirmation?.description ?? (approvalDetailTask as any).proof_comment;
+                      const valuesData = approvalConfirmation?.values_data;
+                      const checklistData = approvalConfirmation?.checklist_data;
+                      const hasAny = photoUrl || proofText || (valuesData?.length > 0) || (checklistData?.length > 0);
+                      if (!hasAny) return (
+                        <View style={{ padding: 20, alignItems: 'center' }}>
+                          <Ionicons name="alert-circle-outline" size={32} color={theme.colors.textMuted} />
+                          <Text style={{ fontSize: 13, color: theme.colors.textSecondary, marginTop: 8 }}>Pracownik nie przesłał potwierdzenia</Text>
+                        </View>
+                      );
+                      return (
+                        <View style={{ marginTop: 16, gap: 12 }}>
+                          <Text style={[mStyles.detailLabel, { marginBottom: 4 }]}>Potwierdzenie pracownika</Text>
+                          {photoUrl && (
+                            <Image source={{ uri: photoUrl }} style={{ width: '100%', height: 220, borderRadius: 12 }} resizeMode="cover" />
+                          )}
+                          {valuesData && valuesData.length > 0 && (
+                            <View style={{ backgroundColor: theme.colors.surface, borderRadius: 10, padding: 12, gap: 8 }}>
+                              <Text style={[mStyles.detailLabel, { marginBottom: 4 }]}>Pomiary (HACCP)</Text>
+                              {valuesData.map((row: any, i: number) => {
+                                const isOk = row.status === 'ok';
+                                const statusColor = isOk ? theme.colors.green : theme.colors.error;
+                                return (
+                                  <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4, borderTopWidth: i > 0 ? 1 : 0, borderTopColor: theme.colors.border }}>
+                                    <Text style={{ fontSize: 13, color: theme.colors.textSecondary, flex: 1 }}>{row.name}</Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                      <Text style={{ fontSize: 14, fontWeight: '700', color: statusColor }}>{row.value} {row.unit}</Text>
+                                      <Ionicons name={isOk ? 'checkmark-circle' : 'alert-circle'} size={16} color={statusColor} />
+                                    </View>
+                                  </View>
+                                );
+                              })}
+                            </View>
+                          )}
+                          {proofText ? (
+                            <View style={[mStyles.detailSection, { backgroundColor: theme.colors.surface }]}>
+                              <Text style={mStyles.detailLabel}>Opis pracownika</Text>
+                              <Text style={mStyles.detailText}>{proofText}</Text>
+                            </View>
+                          ) : null}
+                          {checklistData && checklistData.length > 0 && (
+                            <View style={{ backgroundColor: theme.colors.surface, borderRadius: 10, padding: 12, gap: 8 }}>
+                              <Text style={[mStyles.detailLabel, { marginBottom: 4 }]}>Lista kontrolna</Text>
+                              {checklistData.map((item: any, i: number) => (
+                                <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                  <Ionicons name={item.checked ? 'checkmark-circle' : 'ellipse-outline'} size={18} color={item.checked ? theme.colors.green : theme.colors.textMuted} />
+                                  <Text style={{ fontSize: 13, color: item.checked ? theme.colors.text : theme.colors.textSecondary, flex: 1 }}>{item.label}</Text>
+                                </View>
+                              ))}
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })()}
+                  </ScrollView>
+                  <View style={mStyles.footer}>
+                    <TouchableOpacity style={[mStyles.saveBtn, { backgroundColor: theme.colors.error }]} onPress={() => { setApprovalDetailTask(null); openRejectModal(approvalDetailTask); }} activeOpacity={0.85}>
+                      <Text style={mStyles.saveText}>Odrzuć</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[mStyles.saveBtn, { backgroundColor: theme.colors.green }]} onPress={() => { approveTask(approvalDetailTask.id); setApprovalDetailTask(null); }} activeOpacity={0.85}>
+                      <Text style={mStyles.saveText}>Zatwierdź ✓</Text>
                     </TouchableOpacity>
                   </View>
                 </>
@@ -702,6 +886,51 @@ export default function TasksScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Reject Reason Modal */}
+      <Modal visible={!!rejectingTask} animationType="fade" transparent onRequestClose={() => setRejectingTask(null)}>
+        <View style={mStyles.overlay}>
+          <View style={[mStyles.sheet, isDesktop && mStyles.sheetDesktop]}>
+            <View style={mStyles.header}>
+              <Ionicons name="close-circle" size={20} color={theme.colors.error} />
+              <Text style={mStyles.headerTitle}>Odrzuć zadanie</Text>
+              <TouchableOpacity onPress={() => setRejectingTask(null)}>
+                <Ionicons name="close" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={mStyles.body}>
+              <Text style={{ fontSize: 14, color: theme.colors.textSecondary, marginBottom: 16, lineHeight: 20 }}>
+                Podaj powód odrzucenia. Zadanie wróci do listy pracownika z Twoim komentarzem.
+              </Text>
+              <Text style={mStyles.label}>Powód odrzucenia *</Text>
+              <TextInput
+                style={[mStyles.input, mStyles.inputMulti]}
+                value={rejectReason}
+                onChangeText={setRejectReason}
+                placeholder="np. Zdjęcie niewyraźne, proszę powtórzyć..."
+                placeholderTextColor={theme.colors.textMuted}
+                multiline
+                numberOfLines={3}
+                autoFocus
+              />
+            </ScrollView>
+            <View style={mStyles.footer}>
+              <TouchableOpacity style={mStyles.cancelBtn} onPress={() => setRejectingTask(null)} activeOpacity={0.7}>
+                <Text style={mStyles.cancelText}>Anuluj</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[mStyles.saveBtn, { backgroundColor: theme.colors.error }, !rejectReason.trim() && mStyles.saveBtnDisabled]}
+                onPress={() => rejectingTask && rejectTask(rejectingTask.id, rejectReason.trim())}
+                activeOpacity={0.85}
+                disabled={!rejectReason.trim()}
+              >
+                <Text style={mStyles.saveText}>Odrzuć zadanie</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }

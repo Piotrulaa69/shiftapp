@@ -1,7 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
+    ActivityIndicator,
+    Image,
     Platform,
     ScrollView,
     StyleSheet,
@@ -13,6 +16,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../../context/AlertContext';
+import { useAuth } from '../../context/AuthContext';
+import { createTaskConfirmation, submitTaskForApproval, uploadTaskPhoto } from '../../lib/db';
 import type { DbTask } from '../../lib/supabase';
 import { supabase } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
@@ -27,9 +32,11 @@ export default function ConfirmPhotoScreen() {
   const { taskId } = useLocalSearchParams<{ taskId: string }>();
   const router = useRouter();
   const { showAlert, showSuccess } = useAlert();
+  const { user } = useAuth();
   const [task, setTask] = useState<DbTask | null>(null);
-  const [hasPhoto, setHasPhoto] = useState(false);
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!taskId) return;
@@ -43,13 +50,65 @@ export default function ConfirmPhotoScreen() {
 
   if (!task) return null;
 
-  const handleConfirm = () => {
-    if (!hasPhoto) {
+  const pickFromCamera = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      showAlert('Brak uprawnień', 'Zezwól na dostęp do aparatu w ustawieniach.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 });
+    if (!result.canceled && result.assets[0]) {
+      setPhotoUri(result.assets[0].uri);
+    }
+  };
+
+  const pickFromGallery = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      showAlert('Brak uprawnień', 'Zezwól na dostęp do galerii w ustawieniach.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
+    if (!result.canceled && result.assets[0]) {
+      setPhotoUri(result.assets[0].uri);
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (!photoUri) {
       showAlert('Brak zdjęcia', 'Dodaj zdjęcie potwierdzające wykonanie zadania.');
       return;
     }
+    if (!user || !task) return;
+    setSubmitting(true);
+
+    // Upload photo to Supabase Storage
+    const photoUrl = await uploadTaskPhoto(task.restaurant_id, task.id, photoUri);
+
+    // Save confirmation record
+    const saved = await createTaskConfirmation({
+      restaurant_id: task.restaurant_id,
+      task_id: task.id,
+      employee_id: user.id,
+      confirmation_type: 'photo',
+      photo_url: photoUrl,
+      photo_notes: notes || null,
+    });
+
+    if (!saved) {
+      setSubmitting(false);
+      showAlert('Błąd', 'Nie udało się zapisać potwierdzenia. Spróbuj ponownie.');
+      return;
+    }
+
+    // Submit task for approval
+    await submitTaskForApproval(task.id, photoUrl ?? undefined, notes || undefined);
+
+    setSubmitting(false);
     showSuccess('Zadanie potwierdzone!', 'Świetna robota! Kierownik zmiany zostanie powiadomiony.', () => router.back());
   };
+
+  const hasPhoto = !!photoUri;
 
   return (
     <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
@@ -115,7 +174,7 @@ export default function ConfirmPhotoScreen() {
           <Text style={s.sectionSub}>Zrób zdjęcie dokumentujące wykonanie zadania</Text>
 
           {!hasPhoto ? (
-            <TouchableOpacity style={s.photoArea} onPress={() => setHasPhoto(true)} activeOpacity={0.7}>
+            <TouchableOpacity style={s.photoArea} onPress={pickFromCamera} activeOpacity={0.7}>
               <View style={s.photoAreaIcon}>
                 <Ionicons name="camera" size={40} color={theme.colors.primary} />
               </View>
@@ -124,16 +183,15 @@ export default function ConfirmPhotoScreen() {
             </TouchableOpacity>
           ) : (
             <View style={s.photoPreview}>
+              {photoUri && (
+                <Image source={{ uri: photoUri }} style={{ width: '100%', height: 200, borderRadius: theme.borderRadius.md, marginBottom: 10 }} resizeMode="cover" />
+              )}
               <View style={s.photoPreviewInner}>
                 <Ionicons name="checkmark-circle" size={52} color={theme.colors.green} />
                 <Text style={s.photoPreviewTitle}>Zdjęcie dodane</Text>
                 <Text style={s.photoPreviewFilename}>{photoFilename}</Text>
-                <View style={s.photoPreviewMeta}>
-                  <Ionicons name="checkmark" size={12} color={theme.colors.green} />
-                  <Text style={s.photoPreviewMetaText}>Weryfikacja OK · {(Math.random() * 2 + 0.8).toFixed(1)} MB</Text>
-                </View>
               </View>
-              <TouchableOpacity style={s.removeBtn} onPress={() => setHasPhoto(false)} activeOpacity={0.7}>
+              <TouchableOpacity style={s.removeBtn} onPress={() => setPhotoUri(null)} activeOpacity={0.7}>
                 <Ionicons name="trash-outline" size={15} color={theme.colors.error} />
                 <Text style={s.removeBtnText}>Usuń i zrób nowe</Text>
               </TouchableOpacity>
@@ -141,11 +199,11 @@ export default function ConfirmPhotoScreen() {
           )}
 
           <View style={s.photoButtons}>
-            <TouchableOpacity style={s.photoBtn} onPress={() => setHasPhoto(true)} activeOpacity={0.7}>
+            <TouchableOpacity style={s.photoBtn} onPress={pickFromCamera} activeOpacity={0.7}>
               <Ionicons name="camera-outline" size={18} color={theme.colors.primary} />
               <Text style={s.photoBtnText}>Aparat</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={s.photoBtn} onPress={() => setHasPhoto(true)} activeOpacity={0.7}>
+            <TouchableOpacity style={s.photoBtn} onPress={pickFromGallery} activeOpacity={0.7}>
               <Ionicons name="images-outline" size={18} color={theme.colors.primary} />
               <Text style={s.photoBtnText}>Galeria</Text>
             </TouchableOpacity>
@@ -194,12 +252,19 @@ export default function ConfirmPhotoScreen() {
 
         {/* Confirm button */}
         <TouchableOpacity
-          style={[s.confirmBtn, !hasPhoto && s.confirmBtnDisabled]}
+          style={[s.confirmBtn, (!hasPhoto || submitting) && s.confirmBtnDisabled]}
           onPress={handleConfirm}
           activeOpacity={0.85}
+          disabled={submitting}
         >
-          <Ionicons name="checkmark-circle" size={22} color={theme.colors.white} />
-          <Text style={s.confirmBtnText}>Potwierdź wykonanie zadania</Text>
+          {submitting ? (
+            <ActivityIndicator color={theme.colors.white} />
+          ) : (
+            <>
+              <Ionicons name="checkmark-circle" size={22} color={theme.colors.white} />
+              <Text style={s.confirmBtnText}>Potwierdź wykonanie zadania</Text>
+            </>
+          )}
         </TouchableOpacity>
 
         <Text style={s.footerNote}>

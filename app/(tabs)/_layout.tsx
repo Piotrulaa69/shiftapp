@@ -1,16 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Redirect, Tabs, usePathname, useRouter } from 'expo-router';
+import { useState } from 'react';
 import {
     ActivityIndicator,
     Image,
+    Modal,
     Platform,
+    Pressable,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     useWindowDimensions,
-    View,
+    View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
@@ -213,11 +216,14 @@ const sideStyles = StyleSheet.create({
 });
 
 /* ─────────────── MOBILE TAB BAR ─────────────── */
+type FabAction = { icon: string; label: string; onPress: () => void };
+
 function MobileTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isOwner, isManager } = useAuth();
   const isAdmin = isOwner || isManager;
+  const [fabOpen, setFabOpen] = useState(false);
 
   // 'admin' is always excluded from regular tabs - it goes to FAB for admins, hidden for employees
   const visibleRoutes = state.routes.filter((r) =>
@@ -251,30 +257,98 @@ function MobileTabBar({ state, navigation }: BottomTabBarProps) {
 
   const adminFocused = state.routes[state.index]?.name === 'admin';
 
+  const adminActions: FabAction[] = [
+    { icon: 'build-outline', label: 'Narzędzia', onPress: () => router.push('/(tabs)/admin' as any) },
+    { icon: 'calendar-outline', label: 'Dodaj zmianę', onPress: () => router.push('/(tabs)/schedule' as any) },
+    { icon: 'add-circle-outline', label: 'Nowe zadanie', onPress: () => router.push('/(tabs)/tasks' as any) },
+    { icon: 'person-add-outline', label: 'Zaproś pracownika', onPress: () => router.push('/(tabs)/team' as any) },
+  ];
+
+  const employeeActions: FabAction[] = [
+    { icon: 'finger-print-outline', label: 'Moja zmiana', onPress: () => router.push('/shift-detail' as any) },
+    { icon: 'list-outline', label: 'Zadania', onPress: () => router.push('/(tabs)/tasks' as any) },
+    { icon: 'chatbubble-outline', label: 'Czat', onPress: () => router.push('/chat' as any) },
+  ];
+
+  const actions = isAdmin ? adminActions : employeeActions;
+
+  const handleFabPress = () => {
+    setFabOpen(true);
+  };
+
+  const handleAction = (action: FabAction) => {
+    setFabOpen(false);
+    setTimeout(() => action.onPress(), 150);
+  };
+
   return (
-    <View style={[tabStyles.container, { paddingBottom: insets.bottom || 8 }]}>
-      {leftRoutes.map((r) => renderTab(r))}
-      {isAdmin ? (
+    <>
+      <Modal visible={fabOpen} transparent animationType="fade" onRequestClose={() => setFabOpen(false)}>
+        <Pressable style={fabMenuStyles.overlay} onPress={() => setFabOpen(false)}>
+          <View style={[fabMenuStyles.menu, { bottom: 90 + (insets.bottom || 8) }]}>
+            {actions.map((a, i) => (
+              <TouchableOpacity key={i} style={fabMenuStyles.menuItem} onPress={() => handleAction(a)} activeOpacity={0.7}>
+                <View style={fabMenuStyles.menuIcon}>
+                  <Ionicons name={a.icon as any} size={20} color={theme.colors.primary} />
+                </View>
+                <Text style={fabMenuStyles.menuLabel}>{a.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
+      <View style={[tabStyles.container, { paddingBottom: insets.bottom || 8 }]}>
+        {leftRoutes.map((r) => renderTab(r))}
         <TouchableOpacity
-          style={[tabStyles.fab, adminFocused && tabStyles.fabActive]}
+          style={[tabStyles.fab, (adminFocused || fabOpen) && tabStyles.fabActive]}
           activeOpacity={0.85}
-          onPress={() => router.push('/(tabs)/admin' as any)}
+          onPress={handleFabPress}
         >
-          <Ionicons name="settings" size={26} color={theme.colors.white} />
+          <Ionicons name={fabOpen ? 'close' : (isAdmin ? 'add' : 'apps')} size={26} color={theme.colors.white} />
         </TouchableOpacity>
-      ) : (
-        <TouchableOpacity
-          style={tabStyles.fab}
-          activeOpacity={0.85}
-          onPress={() => router.push('/shift-detail' as any)}
-        >
-          <Ionicons name="finger-print" size={28} color={theme.colors.white} />
-        </TouchableOpacity>
-      )}
-      {rightRoutes.map((r) => renderTab(r))}
-    </View>
+        {rightRoutes.map((r) => renderTab(r))}
+      </View>
+    </>
   );
 }
+
+const fabMenuStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  menu: {
+    position: 'absolute',
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.borderRadius.lg,
+    padding: 8,
+    minWidth: 200,
+    ...theme.shadows.medium,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: theme.borderRadius.md,
+  },
+  menuIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: theme.colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: theme.colors.text,
+  },
+});
 
 const tabStyles = StyleSheet.create({
   container: {
