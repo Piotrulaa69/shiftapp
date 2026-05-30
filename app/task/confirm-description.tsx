@@ -37,21 +37,30 @@ export default function ConfirmDescriptionScreen() {
   const [task, setTask] = useState<DbTask | null>(null);
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [checklist, setChecklist] = useState<ChecklistItem[]>(CHECKLIST);
+  const [prompt, setPrompt] = useState<string>('');
 
   useEffect(() => {
     if (!taskId) return;
     supabase.from('tasks').select('*').eq('id', taskId).single()
-      .then(({ data }) => { if (data) setTask(data as DbTask); });
+      .then(({ data }) => {
+        if (data) {
+          setTask(data as DbTask);
+          const cfg = (data as any).confirmation_config;
+          if (cfg?.checklist?.length > 0) {
+            setChecklist(cfg.checklist.map((c: any) => ({ id: c.id, label: c.label, checked: false })));
+          }
+          if (cfg?.prompt) setPrompt(cfg.prompt);
+        }
+      });
   }, [taskId]);
-
-  const [checklist, setChecklist] = useState<ChecklistItem[]>(CHECKLIST);
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
 
   if (!task) return null;
 
   const checkedCount = checklist.filter((c) => c.checked).length;
-  const isReady = description.trim().length >= 20 && checkedCount >= 2;
+  const isReady = description.trim().length >= 20 && (checklist.length === 0 || checkedCount >= 1);
 
   const toggleCheck = (id: string) => {
     setChecklist((prev) =>
@@ -146,15 +155,22 @@ export default function ConfirmDescriptionScreen() {
           </Text>
 
           {/* Hints */}
-          <View style={s.hintsBox}>
-            <Text style={s.hintsTitle}>Podpowiedź — warto opisać:</Text>
-            {['Z kim rozmawiałeś/aś i kiedy?', 'Co zostało ustalone?', 'Czy są jakieś zmiany vs. plan?'].map((hint) => (
-              <View key={hint} style={s.hintRow}>
-                <View style={s.hintDot} />
-                <Text style={s.hintText}>{hint}</Text>
-              </View>
-            ))}
-          </View>
+          {prompt ? (
+            <View style={[s.hintsBox, { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primary }]}>
+              <Text style={[s.hintsTitle, { color: theme.colors.primary }]}>Polecenie od managera:</Text>
+              <Text style={[s.hintText, { color: theme.colors.primary, fontWeight: '500' }]}>{prompt}</Text>
+            </View>
+          ) : (
+            <View style={s.hintsBox}>
+              <Text style={s.hintsTitle}>Podpowiedź — warto opisać:</Text>
+              {['Z kim rozmawiałeś/aś i kiedy?', 'Co zostało ustalone?', 'Czy są jakieś zmiany vs. plan?'].map((hint) => (
+                <View key={hint} style={s.hintRow}>
+                  <View style={s.hintDot} />
+                  <Text style={s.hintText}>{hint}</Text>
+                </View>
+              ))}
+            </View>
+          )}
 
           <TextInput
             style={[s.descInput, description.length >= 20 && s.descInputOk]}

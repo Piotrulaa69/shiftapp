@@ -67,7 +67,23 @@ export default function ConfirmValuesScreen() {
   useEffect(() => {
     if (!taskId) return;
     supabase.from('tasks').select('*').eq('id', taskId).single()
-      .then(({ data }) => { if (data) setTask(data as DbTask); });
+      .then(({ data }) => {
+        if (data) {
+          setTask(data as DbTask);
+          const cfg = (data as any).confirmation_config;
+          if (cfg?.items?.length > 0) {
+            setItems(cfg.items.map((item: any) => ({
+              id: item.id,
+              name: item.name,
+              unit: item.unit ?? '',
+              min: typeof item.min === 'number' ? item.min : 0,
+              max: typeof item.max === 'number' ? item.max : 100,
+              icon: 'thermometer-outline',
+              value: '',
+            })));
+          }
+        }
+      });
   }, [taskId]);
 
   const { width } = useWindowDimensions();

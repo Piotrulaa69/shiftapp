@@ -23,8 +23,11 @@ import { theme } from '../../styles/theme';
 const TAB_CONFIG: Record<string, { label: string; icon: string }> = {
   dashboard: { label: 'Panel', icon: 'grid' },
   schedule: { label: 'Grafik', icon: 'calendar' },
+  'schedule-ai': { label: 'Grafik AI', icon: 'sparkles' },
+  'documents-ai': { label: 'Dokumenty AI', icon: 'document-text' },
   tasks: { label: 'Zadania', icon: 'list' },
   szkolenia: { label: 'Szkolenia', icon: 'school' },
+  'time-tracking': { label: 'Ewidencja', icon: 'time' },
   admin: { label: 'Zarządzanie', icon: 'settings' },
 };
 
@@ -33,6 +36,12 @@ const NAV_ITEMS_BASE = [
   { key: 'schedule', route: '/(tabs)/schedule' as const },
   { key: 'tasks', route: '/(tabs)/tasks' as const },
   { key: 'szkolenia', route: '/(tabs)/szkolenia' as const },
+  { key: 'time-tracking', route: '/(tabs)/time-tracking' as const },
+];
+
+const NAV_ITEMS_ADMIN_EXTRA = [
+  { key: 'schedule-ai', route: '/(tabs)/schedule-ai' as const },
+  { key: 'documents-ai', route: '/(tabs)/documents-ai' as const },
 ];
 
 const NAV_ITEM_ADMIN = { key: 'admin', route: '/(tabs)/admin' as const };
@@ -89,7 +98,9 @@ function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const { logout, isOwner, isManager, restaurant, user } = useAuth();
-  const NAV_ITEMS = (isOwner || isManager) ? [...NAV_ITEMS_BASE, NAV_ITEM_ADMIN] : NAV_ITEMS_BASE;
+  const NAV_ITEMS = (isOwner || isManager)
+    ? [...NAV_ITEMS_BASE, ...NAV_ITEMS_ADMIN_EXTRA, NAV_ITEM_ADMIN]
+    : NAV_ITEMS_BASE;
 
   return (
     <View style={sideStyles.sidebar}>
@@ -226,8 +237,9 @@ function MobileTabBar({ state, navigation }: BottomTabBarProps) {
   const [fabOpen, setFabOpen] = useState(false);
 
   // 'admin' is always excluded from regular tabs - it goes to FAB for admins, hidden for employees
+  const MOBILE_HIDDEN = ['admin', 'schedule-ai', 'time-tracking', 'documents-ai'];
   const visibleRoutes = state.routes.filter((r) =>
-    r.name in TAB_CONFIG && r.name !== 'admin'
+    r.name in TAB_CONFIG && !MOBILE_HIDDEN.includes(r.name)
   );
   const leftRoutes = visibleRoutes.slice(0, 2);
   const rightRoutes = visibleRoutes.slice(2);
@@ -259,9 +271,10 @@ function MobileTabBar({ state, navigation }: BottomTabBarProps) {
 
   const adminActions: FabAction[] = [
     { icon: 'build-outline', label: 'Narzędzia', onPress: () => router.push('/(tabs)/admin' as any) },
-    { icon: 'calendar-outline', label: 'Dodaj zmianę', onPress: () => router.push('/(tabs)/schedule' as any) },
+    { icon: 'sparkles-outline', label: 'Grafik AI', onPress: () => router.push('/(tabs)/schedule-ai' as any) },
+    { icon: 'document-text-outline', label: 'Dokumenty AI', onPress: () => router.push('/(tabs)/documents-ai' as any) },
+    { icon: 'time-outline', label: 'Ewidencja czasu', onPress: () => router.push('/(tabs)/time-tracking' as any) },
     { icon: 'add-circle-outline', label: 'Nowe zadanie', onPress: () => router.push('/(tabs)/tasks' as any) },
-    { icon: 'person-add-outline', label: 'Zaproś pracownika', onPress: () => router.push('/(tabs)/team' as any) },
   ];
 
   const employeeActions: FabAction[] = [
@@ -439,6 +452,9 @@ export default function TabLayout() {
             <Tabs.Screen name="tasks" />
             <Tabs.Screen name="szkolenia" />
             <Tabs.Screen name="admin" options={{ href: showAdmin ? undefined : null }} />
+            <Tabs.Screen name="schedule-ai" options={{ href: null }} />
+            <Tabs.Screen name="time-tracking" options={{ href: null }} />
+            <Tabs.Screen name="documents-ai" options={{ href: null }} />
             <Tabs.Screen name="team" options={{ href: null }} />
           </Tabs>
           </View>
@@ -457,6 +473,9 @@ export default function TabLayout() {
       <Tabs.Screen name="tasks" />
       <Tabs.Screen name="szkolenia" />
       <Tabs.Screen name="admin" options={{ href: showAdmin ? undefined : null }} />
+      <Tabs.Screen name="schedule-ai" options={{ href: null }} />
+      <Tabs.Screen name="time-tracking" options={{ href: null }} />
+      <Tabs.Screen name="documents-ai" options={{ href: null }} />
       <Tabs.Screen name="team" options={{ href: null }} />
     </Tabs>
   );

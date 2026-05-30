@@ -134,6 +134,7 @@ export async function createTask(
     priority: 'wysoki' | 'normalny' | 'niski';
     duration_min: number;
     confirmation_type: 'photo' | 'values' | 'description' | null;
+    confirmation_config?: any;
   }
 ): Promise<DbTask | null> {
   const { data, error } = await supabase

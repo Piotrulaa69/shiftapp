@@ -182,6 +182,9 @@ const tStyles = StyleSheet.create({
   rejectionText: { fontSize: 12, fontWeight: '600', color: theme.colors.error, flex: 1 },
 });
 
+type CfgValueItem = { id: string; name: string; unit: string; min: string; max: string };
+type CfgCheckItem = { id: string; label: string };
+
 const PRIORITIES: Array<'wysoki' | 'normalny' | 'niski'> = ['wysoki', 'normalny', 'niski'];
 const CONFIRM_TYPES: Array<{ value: 'photo' | 'values' | 'description' | null; label: string }> = [
   { value: null, label: 'Brak' },
@@ -220,6 +223,9 @@ export default function TasksScreen() {
   const [loadingConfirmation, setLoadingConfirmation] = useState(false);
   const [rejectingTask, setRejectingTask] = useState<DbTask | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [cfgValueItems, setCfgValueItems] = useState<CfgValueItem[]>([]);
+  const [cfgCheckItems, setCfgCheckItems] = useState<CfgCheckItem[]>([]);
+  const [cfgPrompt, setCfgPrompt] = useState('');
 
   useFocusEffect(useCallback(() => {
     if (!rid) return;
@@ -285,6 +291,14 @@ export default function TasksScreen() {
     if (!newTitle.trim()) return;
     setSaving(true);
     const assignTo = newAssignedTo === 'ALL' ? null : (newAssignedTo || user?.id || null);
+    let confirmationConfig: any = null;
+    if (newConfirm === 'values' && cfgValueItems.length > 0) {
+      confirmationConfig = { items: cfgValueItems.map(i => ({ id: i.id, name: i.name, unit: i.unit, min: parseFloat(i.min) || 0, max: parseFloat(i.max) || 100 })) };
+    } else if (newConfirm === 'description') {
+      confirmationConfig = { prompt: cfgPrompt.trim() || null, checklist: cfgCheckItems.map(i => ({ id: i.id, label: i.label })) };
+    } else if (newConfirm === 'photo') {
+      confirmationConfig = { prompt: cfgPrompt.trim() || null };
+    }
     const created = await createTask(rid, {
       title: newTitle.trim(),
       description: newDesc.trim(),
@@ -293,11 +307,13 @@ export default function TasksScreen() {
       priority: newPriority,
       duration_min: parseInt(newDuration) || 30,
       confirmation_type: newConfirm,
+      confirmation_config: confirmationConfig,
     });
     if (created) setTasks((prev) => [...prev, created]);
     setSaving(false);
     setShowModal(false);
     setNewTitle(''); setNewDesc(''); setNewTime('08:00'); setNewPriority('normalny'); setNewDuration('30'); setNewConfirm(null); setNewAssignedTo('');
+    setCfgValueItems([]); setCfgCheckItems([]); setCfgPrompt('');
   };
 
   if (loading) return (
@@ -665,11 +681,73 @@ export default function TasksScreen() {
               <Text style={mStyles.label}>Potwierdzenie</Text>
               <View style={mStyles.chips}>
                 {CONFIRM_TYPES.map((c) => (
-                  <TouchableOpacity key={String(c.value)} style={[mStyles.chip, newConfirm === c.value && mStyles.chipActive]} onPress={() => setNewConfirm(c.value)} activeOpacity={0.7}>
+                  <TouchableOpacity key={String(c.value)} style={[mStyles.chip, newConfirm === c.value && mStyles.chipActive]} onPress={() => { setNewConfirm(c.value); setCfgValueItems([]); setCfgCheckItems([]); setCfgPrompt(''); }} activeOpacity={0.7}>
                     <Text style={[mStyles.chipText, newConfirm === c.value && mStyles.chipTextActive]}>{c.label}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
+
+              {/* Dynamic confirmation config editor */}
+              {newConfirm === 'values' && (
+                <View style={{ marginTop: 12, gap: 8 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={mStyles.label}>Definiuj pomiary</Text>
+                    <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.colors.primaryLight, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 }} onPress={() => setCfgValueItems(prev => [...prev, { id: Date.now().toString(), name: '', unit: '°C', min: '0', max: '100' }])} activeOpacity={0.7}>
+                      <Ionicons name="add" size={14} color={theme.colors.primary} />
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.primary }}>Dodaj pomiar</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {cfgValueItems.length === 0 && (
+                    <Text style={{ fontSize: 12, color: theme.colors.textMuted, fontStyle: 'italic', lineHeight: 16 }}>Brak pomiarów — kliknij "Dodaj pomiar" aby zdefiniować własne, lub pozostaw puste aby użyć domyślnych (HACCP).</Text>
+                  )}
+                  {cfgValueItems.map((item, idx) => (
+                    <View key={item.id} style={{ backgroundColor: theme.colors.surface, borderRadius: 10, padding: 10, gap: 6 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: theme.colors.textSecondary }}>Pomiar {idx + 1}</Text>
+                        <TouchableOpacity onPress={() => setCfgValueItems(prev => prev.filter(i => i.id !== item.id))}>
+                          <Ionicons name="trash-outline" size={15} color={theme.colors.error} />
+                        </TouchableOpacity>
+                      </View>
+                      <TextInput style={mStyles.input} value={item.name} onChangeText={v => setCfgValueItems(prev => prev.map(i => i.id === item.id ? { ...i, name: v } : i))} placeholder="Nazwa (np. Lodówka 1)" placeholderTextColor={theme.colors.textMuted} />
+                      <View style={{ flexDirection: 'row', gap: 6 }}>
+                        <TextInput style={[mStyles.input, { flex: 1 }]} value={item.unit} onChangeText={v => setCfgValueItems(prev => prev.map(i => i.id === item.id ? { ...i, unit: v } : i))} placeholder="Jed. (°C...)" placeholderTextColor={theme.colors.textMuted} />
+                        <TextInput style={[mStyles.input, { flex: 1 }]} value={item.min} onChangeText={v => setCfgValueItems(prev => prev.map(i => i.id === item.id ? { ...i, min: v } : i))} placeholder="Min" keyboardType="numeric" placeholderTextColor={theme.colors.textMuted} />
+                        <TextInput style={[mStyles.input, { flex: 1 }]} value={item.max} onChangeText={v => setCfgValueItems(prev => prev.map(i => i.id === item.id ? { ...i, max: v } : i))} placeholder="Max" keyboardType="numeric" placeholderTextColor={theme.colors.textMuted} />
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {newConfirm === 'description' && (
+                <View style={{ marginTop: 12, gap: 8 }}>
+                  <Text style={mStyles.label}>Polecenie dla pracownika (opcjonalne)</Text>
+                  <TextInput style={[mStyles.input, mStyles.inputMulti]} value={cfgPrompt} onChangeText={setCfgPrompt} placeholder="np. Opisz dokładnie co zostało zrobione i jakie napotkano problemy..." placeholderTextColor={theme.colors.textMuted} multiline numberOfLines={2} />
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                    <Text style={mStyles.label}>Lista kontrolna (opcjonalne)</Text>
+                    <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.colors.primaryLight, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 }} onPress={() => setCfgCheckItems(prev => [...prev, { id: Date.now().toString(), label: '' }])} activeOpacity={0.7}>
+                      <Ionicons name="add" size={14} color={theme.colors.primary} />
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.primary }}>Dodaj punkt</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {cfgCheckItems.map((item, idx) => (
+                    <View key={item.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Ionicons name="checkbox-outline" size={16} color={theme.colors.textMuted} />
+                      <TextInput style={[mStyles.input, { flex: 1 }]} value={item.label} onChangeText={v => setCfgCheckItems(prev => prev.map(i => i.id === item.id ? { ...i, label: v } : i))} placeholder={`Punkt ${idx + 1}...`} placeholderTextColor={theme.colors.textMuted} />
+                      <TouchableOpacity onPress={() => setCfgCheckItems(prev => prev.filter(i => i.id !== item.id))}>
+                        <Ionicons name="close-circle-outline" size={18} color={theme.colors.error} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {newConfirm === 'photo' && (
+                <View style={{ marginTop: 12 }}>
+                  <Text style={mStyles.label}>Wskazówka dla pracownika (opcjonalne)</Text>
+                  <TextInput style={[mStyles.input, mStyles.inputMulti]} value={cfgPrompt} onChangeText={setCfgPrompt} placeholder="np. Zrób zdjęcie czystej kuchni po sprzątaniu..." placeholderTextColor={theme.colors.textMuted} multiline numberOfLines={2} />
+                </View>
+              )}
             </ScrollView>
 
             <View style={mStyles.footer}>

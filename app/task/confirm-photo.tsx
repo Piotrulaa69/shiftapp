@@ -37,11 +37,18 @@ export default function ConfirmPhotoScreen() {
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [photoPrompt, setPhotoPrompt] = useState('');
 
   useEffect(() => {
     if (!taskId) return;
     supabase.from('tasks').select('*').eq('id', taskId).single()
-      .then(({ data }) => { if (data) setTask(data as DbTask); });
+      .then(({ data }) => {
+        if (data) {
+          setTask(data as DbTask);
+          const cfg = (data as any).confirmation_config;
+          if (cfg?.prompt) setPhotoPrompt(cfg.prompt);
+        }
+      });
   }, [taskId]);
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
@@ -171,7 +178,13 @@ export default function ConfirmPhotoScreen() {
               <Text style={s.requiredText}>Wymagane</Text>
             </View>
           </View>
-          <Text style={s.sectionSub}>Zrób zdjęcie dokumentujące wykonanie zadania</Text>
+          <Text style={s.sectionSub}>{photoPrompt || 'Zrób zdjęcie dokumentujące wykonanie zadania'}</Text>
+          {photoPrompt ? (
+            <View style={{ backgroundColor: theme.colors.primaryLight, borderRadius: 10, padding: 12, marginBottom: 12, flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
+              <Ionicons name="information-circle" size={16} color={theme.colors.primary} />
+              <Text style={{ fontSize: 13, color: theme.colors.primary, fontWeight: '600', flex: 1 }}>{photoPrompt}</Text>
+            </View>
+          ) : null}
 
           {!hasPhoto ? (
             <TouchableOpacity style={s.photoArea} onPress={pickFromCamera} activeOpacity={0.7}>

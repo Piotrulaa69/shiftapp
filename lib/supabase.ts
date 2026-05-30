@@ -100,6 +100,7 @@ export type DbTask = {
   status: 'do_zrobienia' | 'w_trakcie' | 'czeka_na_zatwierdzenie' | 'zatwierdzone' | 'odrzucone' | 'zamkniete';
   duration_min: number;
   confirmation_type: 'photo' | 'values' | 'description' | null;
+  confirmation_config: any | null;
   points: number;
   proof_photo_url: string | null;
   proof_comment: string | null;
