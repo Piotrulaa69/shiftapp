@@ -12,9 +12,10 @@ export type AuthUser = {
   email: string;
   role: UserRole;
   jobTitle: string;
-  restaurantId: string;
+  restaurantId: string | null;
   avatarColor: string;
   onboardingDone: boolean;
+  isSuperAdmin: boolean;
 };
 
 export type Restaurant = {
@@ -34,6 +35,7 @@ type AuthContextType = {
   isAuthenticated: boolean;
   isOwner: boolean;
   isManager: boolean;
+  isSuperAdmin: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   joinWithCode: (
@@ -67,9 +69,10 @@ function toAuthUser(profile: DbProfile, email: string): AuthUser {
     email,
     role: profile.role as UserRole,
     jobTitle: profile.job_title,
-    restaurantId: profile.restaurant_id,
+    restaurantId: profile.restaurant_id ?? null,
     avatarColor: profile.avatar_color,
     onboardingDone: profile.onboarding_done ?? true,
+    isSuperAdmin: profile.is_super_admin ?? false,
   };
 }
 
@@ -103,6 +106,8 @@ async function loadUserData(userId: string, email: string): Promise<{ user: Auth
   };
 }
 
+let _isRegistering = false;
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
@@ -123,13 +128,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else if (session?.user) {
         setHasSession(true);
         setIsLoading(false);
-        loadUserData(session.user.id, session.user.email ?? '').then((result) => {
-          if (result) {
-            setUser(result.user);
-            setRestaurant(result.restaurant);
-          }
-          // Don't sign out on failure — session stays, user data loads on next refresh
-        });
+        if (!_isRegistering) {
+          loadUserData(session.user.id, session.user.email ?? '').then((result) => {
+            if (result) {
+              setUser(result.user);
+              setRestaurant(result.restaurant);
+            } else {
+              // No profile found — orphaned auth user, sign out cleanly
+              supabase.auth.signOut();
+            }
+          });
+        }
       }
     });
 
@@ -210,6 +219,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     email: string;
     password: string;
   }): Promise<{ success: boolean; error?: string }> => {
+    _isRegistering = true;
     setIsLoading(true);
 
     // 1. Create Supabase Auth user
@@ -218,24 +228,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       password: data.password,
     });
     if (authError || !authData.user) {
+      _isRegistering = false;
       setIsLoading(false);
-      return { success: false, error: authError?.message ?? 'Nie udało się utworzyć konta.' };
+      const msg = (authError?.message ?? '').toLowerCase();
+      console.error('[registerRestaurant] signUp error:', authError?.message);
+      const friendly =
+        msg.includes('rate limit')                          ? 'Przekroczono limit rejestracji. Odczekaj chwilę i spróbuj ponownie.' :
+        msg.includes('already registered')                  ? 'Konto z tym e-mailem już istnieje. Spróbuj się zalogować.' :
+        msg.includes('already exists')                      ? 'Konto z tym e-mailem już istnieje. Spróbuj się zalogować.' :
+        msg.includes('user already')                        ? 'Konto z tym e-mailem już istnieje. Spróbuj się zalogować.' :
+        msg.includes('password')                            ? 'Hasło musi mieć co najmniej 6 znaków.' :
+        msg.includes('invalid email')                       ? 'Podaj prawidłowy adres e-mail.' :
+        msg.includes('signup')  || msg.includes('sign up') ? 'Rejestracja jest chwilowo niedostępna.' :
+        authError?.message ?? 'Nie udało się utworzyć konta.';
+      return { success: false, error: friendly };
     }
     const userId = authData.user.id;
 
-    // 2. Create restaurant
-    const { data: restData, error: restError } = await supabase
-      .from('restaurants')
-      .insert({
-        name: data.restaurantName.trim(),
-        address: data.address.trim(),
-        phone: data.phone.trim(),
-        owner_id: userId,
-      })
-      .select()
-      .single();
-    if (restError || !restData) {
+    // 2. Create restaurant via SECURITY DEFINER RPC (bypasses RLS)
+    const { data: rpcData, error: restError } = await supabase.rpc('create_restaurant_for_owner', {
+      p_name: data.restaurantName.trim(),
+      p_address: data.address.trim(),
+      p_phone: data.phone.trim(),
+      p_owner_id: userId,
+    });
+    const restData = rpcData as { id: string } | null;
+    if (restError || !restData?.id) {
+      _isRegistering = false;
       setIsLoading(false);
+      console.error('[registerRestaurant] restaurant error:', restError?.message);
       return { success: false, error: 'Nie udało się utworzyć restauracji.' };
     }
 
@@ -252,11 +273,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       avatar_color: avatarColor,
     });
     if (profileError) {
+      _isRegistering = false;
       setIsLoading(false);
       return { success: false, error: 'Nie udało się utworzyć profilu.' };
     }
 
     // 4. Load user data
+    _isRegistering = false;
     const result = await loadUserData(userId, data.email.trim());
     setIsLoading(false);
     if (!result) return { success: false, error: 'Nie udało się załadować danych.' };
@@ -278,12 +301,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!error && data) setRestaurant(toRestaurant(data as any));
   };
 
-  const isOwner = user?.role === 'owner';
+  const isOwner = user?.role === 'owner' && !user?.isSuperAdmin;
   const isManager = user?.role === 'manager';
+  const isSuperAdmin = user?.isSuperAdmin ?? false;
 
   return (
     <AuthContext.Provider
-      value={{ user, restaurant, isAuthenticated: hasSession, isOwner, isManager, isLoading, login, joinWithCode, registerRestaurant, logout, refreshRestaurant }}
+      value={{ user, restaurant, isAuthenticated: hasSession, isOwner, isManager, isSuperAdmin, isLoading, login, joinWithCode, registerRestaurant, logout, refreshRestaurant }}
     >
       {children}
     </AuthContext.Provider>

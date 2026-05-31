@@ -423,7 +423,7 @@ const topbarStyles = StyleSheet.create({
 
 /* ─────────────── ROOT ─────────────── */
 export default function TabLayout() {
-  const { isAuthenticated, isOwner, isManager, isLoading } = useAuth();
+  const { isAuthenticated, isOwner, isManager, isSuperAdmin, isLoading } = useAuth();
   const showAdmin = isOwner || isManager;
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
@@ -436,6 +436,7 @@ export default function TabLayout() {
     );
   }
   if (!isAuthenticated) return <Redirect href="/login" />;
+  if (isSuperAdmin) return <Redirect href={'/super-admin' as any} />;
 
   if (isDesktop) {
     return (

@@ -11,7 +11,9 @@ export default function Index() {
   useEffect(() => {
     if (isLoading) return;
     if (!isAuthenticated) {
-      router.replace('/landing' as any);
+      router.replace('/login' as any);
+    } else if (user?.isSuperAdmin) {
+      router.replace('/super-admin' as any);
     } else if (user && !user.onboardingDone) {
       router.replace('/onboarding' as any);
     } else {

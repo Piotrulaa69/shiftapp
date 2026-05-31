@@ -1,99 +1,135 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import {
+    ActivityIndicator, Platform, ScrollView, StyleSheet, Text,
+    TextInput, TouchableOpacity, useWindowDimensions, View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '../../context/AuthContext';
+import { getEmployees } from '../../lib/db';
+import {
+    DEFAULT_PREFS, EmpAvail,
+    GeneratedShift,
+    generateSchedule,
+    GenerationResult,
+    getApprovedLeaves, getEmployeeAvailability, getSchedulePrefs,
+    SchedulePrefs, upsertEmployeeAvailability, upsertSchedulePrefs,
+} from '../../lib/schedule';
+import type { DbProfile } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
 const DAYS = ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd'];
-const DAYS_FULL = ['Poniedziałek', 'Wtorek', 'Środa', 'Czwartek', 'Piątek', 'Sobota', 'Niedziela'];
 
-type ShiftBlock = { day: number; start: string; end: string; hours: number; color: string; bg: string };
-type Employee = {
-  id: string; name: string; role: string; initials: string; color: string;
-  availability: ('ok' | 'limited' | 'off')[];
-  shifts: ShiftBlock[];
-};
+function getWeekStart(offset = 0): Date {
+  const d = new Date();
+  const day = d.getDay() === 0 ? 6 : d.getDay() - 1;
+  d.setDate(d.getDate() - day + offset * 7);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
 
-const EMPLOYEES: Employee[] = [
-  {
-    id: '1', name: 'Jan Kowalski', role: 'Kucharz', initials: 'JK', color: '#2563EB',
-    availability: ['ok', 'ok', 'limited', 'ok', 'ok', 'off', 'off'],
-    shifts: [
-      { day: 0, start: '08:00', end: '16:00', hours: 8, color: theme.colors.primary, bg: theme.colors.primaryLight },
-      { day: 1, start: '08:00', end: '16:00', hours: 8, color: theme.colors.primary, bg: theme.colors.primaryLight },
-      { day: 3, start: '10:00', end: '18:00', hours: 8, color: theme.colors.primary, bg: theme.colors.primaryLight },
-      { day: 4, start: '08:00', end: '16:00', hours: 8, color: theme.colors.primary, bg: theme.colors.primaryLight },
-    ],
-  },
-  {
-    id: '2', name: 'Anna Malinowska', role: 'Kelnerka', initials: 'AM', color: '#7C3AED',
-    availability: ['ok', 'ok', 'ok', 'ok', 'limited', 'ok', 'off'],
-    shifts: [
-      { day: 1, start: '14:00', end: '22:00', hours: 8, color: '#7C3AED', bg: '#EDE9FE' },
-      { day: 2, start: '14:00', end: '22:00', hours: 8, color: '#7C3AED', bg: '#EDE9FE' },
-      { day: 3, start: '14:00', end: '22:00', hours: 8, color: '#7C3AED', bg: '#EDE9FE' },
-      { day: 5, start: '10:00', end: '18:00', hours: 8, color: '#7C3AED', bg: '#EDE9FE' },
-    ],
-  },
-  {
-    id: '3', name: 'Piotr Sikora', role: 'Barman', initials: 'PS', color: '#059669',
-    availability: ['limited', 'ok', 'ok', 'off', 'ok', 'ok', 'ok'],
-    shifts: [
-      { day: 0, start: '16:00', end: '00:00', hours: 8, color: '#059669', bg: '#D1FAE5' },
-      { day: 2, start: '16:00', end: '00:00', hours: 8, color: '#059669', bg: '#D1FAE5' },
-      { day: 4, start: '16:00', end: '00:00', hours: 8, color: '#059669', bg: '#D1FAE5' },
-      { day: 5, start: '16:00', end: '00:00', hours: 8, color: '#059669', bg: '#D1FAE5' },
-    ],
-  },
-  {
-    id: '4', name: 'Marta Nowak', role: 'Obsługa', initials: 'MN', color: '#D97706',
-    availability: ['ok', 'off', 'ok', 'ok', 'ok', 'limited', 'off'],
-    shifts: [
-      { day: 0, start: '08:00', end: '12:00', hours: 4, color: '#D97706', bg: '#FEF3C7' },
-      { day: 2, start: '08:00', end: '16:00', hours: 8, color: '#D97706', bg: '#FEF3C7' },
-      { day: 3, start: '08:00', end: '16:00', hours: 8, color: '#D97706', bg: '#FEF3C7' },
-      { day: 4, start: '12:00', end: '20:00', hours: 8, color: '#D97706', bg: '#FEF3C7' },
-    ],
-  },
-  {
-    id: '5', name: 'Krzysztof Wiśniewski', role: 'Kucharz', initials: 'KW', color: '#DC2626',
-    availability: ['ok', 'ok', 'ok', 'ok', 'off', 'ok', 'ok'],
-    shifts: [
-      { day: 1, start: '08:00', end: '16:00', hours: 8, color: '#DC2626', bg: '#FEE2E2' },
-      { day: 2, start: '08:00', end: '16:00', hours: 8, color: '#DC2626', bg: '#FEE2E2' },
-      { day: 5, start: '10:00', end: '18:00', hours: 8, color: '#DC2626', bg: '#FEE2E2' },
-      { day: 6, start: '10:00', end: '18:00', hours: 8, color: '#DC2626', bg: '#FEE2E2' },
-    ],
-  },
-];
-
-const AI_INSIGHTS = [
-  { icon: 'sparkles', color: '#7C3AED', bg: '#EDE9FE', text: 'Środa ma za mało obsady — sugeruję dodanie zmiany dla Anny lub Piotra.' },
-  { icon: 'alert-circle', color: '#D97706', bg: '#FEF3C7', text: 'Jan Kowalski przekroczy 40h tygodniowo jeśli weźmie wolontaryjną zmianę w sobotę.' },
-  { icon: 'checkmark-circle', color: '#059669', bg: '#D1FAE5', text: 'Piątek — obsada optymalna, wszystkie zmiany pokryte.' },
-];
-
-const AVAIL_CONFIG = {
-  ok: { color: '#059669', bg: '#D1FAE5', label: 'Dostępny' },
-  limited: { color: '#D97706', bg: '#FEF3C7', label: 'Częściowo' },
-  off: { color: '#9CA3AF', bg: '#F3F4F6', label: 'Niedostępny' },
-};
+function weekLabel(weekStart: Date): string {
+  const end = new Date(weekStart);
+  end.setDate(end.getDate() + 6);
+  const fmt = (d: Date) => `${d.getDate()}.${String(d.getMonth() + 1).padStart(2, '0')}`;
+  return `${fmt(weekStart)} – ${fmt(end)}.${end.getFullYear()}`;
+}
 
 export default function ScheduleAIScreen() {
+  const { user } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
-  const [currentWeek, setCurrentWeek] = useState(22);
-  const [generating, setGenerating] = useState(false);
-  const [generated, setGenerated] = useState(false);
+
+  const [weekOffset, setWeekOffset] = useState(0);
+  const weekStart = getWeekStart(weekOffset);
+
   const [activeTab, setActiveTab] = useState<'grafik' | 'dostepnosc' | 'preferencje'>('grafik');
 
-  const handleGenerate = () => {
+  // Data
+  const [employees, setEmployees] = useState<DbProfile[]>([]);
+  const [prefs, setPrefs] = useState<SchedulePrefs | null>(null);
+  const [availability, setAvailability] = useState<EmpAvail[]>([]);
+  const [result, setResult] = useState<GenerationResult | null>(null);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Prefs edit state
+  const [editPrefs, setEditPrefs] = useState<SchedulePrefs | null>(null);
+
+  const rid = user?.restaurantId ?? '';
+
+  const loadData = useCallback(async () => {
+    if (!rid) return;
+    setDataLoading(true);
+    const [emps, p, avail] = await Promise.all([
+      getEmployees(rid),
+      getSchedulePrefs(rid),
+      getEmployeeAvailability(rid),
+    ]);
+    setEmployees(emps as DbProfile[]);
+    const resolvedPrefs = p ?? DEFAULT_PREFS(rid);
+    setPrefs(resolvedPrefs);
+    setEditPrefs({ ...resolvedPrefs });
+    setAvailability(avail);
+    setDataLoading(false);
+  }, [rid]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const handleGenerate = async () => {
+    if (!prefs || employees.length === 0) return;
     setGenerating(true);
-    setTimeout(() => { setGenerating(false); setGenerated(true); }, 2200);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    const leaves = await getApprovedLeaves(rid, weekStart, weekEnd);
+    const res = generateSchedule(employees, availability, leaves as any, prefs, weekStart);
+    setResult(res);
+    setGenerating(false);
   };
 
-  const totalHours = EMPLOYEES.reduce((sum, e) => sum + e.shifts.reduce((s, sh) => s + sh.hours, 0), 0);
-  const coveredDays = [...new Set(EMPLOYEES.flatMap(e => e.shifts.map(s => s.day)))].length;
+  const handleSavePrefs = async () => {
+    if (!editPrefs) return;
+    setSaving(true);
+    await upsertSchedulePrefs(editPrefs);
+    setPrefs(editPrefs);
+    setSaving(false);
+  };
+
+  const toggleAvailability = async (employeeId: string, dayIdx: number, current: boolean) => {
+    const updated: EmpAvail = {
+      employee_id: employeeId,
+      restaurant_id: rid,
+      day_of_week: dayIdx,
+      available: !current,
+    };
+    const newAvail = [...availability.filter(a => !(a.employee_id === employeeId && a.day_of_week === dayIdx)), updated];
+    setAvailability(newAvail);
+    await upsertEmployeeAvailability([updated]);
+  };
+
+  const getAvail = (empId: string, day: number): boolean => {
+    const a = availability.find(a => a.employee_id === empId && a.day_of_week === day);
+    return a === undefined ? true : a.available;
+  };
+
+  // Build shift map for grid
+  const shiftMap: Record<string, GeneratedShift[]> = {};
+  (result?.shifts ?? []).forEach(sh => {
+    const key = sh.employee_id;
+    if (!shiftMap[key]) shiftMap[key] = [];
+    shiftMap[key].push(sh);
+  });
+
+  if (dataLoading) {
+    return (
+      <SafeAreaView style={s.safe} edges={['top']}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -101,18 +137,21 @@ export default function ScheduleAIScreen() {
       <View style={s.header}>
         <View style={s.headerLeft}>
           <View style={s.aiBadge}>
-            <Ionicons name="sparkles" size={14} color="#7C3AED" />
+            <Ionicons name="sparkles" size={13} color="#7C3AED" />
             <Text style={s.aiBadgeText}>AI</Text>
           </View>
-          <Text style={s.title}>Grafik pracy AI</Text>
+          <View>
+            <Text style={s.title}>Grafik pracy AI</Text>
+            <Text style={s.headerSub}>{weekLabel(weekStart)}</Text>
+          </View>
         </View>
         <View style={s.headerRight}>
           <View style={s.weekNav}>
-            <TouchableOpacity style={s.weekBtn} onPress={() => setCurrentWeek(w => w - 1)} activeOpacity={0.7}>
+            <TouchableOpacity style={s.weekBtn} onPress={() => setWeekOffset(o => o - 1)} activeOpacity={0.7}>
               <Ionicons name="chevron-back" size={16} color={theme.colors.textSecondary} />
             </TouchableOpacity>
-            <Text style={s.weekLabel}>Tydzień {currentWeek}</Text>
-            <TouchableOpacity style={s.weekBtn} onPress={() => setCurrentWeek(w => w + 1)} activeOpacity={0.7}>
+            <Text style={s.weekLabel}>Tydzień</Text>
+            <TouchableOpacity style={s.weekBtn} onPress={() => setWeekOffset(o => o + 1)} activeOpacity={0.7}>
               <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
             </TouchableOpacity>
           </View>
@@ -128,49 +167,48 @@ export default function ScheduleAIScreen() {
         </View>
       </View>
 
-      {/* Preview banner */}
-      <View style={s.previewBanner}>
-        <Ionicons name="flask-outline" size={14} color="#92400E" />
-        <Text style={s.previewBannerText}>Wersja podglądowa — dane testowe, których nie można edytować. Funkcjonalność zostanie uruchomiona wkrótce.</Text>
-      </View>
-
       {/* Stats bar */}
       <View style={s.statsBar}>
         <View style={s.statItem}>
-          <Text style={s.statNum}>{totalHours}</Text>
+          <Text style={s.statNum}>{result ? result.stats.totalHours.toFixed(0) : '—'}</Text>
           <Text style={s.statLbl}>godz. łącznie</Text>
         </View>
         <View style={s.statDivider} />
         <View style={s.statItem}>
-          <Text style={s.statNum}>{EMPLOYEES.length}</Text>
+          <Text style={s.statNum}>{employees.length}</Text>
           <Text style={s.statLbl}>pracowników</Text>
         </View>
         <View style={s.statDivider} />
         <View style={s.statItem}>
-          <Text style={[s.statNum, { color: '#059669' }]}>{coveredDays}</Text>
+          <Text style={[s.statNum, { color: result ? '#059669' : theme.colors.textMuted }]}>
+            {result ? `${result.stats.coveredDays}/7` : '—'}
+          </Text>
           <Text style={s.statLbl}>dni pokrytych</Text>
         </View>
         <View style={s.statDivider} />
         <View style={s.statItem}>
-          <Text style={[s.statNum, { color: generated ? '#059669' : '#D97706' }]}>{generated ? 'Gotowy' : 'Szkic'}</Text>
+          <Text style={[s.statNum, { color: result ? '#059669' : '#D97706' }]}>{result ? 'Gotowy' : 'Brak'}</Text>
           <Text style={s.statLbl}>status</Text>
         </View>
       </View>
 
-      {/* AI Insight Banner */}
-      {generated && (
-        <View style={s.insightBanner}>
-          <Ionicons name="sparkles" size={16} color="#7C3AED" />
-          <Text style={s.insightText}>AI wygenerował grafik z uwzględnieniem dostępności i preferencji. Wykryto 1 konflikt — środa ma niewystarczającą obsadę.</Text>
-          <TouchableOpacity activeOpacity={0.7}>
-            <Text style={s.insightBtn}>Napraw</Text>
-          </TouchableOpacity>
+      {/* Warnings banner */}
+      {result && result.warnings.length > 0 && (
+        <View style={s.warningBanner}>
+          <Ionicons name="warning" size={14} color="#92400E" />
+          <Text style={s.warningText}>{result.warnings[0]}{result.warnings.length > 1 ? ` (+${result.warnings.length - 1})` : ''}</Text>
+        </View>
+      )}
+      {result && result.warnings.length === 0 && (
+        <View style={s.successBanner}>
+          <Ionicons name="checkmark-circle" size={14} color="#065F46" />
+          <Text style={s.successText}>Grafik wygenerowany — wszystkie dni pokryte minimalną obsadą.</Text>
         </View>
       )}
 
-      {/* Tab navigation */}
+      {/* Tabs */}
       <View style={s.tabs}>
-        {(['grafik', 'dostepnosc', 'preferencje'] as const).map((tab) => (
+        {(['grafik', 'dostepnosc', 'preferencje'] as const).map(tab => (
           <TouchableOpacity key={tab} style={[s.tab, activeTab === tab && s.tabActive]} onPress={() => setActiveTab(tab)} activeOpacity={0.7}>
             <Text style={[s.tabText, activeTab === tab && s.tabTextActive]}>
               {tab === 'grafik' ? 'Grafik' : tab === 'dostepnosc' ? 'Dostępność' : 'Preferencje'}
@@ -180,139 +218,259 @@ export default function ScheduleAIScreen() {
       </View>
 
       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+        {/* ── GRAFIK TAB ── */}
         {activeTab === 'grafik' && (
           <View style={s.content}>
-            {/* Schedule grid */}
-            <View style={s.grid}>
-              {/* Header row */}
-              <View style={s.gridHeader}>
-                <View style={s.gridEmployeeCol} />
-                {DAYS.map((d, i) => (
-                  <View key={i} style={s.gridDayCol}>
-                    <Text style={s.gridDayText}>{d}</Text>
-                  </View>
-                ))}
+            {employees.length === 0 ? (
+              <View style={s.emptyState}>
+                <Ionicons name="people-outline" size={48} color={theme.colors.textMuted} />
+                <Text style={s.emptyTitle}>Brak pracowników</Text>
+                <Text style={s.emptySub}>Dodaj pracowników do restauracji, aby wygenerować grafik.</Text>
               </View>
-
-              {/* Employee rows */}
-              {EMPLOYEES.map((emp) => (
-                <View key={emp.id} style={s.gridRow}>
-                  <View style={s.gridEmployeeCol}>
-                    <View style={[s.empAvatar, { backgroundColor: emp.color + '22' }]}>
-                      <Text style={[s.empAvatarText, { color: emp.color }]}>{emp.initials}</Text>
-                    </View>
-                    {isDesktop && (
-                      <View style={{ flex: 1 }}>
-                        <Text style={s.empName} numberOfLines={1}>{emp.name}</Text>
-                        <Text style={s.empRole}>{emp.role}</Text>
+            ) : !result ? (
+              <View style={s.emptyState}>
+                <Ionicons name="sparkles-outline" size={48} color="#7C3AED" />
+                <Text style={s.emptyTitle}>Kliknij "Generuj AI"</Text>
+                <Text style={s.emptySub}>AI uwzględni dostępność pracowników, urlopy i preferencje godzinowe.</Text>
+                <TouchableOpacity style={s.generateBigBtn} onPress={handleGenerate} activeOpacity={0.85}>
+                  <Ionicons name="sparkles" size={18} color="#fff" />
+                  <Text style={s.generateBigBtnText}>Generuj grafik na ten tydzień</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                {/* Schedule grid */}
+                <View style={s.grid}>
+                  <View style={s.gridHeader}>
+                    <View style={s.gridEmpCol} />
+                    {DAYS.map((d, i) => (
+                      <View key={i} style={s.gridDayCol}>
+                        <Text style={s.gridDayText}>{d}</Text>
                       </View>
-                    )}
+                    ))}
                   </View>
-                  {DAYS.map((_, dayIdx) => {
-                    const shift = emp.shifts.find(sh => sh.day === dayIdx);
-                    const avail = emp.availability[dayIdx];
+                  {employees.map(emp => {
+                    const empShifts = shiftMap[emp.id] ?? [];
                     return (
-                      <View key={dayIdx} style={s.gridDayCol}>
-                        {shift ? (
-                          <TouchableOpacity style={[s.shiftBlock, { backgroundColor: shift.bg, borderColor: shift.color }]} activeOpacity={0.8}>
-                            <Text style={[s.shiftTime, { color: shift.color }]}>{shift.start}</Text>
-                            <Text style={[s.shiftHours, { color: shift.color }]}>{shift.hours}h</Text>
-                          </TouchableOpacity>
-                        ) : avail === 'off' ? (
-                          <View style={s.offBlock}>
-                            <Text style={s.offText}>—</Text>
+                      <View key={emp.id} style={s.gridRow}>
+                        <View style={s.gridEmpCol}>
+                          <View style={[s.empAvatar, { backgroundColor: (emp.avatar_color ?? '#2563EB') + '22' }]}>
+                            <Text style={[s.empAvatarText, { color: emp.avatar_color ?? '#2563EB' }]}>
+                              {emp.first_name[0]}{emp.last_name[0]}
+                            </Text>
                           </View>
-                        ) : (
-                          <TouchableOpacity style={s.addShiftBtn} activeOpacity={0.7}>
-                            <Ionicons name="add" size={14} color={theme.colors.textMuted} />
-                          </TouchableOpacity>
-                        )}
+                          {isDesktop && (
+                            <View style={{ flex: 1 }}>
+                              <Text style={s.empName} numberOfLines={1}>{emp.first_name} {emp.last_name}</Text>
+                              <Text style={s.empRole}>{emp.job_title}</Text>
+                            </View>
+                          )}
+                        </View>
+                        {DAYS.map((_, dayIdx) => {
+                          const shift = empShifts.find(sh => sh.day_of_week === dayIdx);
+                          const avail = getAvail(emp.id, dayIdx);
+                          const color = emp.avatar_color ?? theme.colors.primary;
+                          return (
+                            <View key={dayIdx} style={s.gridDayCol}>
+                              {shift ? (
+                                <View style={[s.shiftBlock, { backgroundColor: color + '18', borderColor: color }]}>
+                                  <Text style={[s.shiftTime, { color }]}>{shift.start_time}</Text>
+                                  <Text style={[s.shiftHours, { color }]}>{shift.hours}h</Text>
+                                </View>
+                              ) : !avail ? (
+                                <View style={s.offBlock}>
+                                  <Text style={s.offText}>—</Text>
+                                </View>
+                              ) : (
+                                <View style={s.freeBlock}>
+                                  <Ionicons name="ellipse-outline" size={12} color={theme.colors.border} />
+                                </View>
+                              )}
+                            </View>
+                          );
+                        })}
                       </View>
                     );
                   })}
                 </View>
-              ))}
-            </View>
 
-            {/* AI Insights */}
-            <View style={s.insightsSection}>
-              <Text style={s.sectionTitle}>Sugestie AI</Text>
-              {AI_INSIGHTS.map((insight, i) => (
-                <View key={i} style={[s.insightCard, { borderLeftColor: insight.color }]}>
-                  <View style={[s.insightIcon, { backgroundColor: insight.bg }]}>
-                    <Ionicons name={insight.icon as any} size={16} color={insight.color} />
-                  </View>
-                  <Text style={s.insightCardText}>{insight.text}</Text>
-                </View>
-              ))}
-            </View>
+                {/* Per-employee summary */}
+                <Text style={s.sectionTitle}>Podsumowanie tygodnia</Text>
+                {employees.map(emp => {
+                  const empShifts = shiftMap[emp.id] ?? [];
+                  const total = empShifts.reduce((s, sh) => s + sh.hours, 0);
+                  const color = emp.avatar_color ?? theme.colors.primary;
+                  const pct = prefs ? Math.min(total / prefs.max_hours_per_week, 1) : 0;
+                  return (
+                    <View key={emp.id} style={s.summaryRow}>
+                      <View style={[s.empAvatar, { backgroundColor: color + '22' }]}>
+                        <Text style={[s.empAvatarText, { color }]}>{emp.first_name[0]}{emp.last_name[0]}</Text>
+                      </View>
+                      <View style={{ flex: 1, gap: 4 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                          <Text style={s.empName}>{emp.first_name} {emp.last_name}</Text>
+                          <Text style={[s.summaryHours, { color }]}>{total}h</Text>
+                        </View>
+                        <View style={s.progressBg}>
+                          <View style={[s.progressFill, { width: `${pct * 100}%`, backgroundColor: color }]} />
+                        </View>
+                        <Text style={s.summaryMeta}>{empShifts.length} zmian · max {prefs?.max_hours_per_week}h</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+
+                {/* Warnings detail */}
+                {result.warnings.length > 0 && (
+                  <>
+                    <Text style={s.sectionTitle}>Ostrzeżenia</Text>
+                    {result.warnings.map((w, i) => (
+                      <View key={i} style={s.warningCard}>
+                        <Ionicons name="warning-outline" size={16} color="#D97706" />
+                        <Text style={s.warningCardText}>{w}</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+              </>
+            )}
           </View>
         )}
 
+        {/* ── DOSTĘPNOŚĆ TAB ── */}
         {activeTab === 'dostepnosc' && (
           <View style={s.content}>
             <Text style={s.sectionTitle}>Dostępność pracowników</Text>
-            {EMPLOYEES.map((emp) => (
-              <View key={emp.id} style={s.availCard}>
-                <View style={s.availHeader}>
-                  <View style={[s.empAvatar, { backgroundColor: emp.color + '22' }]}>
-                    <Text style={[s.empAvatarText, { color: emp.color }]}>{emp.initials}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.empName}>{emp.name}</Text>
-                    <Text style={s.empRole}>{emp.role}</Text>
-                  </View>
-                  <Text style={s.availHours}>{emp.shifts.reduce((s, sh) => s + sh.hours, 0)}h/tydz.</Text>
-                </View>
-                <View style={s.availDays}>
-                  {DAYS.map((day, i) => {
-                    const av = emp.availability[i];
-                    const cfg = AVAIL_CONFIG[av];
-                    return (
-                      <View key={i} style={s.availDayItem}>
-                        <View style={[s.availDot, { backgroundColor: cfg.bg, borderColor: cfg.color }]}>
-                          <Text style={[s.availDotText, { color: cfg.color }]}>{day[0]}</Text>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
+            <Text style={s.sectionSub}>Dotknij dzień, aby przełączyć dostępność pracownika. Zmiany zapisują się automatycznie.</Text>
+            {employees.length === 0 ? (
+              <View style={s.emptyState}>
+                <Text style={s.emptySub}>Brak pracowników w restauracji.</Text>
               </View>
-            ))}
+            ) : (
+              employees.map(emp => {
+                const color = emp.avatar_color ?? theme.colors.primary;
+                const totalAvail = DAYS.map((_, i) => getAvail(emp.id, i)).filter(Boolean).length;
+                return (
+                  <View key={emp.id} style={s.availCard}>
+                    <View style={s.availHeader}>
+                      <View style={[s.empAvatar, { backgroundColor: color + '22' }]}>
+                        <Text style={[s.empAvatarText, { color }]}>{emp.first_name[0]}{emp.last_name[0]}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.empName}>{emp.first_name} {emp.last_name}</Text>
+                        <Text style={s.empRole}>{emp.job_title}</Text>
+                      </View>
+                      <Text style={[s.availCount, { color }]}>{totalAvail}/7 dni</Text>
+                    </View>
+                    <View style={s.availDays}>
+                      {DAYS.map((day, i) => {
+                        const avail = getAvail(emp.id, i);
+                        return (
+                          <TouchableOpacity
+                            key={i}
+                            style={[s.availDay, avail ? { backgroundColor: color + '20', borderColor: color } : s.availDayOff]}
+                            onPress={() => toggleAvailability(emp.id, i, avail)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={[s.availDayLabel, avail ? { color } : s.availDayLabelOff]}>{day}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                );
+              })
+            )}
             <View style={s.availLegend}>
-              {Object.entries(AVAIL_CONFIG).map(([key, cfg]) => (
-                <View key={key} style={s.legendItem}>
-                  <View style={[s.legendDot, { backgroundColor: cfg.bg, borderColor: cfg.color }]} />
-                  <Text style={s.legendText}>{cfg.label}</Text>
-                </View>
-              ))}
+              <View style={s.legendItem}><View style={[s.legendDot, { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primary }]} /><Text style={s.legendText}>Dostępny</Text></View>
+              <View style={s.legendItem}><View style={[s.legendDot, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} /><Text style={s.legendText}>Niedostępny</Text></View>
             </View>
           </View>
         )}
 
-        {activeTab === 'preferencje' && (
+        {/* ── PREFERENCJE TAB ── */}
+        {activeTab === 'preferencje' && editPrefs && (
           <View style={s.content}>
-            <Text style={s.sectionTitle}>Ustawienia generowania</Text>
+            <Text style={s.sectionTitle}>Preferencje planowania</Text>
+            <Text style={s.sectionSub}>Ustawienia używane przez AI podczas generowania grafiku.</Text>
+
             {[
-              { icon: 'time-outline', label: 'Minimalne godziny tygodniowe', value: '32h', color: theme.colors.primary },
-              { icon: 'time', label: 'Maksymalne godziny tygodniowe', value: '48h', color: theme.colors.primary },
-              { icon: 'moon-outline', label: 'Maksymalna liczba zmian nocnych', value: '2 / tydzień', color: '#7C3AED' },
-              { icon: 'sunny-outline', label: 'Minimalne przerwy między zmianami', value: '11 godzin', color: '#D97706' },
-              { icon: 'people-outline', label: 'Minimalna obsada w ciągu dnia', value: '3 osoby', color: '#059669' },
-              { icon: 'calendar-outline', label: 'Automatyczne weekendy rotacyjne', value: 'Włączone', color: '#059669' },
-            ].map((pref, i) => (
-              <View key={i} style={s.prefRow}>
-                <View style={[s.prefIcon, { backgroundColor: pref.color + '18' }]}>
-                  <Ionicons name={pref.icon as any} size={18} color={pref.color} />
+              {
+                label: 'Min. pracowników na zmianie',
+                icon: 'people', color: '#2563EB',
+                value: String(editPrefs.min_staff_per_shift),
+                key: 'min_staff_per_shift',
+                kbd: 'numeric',
+              },
+              {
+                label: 'Maks. godzin tygodniowo',
+                icon: 'trending-up', color: '#D97706',
+                value: String(editPrefs.max_hours_per_week),
+                key: 'max_hours_per_week',
+                kbd: 'numeric',
+              },
+              {
+                label: 'Min. godzin tygodniowo',
+                icon: 'trending-down', color: '#059669',
+                value: String(editPrefs.min_hours_per_week),
+                key: 'min_hours_per_week',
+                kbd: 'numeric',
+              },
+              {
+                label: 'Godzina startu zmiany',
+                icon: 'sunny', color: '#F59E0B',
+                value: editPrefs.shift_start,
+                key: 'shift_start',
+                kbd: 'default',
+              },
+              {
+                label: 'Godzina końca zmiany',
+                icon: 'moon', color: '#7C3AED',
+                value: editPrefs.shift_end,
+                key: 'shift_end',
+                kbd: 'default',
+              },
+              {
+                label: 'Maks. kolejnych dni pracy',
+                icon: 'calendar', color: '#DC2626',
+                value: String(editPrefs.max_consecutive_days),
+                key: 'max_consecutive_days',
+                kbd: 'numeric',
+              },
+            ].map(({ label, icon, color, value, key, kbd }) => (
+              <View key={key} style={s.prefRow}>
+                <View style={[s.prefIcon, { backgroundColor: color + '18' }]}>
+                  <Ionicons name={icon as any} size={18} color={color} />
                 </View>
-                <Text style={s.prefLabel}>{pref.label}</Text>
-                <View style={s.prefValueBox}>
-                  <Text style={s.prefValue}>{pref.value}</Text>
-                </View>
+                <Text style={s.prefLabel}>{label}</Text>
+                <TextInput
+                  style={s.prefInput}
+                  value={value}
+                  onChangeText={v => setEditPrefs(p => p ? { ...p, [key]: kbd === 'numeric' ? parseInt(v) || 0 : v } : p)}
+                  keyboardType={kbd as any}
+                />
               </View>
             ))}
-            <TouchableOpacity style={s.savePrefsBtn} activeOpacity={0.85}>
-              <Text style={s.savePrefsText}>Zapisz preferencje i generuj</Text>
+
+            <View style={{ gap: 4 }}>
+              <Text style={s.formLabel}>Notatki dla AI (opcjonalnie)</Text>
+              <TextInput
+                style={[s.prefInput, { height: 80, textAlignVertical: 'top', paddingTop: 10 }]}
+                value={editPrefs.notes ?? ''}
+                onChangeText={v => setEditPrefs(p => p ? { ...p, notes: v } : p)}
+                placeholder="np. Marta nie może pracować w poniedziałek rano..."
+                placeholderTextColor={theme.colors.textMuted}
+                multiline
+              />
+            </View>
+
+            <TouchableOpacity style={[s.saveBtn, saving && s.saveBtnLoading]} onPress={handleSavePrefs} activeOpacity={0.85} disabled={saving}>
+              <Ionicons name={saving ? 'hourglass' : 'checkmark-circle'} size={18} color="#fff" />
+              <Text style={s.saveBtnText}>{saving ? 'Zapisywanie...' : 'Zapisz preferencje'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.generateSaveBtn} onPress={() => { handleSavePrefs(); handleGenerate(); setActiveTab('grafik'); }} activeOpacity={0.85}>
+              <Ionicons name="sparkles" size={18} color="#fff" />
+              <Text style={s.generateSaveBtnText}>Zapisz i generuj grafik</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -326,68 +484,81 @@ const s = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: theme.colors.card, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerSub: { fontSize: 11, color: theme.colors.textMuted, marginTop: 1 },
   aiBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#EDE9FE', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20 },
   aiBadgeText: { fontSize: 12, fontWeight: '800', color: '#7C3AED' },
-  title: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
-  weekNav: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.colors.surface, borderRadius: 20, paddingHorizontal: 4, paddingVertical: 2 },
+  title: { fontSize: 17, fontWeight: '800', color: theme.colors.text },
+  weekNav: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.colors.surface, borderRadius: 20, paddingHorizontal: 4, paddingVertical: 2 },
   weekBtn: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  weekLabel: { fontSize: 13, fontWeight: '700', color: theme.colors.text, paddingHorizontal: 4 },
+  weekLabel: { fontSize: 12, fontWeight: '700', color: theme.colors.text, paddingHorizontal: 4 },
   generateBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#7C3AED', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 22 },
   generateBtnLoading: { backgroundColor: '#A78BFA' },
   generateBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
-  statsBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.card, paddingVertical: 12, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  statsBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.card, paddingVertical: 10, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   statItem: { flex: 1, alignItems: 'center' },
-  statNum: { fontSize: 16, fontWeight: '800', color: theme.colors.text },
+  statNum: { fontSize: 15, fontWeight: '800', color: theme.colors.text },
   statLbl: { fontSize: 10, color: theme.colors.textMuted, marginTop: 1 },
-  statDivider: { width: 1, height: 28, backgroundColor: theme.colors.border },
-  insightBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#EDE9FE', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#DDD6FE' },
-  insightText: { flex: 1, fontSize: 12, color: '#5B21B6', lineHeight: 16 },
-  insightBtn: { fontSize: 12, fontWeight: '700', color: '#7C3AED' },
+  statDivider: { width: 1, height: 26, backgroundColor: theme.colors.border },
+  warningBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FEF3C7', paddingHorizontal: 16, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#FDE68A' },
+  warningText: { flex: 1, fontSize: 12, color: '#92400E', fontWeight: '600' },
+  successBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#D1FAE5', paddingHorizontal: 16, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#A7F3D0' },
+  successText: { flex: 1, fontSize: 12, color: '#065F46', fontWeight: '600' },
   tabs: { flexDirection: 'row', backgroundColor: theme.colors.card, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   tab: { paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 2, borderBottomColor: 'transparent' },
   tabActive: { borderBottomColor: '#7C3AED' },
   tabText: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary },
   tabTextActive: { color: '#7C3AED' },
-  content: { padding: 16, gap: 16 },
-  grid: { backgroundColor: theme.colors.card, borderRadius: 16, overflow: 'hidden', ...theme.shadows.card },
-  gridHeader: { flexDirection: 'row', backgroundColor: theme.colors.surface, paddingVertical: 8 },
-  gridEmployeeCol: { width: 80, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, gap: 8 },
-  gridDayCol: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 4, paddingHorizontal: 2 },
-  gridDayText: { fontSize: 11, fontWeight: '700', color: theme.colors.textSecondary },
-  gridRow: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: theme.colors.border, paddingVertical: 6 },
-  empAvatar: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  content: { padding: 16, gap: 14 },
+  emptyState: { alignItems: 'center', paddingVertical: 48, gap: 10 },
+  emptyTitle: { fontSize: 17, fontWeight: '700', color: theme.colors.text },
+  emptySub: { fontSize: 13, color: theme.colors.textMuted, textAlign: 'center', maxWidth: 280, lineHeight: 18 },
+  generateBigBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#7C3AED', paddingHorizontal: 24, paddingVertical: 13, borderRadius: 14, marginTop: 8 },
+  generateBigBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  grid: { backgroundColor: theme.colors.card, borderRadius: 14, overflow: 'hidden', ...theme.shadows.card },
+  gridHeader: { flexDirection: 'row', backgroundColor: theme.colors.surface, paddingVertical: 7 },
+  gridEmpCol: { width: 76, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, gap: 6 },
+  gridDayCol: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 4, paddingHorizontal: 1 },
+  gridDayText: { fontSize: 10, fontWeight: '700', color: theme.colors.textSecondary },
+  gridRow: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: theme.colors.border, paddingVertical: 5 },
+  empAvatar: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   empAvatarText: { fontSize: 10, fontWeight: '800' },
   empName: { fontSize: 11, fontWeight: '700', color: theme.colors.text },
   empRole: { fontSize: 10, color: theme.colors.textMuted },
-  shiftBlock: { width: '90%', borderRadius: 6, paddingVertical: 4, paddingHorizontal: 4, alignItems: 'center', borderWidth: 1, borderLeftWidth: 3 },
+  shiftBlock: { width: '92%', borderRadius: 6, paddingVertical: 3, alignItems: 'center', borderWidth: 1, borderLeftWidth: 3 },
   shiftTime: { fontSize: 9, fontWeight: '700' },
   shiftHours: { fontSize: 10, fontWeight: '800' },
-  offBlock: { alignItems: 'center', opacity: 0.4 },
-  offText: { fontSize: 12, color: theme.colors.textMuted },
-  addShiftBtn: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderStyle: 'dashed', borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center' },
-  insightsSection: { gap: 10 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: theme.colors.text, marginBottom: 4 },
-  insightCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: theme.colors.card, borderRadius: 12, padding: 14, borderLeftWidth: 4, ...theme.shadows.card },
-  insightIcon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  insightCardText: { flex: 1, fontSize: 13, color: theme.colors.textSecondary, lineHeight: 18 },
+  offBlock: { alignItems: 'center' },
+  offText: { fontSize: 11, color: theme.colors.border },
+  freeBlock: { alignItems: 'center' },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: theme.colors.text },
+  sectionSub: { fontSize: 12, color: theme.colors.textMuted, lineHeight: 16, marginTop: -8 },
+  summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: theme.colors.card, borderRadius: 12, padding: 12, ...theme.shadows.card },
+  summaryHours: { fontSize: 15, fontWeight: '800' },
+  summaryMeta: { fontSize: 10, color: theme.colors.textMuted },
+  progressBg: { height: 5, backgroundColor: theme.colors.surface, borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: 5, borderRadius: 3 },
+  warningCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FEF3C7', borderRadius: 10, padding: 12, borderLeftWidth: 3, borderLeftColor: '#D97706' },
+  warningCardText: { flex: 1, fontSize: 13, color: '#92400E' },
   availCard: { backgroundColor: theme.colors.card, borderRadius: 14, padding: 14, gap: 12, ...theme.shadows.card },
   availHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  availHours: { fontSize: 14, fontWeight: '800', color: theme.colors.primary },
-  availDays: { flexDirection: 'row', justifyContent: 'space-between' },
-  availDayItem: { flex: 1, alignItems: 'center' },
-  availDot: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
-  availDotText: { fontSize: 11, fontWeight: '800' },
+  availCount: { fontSize: 13, fontWeight: '800' },
+  availDays: { flexDirection: 'row', gap: 6 },
+  availDay: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 8, borderWidth: 1.5 },
+  availDayOff: { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+  availDayLabel: { fontSize: 10, fontWeight: '800' },
+  availDayLabelOff: { color: theme.colors.textMuted },
   availLegend: { flexDirection: 'row', justifyContent: 'center', gap: 20, backgroundColor: theme.colors.card, borderRadius: 12, padding: 12 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5 },
-  legendText: { fontSize: 12, color: theme.colors.textSecondary, fontWeight: '600' },
-  prefRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: theme.colors.card, borderRadius: 12, padding: 14, ...theme.shadows.card },
+  legendText: { fontSize: 12, color: theme.colors.textSecondary },
+  prefRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: theme.colors.card, borderRadius: 12, padding: 12, ...theme.shadows.card },
   prefIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   prefLabel: { flex: 1, fontSize: 13, fontWeight: '600', color: theme.colors.text },
-  prefValueBox: { backgroundColor: theme.colors.surface, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  prefValue: { fontSize: 12, fontWeight: '700', color: theme.colors.textSecondary },
-  savePrefsBtn: { backgroundColor: '#7C3AED', paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginTop: 8 },
-  savePrefsText: { fontSize: 15, fontWeight: '700', color: '#fff' },
-  previewBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FEF3C7', paddingHorizontal: 16, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#FDE68A' },
-  previewBannerText: { flex: 1, fontSize: 12, color: '#92400E', fontWeight: '600', lineHeight: 16 },
+  prefInput: { width: 80, backgroundColor: theme.colors.surface, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, fontWeight: '700', color: theme.colors.text, borderWidth: 1, borderColor: theme.colors.border, textAlign: 'center' },
+  formLabel: { fontSize: 12, fontWeight: '700', color: theme.colors.textSecondary },
+  saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.colors.primary, paddingVertical: 13, borderRadius: 12 },
+  saveBtnLoading: { backgroundColor: '#93C5FD' },
+  saveBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  generateSaveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#7C3AED', paddingVertical: 13, borderRadius: 12 },
+  generateSaveBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
 });

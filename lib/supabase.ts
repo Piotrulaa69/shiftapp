@@ -46,7 +46,8 @@ export type DbRestaurant = {
 
 export type DbProfile = {
   id: string;
-  restaurant_id: string;
+  restaurant_id: string | null;
+  is_super_admin: boolean;
   first_name: string;
   last_name: string;
   role: 'owner' | 'manager' | 'employee';
