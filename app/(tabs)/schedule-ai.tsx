@@ -83,6 +83,24 @@ export default function ScheduleAIScreen() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  const draftKey = `schedule_draft_${rid}_${weekStart.toISOString().slice(0, 10)}`;
+
+  // Load persisted draft when week changes
+  useEffect(() => {
+    if (!rid || Platform.OS !== 'web') return;
+    try {
+      const saved = localStorage.getItem(draftKey);
+      if (saved) {
+        const shifts = JSON.parse(saved) as GeneratedShift[];
+        setEditableShifts(shifts);
+        setResult({ shifts, warnings: [], stats: { totalHours: 0, coveredDays: 0, staffPerDay: [] } });
+      } else {
+        setEditableShifts([]);
+        setResult(null);
+      }
+    } catch {}
+  }, [draftKey, rid]);
+
   const handleGenerate = async () => {
     if (!prefs || employees.length === 0) return;
     setGenerating(true);
@@ -91,6 +109,9 @@ export default function ScheduleAIScreen() {
     const leaves = await getApprovedLeaves(rid, weekStart, weekEnd);
     const res = generateSchedule(employees, availability, leaves as any, prefs, weekStart);
     setResult(res);
+    if (Platform.OS === 'web') {
+      try { localStorage.setItem(draftKey, JSON.stringify(res.shifts)); } catch {}
+    }
     setGenerating(false);
   };
 
@@ -108,6 +129,7 @@ export default function ScheduleAIScreen() {
           return { ...sh, employee_id: fromEmpId, day_of_week: fromDay };
         return sh;
       });
+      if (Platform.OS === 'web') { try { localStorage.setItem(draftKey, JSON.stringify(updated)); } catch {} }
       return updated;
     });
   };
@@ -150,6 +172,8 @@ export default function ScheduleAIScreen() {
       if (created) ok++;
     }
     setPublishing(false);
+    if (Platform.OS === 'web') { try { localStorage.removeItem(draftKey); } catch {} }
+    setResult(null);
     Alert.alert('Opublikowano!', `Zapisano ${ok} z ${editableShifts.length} zmian. Pracownicy zobaczą je w grafiku.`);
   };
 

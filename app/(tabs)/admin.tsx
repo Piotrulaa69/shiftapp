@@ -41,7 +41,7 @@ export default function AdminScreen() {
   const [jobTitle, setJobTitle] = useState('Kelner');
   const [lastCode, setLastCode] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
-  const [tab, setTab] = useState<'team' | 'invites' | 'settings' | 'tools' | 'trainings' | 'urlopy' | 'nieobecnosci'>('team');
+  const [tab, setTab] = useState<'team' | 'invites' | 'urlopy' | 'nieobecnosci' | 'settings'>('team');
 
   // Restaurant edit state
   const [rName, setRName] = useState('');
@@ -269,8 +269,6 @@ export default function AdminScreen() {
           { key: 'invites', label: 'Zaproszenia', icon: 'mail' },
           { key: 'urlopy', label: 'Urlopy', icon: 'umbrella' },
           { key: 'nieobecnosci', label: 'Nieobecności', icon: 'alert-circle' },
-          { key: 'trainings', label: 'Szkolenia', icon: 'school' },
-          { key: 'tools', label: 'Narzędzia', icon: 'build' },
           { key: 'settings', label: 'Restauracja', icon: 'restaurant' },
         ] as const).map((t) => (
           <TouchableOpacity
@@ -571,45 +569,6 @@ export default function AdminScreen() {
           </>
         )}
 
-        {/* ─── TRAININGS TAB ─── */}
-        {tab === 'trainings' && (
-          <>
-            <TouchableOpacity style={s.inviteBtn} onPress={openNewTraining} activeOpacity={0.85}>
-              <Ionicons name="add-circle" size={20} color={theme.colors.white} />
-              <Text style={s.inviteBtnText}>Dodaj nowe szkolenie</Text>
-            </TouchableOpacity>
-
-            <View style={s.section}>
-              <Text style={s.sectionTitle}>Szkolenia ({trainings.length})</Text>
-              {trainings.length === 0 ? (
-                <View style={s.emptyState}>
-                  <Ionicons name="school-outline" size={36} color={theme.colors.border} />
-                  <Text style={s.emptyText}>Brak szkoleń</Text>
-                  <Text style={s.emptySub}>Dodaj pierwsze szkolenie dla zespołu</Text>
-                </View>
-              ) : (
-                trainings.map((tr) => (
-                  <View key={tr.id} style={s.trRow}>
-                    <View style={[s.trIconWrap, { backgroundColor: tr.required ? theme.colors.errorLight : theme.colors.primaryLight }]}>
-                      <Ionicons name="school-outline" size={18} color={tr.required ? theme.colors.error : theme.colors.primary} />
-                    </View>
-                    <View style={s.trInfo}>
-                      <Text style={s.trTitle} numberOfLines={1}>{tr.title}</Text>
-                      <Text style={s.trMeta}>{tr.category} · {tr.duration_min} min · {tr.points} pkt{tr.required ? ' · Obowiązkowe' : ''}</Text>
-                    </View>
-                    <TouchableOpacity style={s.trEditBtn} onPress={() => openEditTraining(tr)} activeOpacity={0.7}>
-                      <Ionicons name="create-outline" size={16} color={theme.colors.primary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={s.removeBtn} onPress={() => deleteTrainingConfirm(tr)} activeOpacity={0.7}>
-                      <Ionicons name="trash-outline" size={16} color={theme.colors.error} />
-                    </TouchableOpacity>
-                  </View>
-                ))
-              )}
-            </View>
-          </>
-        )}
-
         {/* ─── URLOPY TAB ─── */}
         {tab === 'urlopy' && (
           <View style={{ gap: 0 }}>
@@ -705,33 +664,6 @@ export default function AdminScreen() {
           </View>
         )}
 
-        {/* ─── TOOLS TAB ─── */}
-        {tab === 'tools' && (
-          <View style={{ gap: 12 }}>
-            {[
-              { icon: 'bar-chart', label: 'Raporty', desc: 'Statystyki i analizy pracy zespołu', route: '/reports', color: '#22C55E' },
-              { icon: 'swap-horizontal', label: 'Wymiany zmian', desc: 'Przeglądaj i zatwierdzaj wymiany', route: '/shift-swap', color: '#A855F7' },
-              { icon: 'folder-open', label: 'Dokumenty', desc: 'Umowy, certyfikaty i zaświadczenia', route: '/documents', color: '#0EA5E9' },
-              { icon: 'calendar-number', label: 'Dyspozycyjność', desc: 'Dostępność całego zespołu', route: '/availability', color: '#8B5CF6' },
-            ].map((tool) => (
-              <TouchableOpacity
-                key={tool.label}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: theme.colors.card, borderRadius: 14, padding: 16 }}
-                onPress={() => router.push(tool.route as any)}
-                activeOpacity={0.8}
-              >
-                <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: tool.color + '18', alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name={`${tool.icon}-outline` as any} size={22} color={tool.color} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 14, fontWeight: '600', color: theme.colors.text }}>{tool.label}</Text>
-                  <Text style={{ fontSize: 12, color: theme.colors.textMuted }}>{tool.desc}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
       </ScrollView>
 
       {/* ─── TRAINING MODAL ─── */}

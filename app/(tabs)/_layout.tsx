@@ -23,12 +23,15 @@ import { theme } from '../../styles/theme';
 const TAB_CONFIG: Record<string, { label: string; icon: string }> = {
   dashboard: { label: 'Panel', icon: 'grid' },
   schedule: { label: 'Grafik', icon: 'calendar' },
-  'schedule-ai': { label: 'Grafik AI', icon: 'sparkles' },
-  'documents-ai': { label: 'Dokumenty AI', icon: 'document-text' },
   tasks: { label: 'Zadania', icon: 'list' },
   szkolenia: { label: 'Szkolenia', icon: 'school' },
-  'time-tracking': { label: 'Ewidencja', icon: 'time' },
   admin: { label: 'Zarządzanie', icon: 'settings' },
+  documents: { label: 'Dokumenty', icon: 'folder-open' },
+  // hidden tabs — keep for routing compatibility
+  'schedule-ai': { label: 'Grafik AI', icon: 'sparkles' },
+  'documents-ai': { label: 'Dokumenty AI', icon: 'document-text' },
+  'time-tracking': { label: 'Ewidencja', icon: 'time' },
+  team: { label: 'Zespół', icon: 'people' },
 };
 
 const NAV_ITEMS_BASE = [
@@ -36,12 +39,10 @@ const NAV_ITEMS_BASE = [
   { key: 'schedule', route: '/(tabs)/schedule' as const },
   { key: 'tasks', route: '/(tabs)/tasks' as const },
   { key: 'szkolenia', route: '/(tabs)/szkolenia' as const },
-  { key: 'time-tracking', route: '/(tabs)/time-tracking' as const },
 ];
 
-const NAV_ITEMS_ADMIN_EXTRA = [
-  { key: 'schedule-ai', route: '/(tabs)/schedule-ai' as const },
-  { key: 'documents-ai', route: '/(tabs)/documents-ai' as const },
+const NAV_ITEMS_ADMIN_EXTRA: { key: string; route: any }[] = [
+  { key: 'documents', route: '/documents' },
 ];
 
 const NAV_ITEM_ADMIN = { key: 'admin', route: '/(tabs)/admin' as const };
@@ -284,11 +285,10 @@ function MobileTabBar({ state, navigation }: BottomTabBarProps) {
   const adminFocused = state.routes[state.index]?.name === 'admin';
 
   const adminActions: FabAction[] = [
-    { icon: 'time-outline', label: 'Czas pracy', onPress: () => router.push('/work-hub' as any) },
-    { icon: 'build-outline', label: 'Narzędzia', onPress: () => router.push('/(tabs)/admin' as any) },
+    { icon: 'settings-outline', label: 'Zarządzanie', onPress: () => router.push('/(tabs)/admin' as any) },
+    { icon: 'folder-open-outline', label: 'Dokumenty', onPress: () => router.push('/documents' as any) },
     { icon: 'sparkles-outline', label: 'Grafik AI', onPress: () => router.push('/(tabs)/schedule-ai' as any) },
-    { icon: 'document-text-outline', label: 'Dokumenty AI', onPress: () => router.push('/(tabs)/documents-ai' as any) },
-    { icon: 'time-outline', label: 'Ewidencja czasu', onPress: () => router.push('/(tabs)/time-tracking' as any) },
+    { icon: 'time-outline', label: 'Czas pracy', onPress: () => router.push('/work-hub' as any) },
   ];
 
   const employeeActions: FabAction[] = [

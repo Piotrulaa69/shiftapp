@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -500,7 +500,9 @@ const sm = StyleSheet.create({
 });
 
 export default function ScheduleScreen() {
-  const { user, isOwner } = useAuth();
+  const { user, isOwner, isManager } = useAuth();
+  const router = useRouter();
+  const canManage = isOwner || isManager;
   const rid = user?.restaurantId ?? '';
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
@@ -719,6 +721,16 @@ export default function ScheduleScreen() {
             <TouchableOpacity style={styles.legendBtn} onPress={() => setShowLegend(true)} activeOpacity={0.7}>
               <Ionicons name="help-circle-outline" size={20} color={theme.colors.textSecondary} />
             </TouchableOpacity>
+            {canManage && (
+              <TouchableOpacity
+                style={[styles.addBtn, { backgroundColor: '#7C3AED', flexDirection: 'row', gap: 5 }]}
+                onPress={() => router.push('/(tabs)/schedule-ai' as any)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="sparkles" size={14} color="#fff" />
+                <Text style={styles.addBtnText}>Grafik AI</Text>
+              </TouchableOpacity>
+            )}
             {isOwner && (
               <TouchableOpacity style={styles.addBtn} onPress={() => { setNewDay(selectedDate); setShowCreateModal(true); }} activeOpacity={0.8}>
                 <Ionicons name="add" size={16} color={theme.colors.white} />
@@ -735,6 +747,15 @@ export default function ScheduleScreen() {
               <TouchableOpacity style={styles.legendBtn} onPress={() => setShowLegend(true)} activeOpacity={0.7}>
                 <Ionicons name="help-circle-outline" size={20} color={theme.colors.textSecondary} />
               </TouchableOpacity>
+              {canManage && (
+                <TouchableOpacity
+                  style={[styles.addBtn, { backgroundColor: '#7C3AED' }]}
+                  onPress={() => router.push('/(tabs)/schedule-ai' as any)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="sparkles" size={14} color="#fff" />
+                </TouchableOpacity>
+              )}
               {isOwner && (
                 <TouchableOpacity style={styles.addBtn} onPress={() => { setNewDay(selectedDate); setShowCreateModal(true); }} activeOpacity={0.8}>
                   <Ionicons name="add" size={16} color={theme.colors.white} />
