@@ -40,6 +40,7 @@ export default function AdminScreen() {
   const [showInvite, setShowInvite] = useState(false);
   const [jobTitle, setJobTitle] = useState('Kelner');
   const [lastCode, setLastCode] = useState<string | null>(null);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [tab, setTab] = useState<'team' | 'invites' | 'settings' | 'tools' | 'trainings' | 'urlopy' | 'nieobecnosci'>('team');
 
   // Restaurant edit state
@@ -112,6 +113,27 @@ export default function AdminScreen() {
     if (!user) return;
     const inv = await generateInvitation(rid, user.id, jobTitle);
     if (inv) { setLastCode(inv.code); setShowInvite(false); refresh(); }
+  };
+
+  const copyToClipboard = (code: string) => {
+    if (Platform.OS === 'web') {
+      navigator.clipboard.writeText(code).then(() => {
+        setCopiedCode(code);
+        setTimeout(() => setCopiedCode(null), 2000);
+      }).catch(() => {
+        // fallback: create temp input
+        const el = document.createElement('input');
+        el.value = code;
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+        setCopiedCode(code);
+        setTimeout(() => setCopiedCode(null), 2000);
+      });
+    } else {
+      shareCode(code);
+    }
   };
 
   const shareCode = async (code: string) => {
@@ -305,11 +327,26 @@ export default function AdminScreen() {
                   <Ionicons name="key-outline" size={18} color={theme.colors.primary} />
                   <Text style={s.codeCardTitle}>Ostatnio wygenerowany kod</Text>
                 </View>
-                <Text style={s.codeValue}>{lastCode}</Text>
-                <TouchableOpacity style={s.shareBtn} onPress={() => shareCode(lastCode)} activeOpacity={0.75}>
-                  <Ionicons name="share-social-outline" size={16} color={theme.colors.primary} />
-                  <Text style={s.shareBtnText}>Udostępnij pracownikowi</Text>
-                </TouchableOpacity>
+                <Text style={s.codeValue} selectable>{lastCode}</Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <TouchableOpacity
+                    style={[s.shareBtn, { flex: 1, backgroundColor: copiedCode === lastCode ? theme.colors.greenLight : theme.colors.primary }]}
+                    onPress={() => copyToClipboard(lastCode)}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons
+                      name={copiedCode === lastCode ? 'checkmark' : 'copy-outline'}
+                      size={16}
+                      color={copiedCode === lastCode ? theme.colors.green : theme.colors.white}
+                    />
+                    <Text style={[s.shareBtnText, { color: copiedCode === lastCode ? theme.colors.green : theme.colors.white }]}>
+                      {copiedCode === lastCode ? 'Skopiowano!' : 'Kopiuj kod'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[s.shareBtn, { paddingHorizontal: 14 }]} onPress={() => shareCode(lastCode)} activeOpacity={0.75}>
+                    <Ionicons name="share-social-outline" size={16} color={theme.colors.primary} />
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
 
@@ -418,8 +455,15 @@ export default function AdminScreen() {
                       <Text style={s.invJob}>{inv.job_title}</Text>
                       <Text style={s.invExpiry}>Wygasa: {new Date(inv.expires_at).toLocaleDateString('pl-PL')}</Text>
                     </View>
-                    <TouchableOpacity onPress={() => shareCode(inv.code)} style={s.invShareBtn}>
-                      <Ionicons name="share-social-outline" size={18} color={theme.colors.primary} />
+                    <TouchableOpacity
+                      onPress={() => copyToClipboard(inv.code)}
+                      style={[s.invShareBtn, copiedCode === inv.code && { backgroundColor: theme.colors.greenLight }]}
+                    >
+                      <Ionicons
+                        name={copiedCode === inv.code ? 'checkmark' : 'copy-outline'}
+                        size={18}
+                        color={copiedCode === inv.code ? theme.colors.green : theme.colors.primary}
+                      />
                     </TouchableOpacity>
                   </View>
                 ))
