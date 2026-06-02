@@ -223,10 +223,22 @@ export type DbDocument = {
   name: string;
   doc_type: 'contract' | 'certificate' | 'attestation' | 'other';
   file_url: string | null;
+  content: string | null;
   expires_at: string | null;
   status: 'active' | 'expiring' | 'expired';
   uploaded_by: string | null;
   created_at: string;
+};
+
+export type DbDocumentTemplate = {
+  id: string;
+  restaurant_id: string;
+  name: string;
+  content: string;
+  doc_type: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type DbConversation = {

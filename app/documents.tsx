@@ -5,8 +5,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
-import { createDocument, deleteDocument, getDocuments, getEmployees, updateDocument, uploadDocumentFile } from '../lib/db';
-import type { DbDocument, DbProfile } from '../lib/supabase';
+import { createDocument, createDocumentTemplate, deleteDocument, deleteDocumentTemplate, getDocumentTemplates, getDocuments, getEmployees, updateDocument, updateDocumentTemplate, uploadDocumentFile } from '../lib/db';
+import type { DbDocument, DbDocumentTemplate, DbProfile } from '../lib/supabase';
 import { theme } from '../styles/theme';
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string; icon: string }> = {
@@ -36,7 +36,7 @@ const computeStatus = (expiresAt?: string | null): 'active' | 'expiring' | 'expi
 
 export default function DocumentsScreen() {
   const router = useRouter();
-  const { user, isOwner, isManager } = useAuth();
+  const { user, restaurant, isOwner, isManager } = useAuth();
   const canManage = isOwner || isManager;
   const rid = user?.restaurantId ?? '';
   const uid = user?.id ?? '';
@@ -63,15 +63,38 @@ export default function DocumentsScreen() {
   // Preview modal
   const [previewDoc, setPreviewDoc] = useState<DbDocument | null>(null);
 
+  // Section toggle
+  const [section, setSection] = useState<'docs' | 'templates'>('docs');
+
+  // Templates
+  const [templates, setTemplates] = useState<DbDocumentTemplate[]>([]);
+  const [showTplModal, setShowTplModal] = useState(false);
+  const [editingTpl, setEditingTpl] = useState<DbDocumentTemplate | null>(null);
+  const [tplName, setTplName] = useState('');
+  const [tplContent, setTplContent] = useState('');
+  const [tplDocType, setTplDocType] = useState('contract');
+  const [tplSaving, setTplSaving] = useState(false);
+
+  // Generate from template
+  const [showGenModal, setShowGenModal] = useState(false);
+  const [genTemplate, setGenTemplate] = useState<DbDocumentTemplate | null>(null);
+  const [genEmployee, setGenEmployee] = useState('');
+  const [genVars, setGenVars] = useState<Record<string, string>>({});
+  const [genPreview, setGenPreview] = useState('');
+  const [genStep, setGenStep] = useState<'form' | 'preview'>('form');
+  const [genSaving, setGenSaving] = useState(false);
+
   const load = useCallback(async () => {
     if (!rid || !user) return;
     setLoading(true);
-    const [d, emps] = await Promise.all([
+    const [d, emps, tpls] = await Promise.all([
       getDocuments(rid),
       canManage ? getEmployees(rid) : Promise.resolve([]),
+      canManage ? getDocumentTemplates(rid) : Promise.resolve([]),
     ]);
     setDocs(d);
     setEmployees(emps);
+    setTemplates(tpls);
     setLoading(false);
   }, [rid, user]);
 
@@ -182,6 +205,131 @@ export default function DocumentsScreen() {
     }
   };
 
+  // ── Template helpers ──────────────────────────────────────────────────────
+  const extractVars = (content: string): string[] => {
+    const matches = content.match(/\{\{([^}]+)\}\}/g) ?? [];
+    const vars = matches.map((m) => m.replace(/^\{\{|\}\}$/g, '').trim());
+    return [...new Set(vars)];
+  };
+
+  const autoFill = (vars: string[], emp: DbProfile): Record<string, string> => {
+    const today = new Date().toLocaleDateString('pl-PL');
+    const MAP: Record<string, string> = {
+      imie_nazwisko: `${emp.first_name} ${emp.last_name}`,
+      imie: emp.first_name,
+      nazwisko: emp.last_name,
+      stanowisko: emp.job_title ?? '',
+      email: (emp as any).email ?? '',
+      restauracja: restaurant?.name ?? '',
+      data: today,
+      data_dzisiaj: today,
+      data_podpisania: today,
+      rok: String(new Date().getFullYear()),
+      miesiac: String(new Date().getMonth() + 1),
+    };
+    const result: Record<string, string> = {};
+    vars.forEach((v) => { result[v] = MAP[v.toLowerCase()] ?? ''; });
+    return result;
+  };
+
+  const fillTemplate = (content: string, vars: Record<string, string>): string => {
+    let filled = content;
+    Object.entries(vars).forEach(([k, v]) => {
+      filled = filled.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v);
+    });
+    return filled;
+  };
+
+  const openTplCreate = () => {
+    setEditingTpl(null);
+    setTplName('');
+    setTplContent('');
+    setTplDocType('contract');
+    setShowTplModal(true);
+  };
+
+  const openTplEdit = (tpl: DbDocumentTemplate) => {
+    setEditingTpl(tpl);
+    setTplName(tpl.name);
+    setTplContent(tpl.content);
+    setTplDocType(tpl.doc_type);
+    setShowTplModal(true);
+  };
+
+  const handleTplSave = async () => {
+    if (!tplName.trim() || !tplContent.trim()) {
+      Alert.alert('Wymagane', 'Wpisz nazwę i treść szablonu.');
+      return;
+    }
+    setTplSaving(true);
+    if (editingTpl) {
+      await updateDocumentTemplate(editingTpl.id, { name: tplName.trim(), content: tplContent, doc_type: tplDocType });
+    } else {
+      await createDocumentTemplate(rid, { name: tplName.trim(), content: tplContent, doc_type: tplDocType, created_by: uid });
+    }
+    setTplSaving(false);
+    setShowTplModal(false);
+    load();
+  };
+
+  const handleTplDelete = (tpl: DbDocumentTemplate) => {
+    Alert.alert('Usuń szablon', `Czy na pewno chcesz usunąć szablon "${tpl.name}"?`, [
+      { text: 'Anuluj', style: 'cancel' },
+      { text: 'Usuń', style: 'destructive', onPress: async () => { await deleteDocumentTemplate(tpl.id); load(); } },
+    ]);
+  };
+
+  const openGenerate = (tpl: DbDocumentTemplate) => {
+    setGenTemplate(tpl);
+    const vars = extractVars(tpl.content);
+    const firstEmp = employees[0];
+    const filled = firstEmp ? autoFill(vars, firstEmp) : Object.fromEntries(vars.map((v) => [v, '']));
+    setGenEmployee(firstEmp?.id ?? '');
+    setGenVars(filled);
+    setGenPreview('');
+    setGenStep('form');
+    setShowGenModal(true);
+  };
+
+  const onGenEmpChange = (empId: string) => {
+    setGenEmployee(empId);
+    if (!genTemplate) return;
+    const emp = employees.find((e) => e.id === empId);
+    if (!emp) return;
+    const vars = extractVars(genTemplate.content);
+    setGenVars((prev) => {
+      const auto = autoFill(vars, emp);
+      const merged: Record<string, string> = {};
+      vars.forEach((v) => {
+        merged[v] = auto[v] || prev[v] || '';
+      });
+      return merged;
+    });
+  };
+
+  const handleGeneratePreview = () => {
+    if (!genTemplate) return;
+    setGenPreview(fillTemplate(genTemplate.content, genVars));
+    setGenStep('preview');
+  };
+
+  const handleSaveGenerated = async () => {
+    if (!genTemplate || !genEmployee || !genPreview) return;
+    setGenSaving(true);
+    const emp = employees.find((e) => e.id === genEmployee);
+    const docName = `${genTemplate.name} — ${emp ? `${emp.first_name} ${emp.last_name}` : ''} (${new Date().toLocaleDateString('pl-PL')})`;
+    await createDocument(rid, {
+      employee_id: genEmployee,
+      name: docName,
+      doc_type: genTemplate.doc_type as any,
+      uploaded_by: uid,
+    });
+    setGenSaving(false);
+    setShowGenModal(false);
+    load();
+    Alert.alert('Zapisano!', 'Dokument jest dostępny w sekcji Dokumenty.');
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={[styles.header, isDesktop && styles.headerDesktop]}>
@@ -189,49 +337,134 @@ export default function DocumentsScreen() {
           <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Dokumenty</Text>
-        <TouchableOpacity onPress={openCreate} style={styles.addBtn}>
-          <Ionicons name="add" size={20} color={theme.colors.white} />
-          <Text style={styles.addBtnText}>Dodaj</Text>
-        </TouchableOpacity>
+        {canManage && (
+          <TouchableOpacity
+            onPress={section === 'templates' ? openTplCreate : openCreate}
+            style={styles.addBtn}
+          >
+            <Ionicons name="add" size={20} color={theme.colors.white} />
+            <Text style={styles.addBtnText}>{section === 'templates' ? 'Szablon' : 'Dodaj'}</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
+      {/* Section tabs */}
       {canManage && (
-        <View style={[styles.modeRow, isDesktop && styles.modeRowDesktop]}>
-          {(['my', 'all'] as const).map((m) => (
-            <TouchableOpacity key={m} style={[styles.modeBtn, viewMode === m && styles.modeBtnActive]} onPress={() => setViewMode(m)}>
-              <Text style={[styles.modeBtnText, viewMode === m && styles.modeBtnTextActive]}>
-                {m === 'my' ? 'Moje' : 'Wszystkich'}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
-      {(expiringCount > 0 || expiredCount > 0) && (
-        <View style={[styles.alertBox, isDesktop && styles.alertBoxDesktop]}>
-          {expiringCount > 0 && (
-            <View style={styles.alertRow}>
-              <Ionicons name="warning" size={16} color="#F97316" />
-              <Text style={styles.alertText}>{expiringCount} dokument(ów) wygasa wkrótce</Text>
-            </View>
-          )}
-          {expiredCount > 0 && (
-            <View style={styles.alertRow}>
-              <Ionicons name="close-circle" size={16} color="#EF4444" />
-              <Text style={styles.alertText}>{expiredCount} dokument(ów) wygasło</Text>
-            </View>
-          )}
-        </View>
-      )}
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.filters, isDesktop && styles.filtersDesktop]}>
-        {[{ key: 'all', label: 'Wszystkie' }, { key: 'active', label: 'Aktywne' }, { key: 'expiring', label: 'Wygasające' }, { key: 'expired', label: 'Wygasłe' }].map((f) => (
-          <TouchableOpacity key={f.key} style={[styles.filterBtn, filter === f.key && styles.filterActive]} onPress={() => setFilter(f.key)}>
-            <Text style={[styles.filterText, filter === f.key && styles.filterTextActive]}>{f.label}</Text>
+        <View style={styles.sectionTabs}>
+          <TouchableOpacity
+            style={[styles.sectionTab, section === 'docs' && styles.sectionTabActive]}
+            onPress={() => setSection('docs')}
+          >
+            <Ionicons name="document-text-outline" size={15} color={section === 'docs' ? theme.colors.primary : theme.colors.textSecondary} />
+            <Text style={[styles.sectionTabText, section === 'docs' && styles.sectionTabTextActive]}>Dokumenty</Text>
           </TouchableOpacity>
-        ))}
-      </ScrollView>
+          <TouchableOpacity
+            style={[styles.sectionTab, section === 'templates' && styles.sectionTabActive]}
+            onPress={() => setSection('templates')}
+          >
+            <Ionicons name="copy-outline" size={15} color={section === 'templates' ? theme.colors.primary : theme.colors.textSecondary} />
+            <Text style={[styles.sectionTabText, section === 'templates' && styles.sectionTabTextActive]}>Szablony AI</Text>
+            {templates.length > 0 && <View style={styles.sectionBadge}><Text style={styles.sectionBadgeText}>{templates.length}</Text></View>}
+          </TouchableOpacity>
+        </View>
+      )}
 
+      {section === 'docs' && (
+        <>
+          {canManage && (
+            <View style={[styles.modeRow, isDesktop && styles.modeRowDesktop]}>
+              {(['my', 'all'] as const).map((m) => (
+                <TouchableOpacity key={m} style={[styles.modeBtn, viewMode === m && styles.modeBtnActive]} onPress={() => setViewMode(m)}>
+                  <Text style={[styles.modeBtnText, viewMode === m && styles.modeBtnTextActive]}>
+                    {m === 'my' ? 'Moje' : 'Wszystkich'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          {(expiringCount > 0 || expiredCount > 0) && (
+            <View style={[styles.alertBox, isDesktop && styles.alertBoxDesktop]}>
+              {expiringCount > 0 && (
+                <View style={styles.alertRow}>
+                  <Ionicons name="warning" size={16} color="#F97316" />
+                  <Text style={styles.alertText}>{expiringCount} dokument(ów) wygasa wkrótce</Text>
+                </View>
+              )}
+              {expiredCount > 0 && (
+                <View style={styles.alertRow}>
+                  <Ionicons name="close-circle" size={16} color="#EF4444" />
+                  <Text style={styles.alertText}>{expiredCount} dokument(ów) wygasło</Text>
+                </View>
+              )}
+            </View>
+          )}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.filters, isDesktop && styles.filtersDesktop]}>
+            {[{ key: 'all', label: 'Wszystkie' }, { key: 'active', label: 'Aktywne' }, { key: 'expiring', label: 'Wygasające' }, { key: 'expired', label: 'Wygasłe' }].map((f) => (
+              <TouchableOpacity key={f.key} style={[styles.filterBtn, filter === f.key && styles.filterActive]} onPress={() => setFilter(f.key)}>
+                <Text style={[styles.filterText, filter === f.key && styles.filterTextActive]}>{f.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </>
+      )}
+
+      {/* ── Templates section ── */}
+      {section === 'templates' && (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}>
+          {/* Hint banner */}
+          <View style={styles.tplHint}>
+            <Ionicons name="sparkles" size={16} color="#7C3AED" />
+            <Text style={styles.tplHintText}>Utwórz szablon z polami <Text style={{ fontWeight: '800' }}>{'{{'+'nazwa_pola'+'}}'}</Text>. AI automatycznie wypełni dane pracownika.</Text>
+          </View>
+          {templates.length === 0 ? (
+            <View style={styles.empty}>
+              <Ionicons name="copy-outline" size={48} color={theme.colors.border} />
+              <Text style={styles.emptyText}>Brak szablonów</Text>
+              <TouchableOpacity style={styles.emptyBtn} onPress={openTplCreate}>
+                <Text style={styles.emptyBtnText}>Utwórz pierwszy szablon</Text>
+              </TouchableOpacity>
+            </View>
+          ) : templates.map((tpl) => {
+            const vars = extractVars(tpl.content);
+            const typeLabel = DOC_TYPES.find((t) => t.key === tpl.doc_type)?.label ?? tpl.doc_type;
+            return (
+              <View key={tpl.id} style={styles.tplCard}>
+                <View style={styles.tplCardTop}>
+                  <View style={styles.tplIconWrap}>
+                    <Ionicons name={TYPE_ICON[tpl.doc_type] as any ?? 'document-text'} size={20} color="#7C3AED" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.tplName}>{tpl.name}</Text>
+                    <Text style={styles.tplMeta}>{typeLabel} · {vars.length} zmiennych</Text>
+                  </View>
+                  <TouchableOpacity style={styles.iconBtn} onPress={() => openTplEdit(tpl)}>
+                    <Ionicons name="pencil-outline" size={16} color={theme.colors.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.iconBtn} onPress={() => handleTplDelete(tpl)}>
+                    <Ionicons name="trash-outline" size={16} color={theme.colors.error} />
+                  </TouchableOpacity>
+                </View>
+                {vars.length > 0 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tplVarsRow}>
+                    {vars.map((v) => (
+                      <View key={v} style={styles.tplVarChip}>
+                        <Text style={styles.tplVarText}>{'{{'}{v}{'}}'}</Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                )}
+                <TouchableOpacity style={styles.tplGenBtn} onPress={() => openGenerate(tpl)} activeOpacity={0.85}>
+                  <Ionicons name="sparkles" size={15} color="#fff" />
+                  <Text style={styles.tplGenBtnText}>Generuj dokument dla pracownika</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          })}
+        </ScrollView>
+      )}
+
+      {/* ── Docs section ── */}
+      {section === 'docs' && (
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]} style={isDesktop ? { width: '100%' } : undefined}>
         {loading ? (
           <ActivityIndicator style={{ marginTop: 40 }} size="large" color={theme.colors.primary} />
@@ -294,6 +527,7 @@ export default function DocumentsScreen() {
           );
         })}
       </ScrollView>
+      )}
 
       {/* Preview Modal */}
       <Modal visible={!!previewDoc} animationType="slide" transparent onRequestClose={() => setPreviewDoc(null)}>
@@ -482,6 +716,166 @@ export default function DocumentsScreen() {
           </View>
         </View>
       </Modal>
+      {/* ── Template Editor Modal ── */}
+      <Modal visible={showTplModal} animationType="fade" transparent onRequestClose={() => setShowTplModal(false)}>
+        <View style={mStyles.overlay}>
+          <View style={[mStyles.sheet, { maxHeight: '95%' }]}>
+            <View style={mStyles.mHeader}>
+              <Text style={mStyles.mTitle}>{editingTpl ? 'Edytuj szablon' : 'Nowy szablon'}</Text>
+              <TouchableOpacity onPress={() => setShowTplModal(false)}>
+                <Ionicons name="close" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={mStyles.body} keyboardShouldPersistTaps="handled">
+              <Text style={mStyles.label}>NAZWA SZABLONU</Text>
+              <TextInput
+                style={mStyles.input}
+                value={tplName}
+                onChangeText={setTplName}
+                placeholder="np. Umowa o pracę"
+                placeholderTextColor={theme.colors.textMuted}
+              />
+
+              <Text style={mStyles.label}>TYP DOKUMENTU</Text>
+              <View style={mStyles.typeGrid}>
+                {DOC_TYPES.map((t) => (
+                  <TouchableOpacity key={t.key} style={[mStyles.typeBtn, tplDocType === t.key && mStyles.typeBtnActive]} onPress={() => setTplDocType(t.key)}>
+                    <Ionicons name={TYPE_ICON[t.key] as any} size={18} color={tplDocType === t.key ? theme.colors.primary : theme.colors.textMuted} />
+                    <Text style={[mStyles.typeBtnText, tplDocType === t.key && mStyles.typeBtnTextActive]}>{t.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={mStyles.label}>TREŚĆ SZABLONU</Text>
+              <Text style={{ fontSize: 11, color: theme.colors.textMuted, marginBottom: 8 }}>
+                Użyj {'{{nazwa_pola}}'} dla zmiennych. Np. {'{{imie_nazwisko}}'}, {'{{stanowisko}}'}, {'{{wynagrodzenie}}'}.
+              </Text>
+              <TextInput
+                style={[mStyles.input, { minHeight: 200, textAlignVertical: 'top', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 13 }]}
+                value={tplContent}
+                onChangeText={setTplContent}
+                multiline
+                placeholder={'Umowa o pracę\n\nZawarta dnia {{data}} pomiędzy:\n{{restauracja}}\na pracownikiem:\n{{imie_nazwisko}}, {{stanowisko}}\n\nWynagrodzenie: {{wynagrodzenie}} PLN brutto\n...'}
+                placeholderTextColor={theme.colors.textMuted}
+              />
+
+              {tplContent.length > 0 && (() => {
+                const vars = extractVars(tplContent);
+                return vars.length > 0 ? (
+                  <View style={{ marginTop: 12 }}>
+                    <Text style={[mStyles.label, { marginTop: 0 }]}>WYKRYTE ZMIENNE ({vars.length})</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                      {vars.map((v) => (
+                        <View key={v} style={tplStyles.varChip}>
+                          <Text style={tplStyles.varChipText}>{'{{'}{v}{'}}'}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ) : null;
+              })()}
+
+              <TouchableOpacity
+                style={[mStyles.saveBtn, tplSaving && { opacity: 0.5 }]}
+                onPress={handleTplSave}
+                disabled={tplSaving}
+                activeOpacity={0.85}
+              >
+                {tplSaving ? <ActivityIndicator color={theme.colors.white} size="small" /> : (
+                  <Text style={mStyles.saveBtnText}>{editingTpl ? 'Zapisz zmiany' : 'Zapisz szablon'}</Text>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Generate Document Modal ── */}
+      <Modal visible={showGenModal} animationType="fade" transparent onRequestClose={() => setShowGenModal(false)}>
+        <View style={mStyles.overlay}>
+          <View style={[mStyles.sheet, { maxHeight: '95%' }]}>
+            <View style={mStyles.mHeader}>
+              <TouchableOpacity onPress={() => genStep === 'preview' ? setGenStep('form') : setShowGenModal(false)}>
+                <Ionicons name={genStep === 'preview' ? 'arrow-back' : 'close'} size={22} color={theme.colors.text} />
+              </TouchableOpacity>
+              <Text style={mStyles.mTitle}>{genStep === 'preview' ? 'Podgląd dokumentu' : 'Generuj dokument'}</Text>
+              <View style={{ width: 28 }} />
+            </View>
+
+            {genStep === 'form' ? (
+              <ScrollView style={mStyles.body} keyboardShouldPersistTaps="handled">
+                {genTemplate && (
+                  <View style={tplStyles.genTemplateInfo}>
+                    <Ionicons name="copy-outline" size={15} color="#7C3AED" />
+                    <Text style={tplStyles.genTemplateName}>{genTemplate.name}</Text>
+                  </View>
+                )}
+
+                <Text style={mStyles.label}>WYBIERZ PRACOWNIKA</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
+                  {employees.map((e) => {
+                    const active = genEmployee === e.id;
+                    return (
+                      <TouchableOpacity key={e.id} style={[mStyles.empChip, active && mStyles.empChipActive]} onPress={() => onGenEmpChange(e.id)}>
+                        <View style={[mStyles.empAvatar, { backgroundColor: active ? theme.colors.primary : e.avatar_color }]}>
+                          <Text style={mStyles.empInitials}>{(e.first_name[0] + e.last_name[0]).toUpperCase()}</Text>
+                        </View>
+                        <View>
+                          <Text style={[mStyles.empName, active && { color: theme.colors.primary }]}>{e.first_name} {e.last_name}</Text>
+                          <Text style={mStyles.empJob}>{e.job_title}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                {Object.keys(genVars).length > 0 && (
+                  <>
+                    <Text style={mStyles.label}>UZUPEŁNIJ ZMIENNE</Text>
+                    <Text style={{ fontSize: 11, color: theme.colors.textMuted, marginBottom: 10 }}>Pola zaznaczone na zielono zostały wypełnione automatycznie.</Text>
+                    {Object.entries(genVars).map(([key, val]) => (
+                      <View key={key} style={{ marginBottom: 10 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                          <Text style={{ fontSize: 12, fontWeight: '700', color: theme.colors.textSecondary }}>{'{{'}{key}{'}}'}</Text>
+                          {val ? <Ionicons name="checkmark-circle" size={13} color={theme.colors.green} /> : <Ionicons name="alert-circle" size={13} color="#F97316" />}
+                        </View>
+                        <TextInput
+                          style={[mStyles.input, val ? { borderColor: theme.colors.green, borderWidth: 1.5 } : {}]}
+                          value={val}
+                          onChangeText={(t) => setGenVars((p) => ({ ...p, [key]: t }))}
+                          placeholder={`Wpisz ${key}...`}
+                          placeholderTextColor={theme.colors.textMuted}
+                        />
+                      </View>
+                    ))}
+                  </>
+                )}
+
+                <TouchableOpacity style={[mStyles.saveBtn, { backgroundColor: '#7C3AED' }]} onPress={handleGeneratePreview} activeOpacity={0.85}>
+                  <Ionicons name="sparkles" size={16} color="#fff" style={{ marginRight: 6 }} />
+                  <Text style={mStyles.saveBtnText}>Generuj podgląd</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            ) : (
+              <ScrollView style={mStyles.body}>
+                <View style={tplStyles.previewBox}>
+                  <Text style={tplStyles.previewText}>{genPreview}</Text>
+                </View>
+                <TouchableOpacity
+                  style={[mStyles.saveBtn, genSaving && { opacity: 0.5 }]}
+                  onPress={handleSaveGenerated}
+                  disabled={genSaving}
+                  activeOpacity={0.85}
+                >
+                  {genSaving ? <ActivityIndicator color={theme.colors.white} size="small" /> : (
+                    <Text style={mStyles.saveBtnText}>Zapisz jako dokument pracownika</Text>
+                  )}
+                </TouchableOpacity>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -530,6 +924,27 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 10, fontWeight: '700' },
   cardActions: { flexDirection: 'row', gap: 4 },
   iconBtn: { padding: 6, borderRadius: 8, backgroundColor: theme.colors.background },
+
+  sectionTabs: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 10, gap: 6 },
+  sectionTab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 9, borderRadius: 12, backgroundColor: theme.colors.card, borderWidth: 1.5, borderColor: theme.colors.border },
+  sectionTabActive: { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primary },
+  sectionTabText: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary },
+  sectionTabTextActive: { color: theme.colors.primary },
+  sectionBadge: { backgroundColor: theme.colors.primary, borderRadius: 8, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  sectionBadgeText: { fontSize: 10, fontWeight: '800', color: '#fff' },
+
+  tplHint: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#F3F0FF', borderRadius: 10, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: '#DDD6FE' },
+  tplHintText: { flex: 1, fontSize: 12, color: '#5B21B6', lineHeight: 18 },
+  tplCard: { backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.lg, padding: 14, marginBottom: 12, gap: 10 },
+  tplCardTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  tplIconWrap: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#F3F0FF', alignItems: 'center', justifyContent: 'center' },
+  tplName: { fontSize: 15, fontWeight: '700', color: theme.colors.text },
+  tplMeta: { fontSize: 12, color: theme.colors.textMuted, marginTop: 2 },
+  tplVarsRow: { flexDirection: 'row', gap: 6, paddingBottom: 2 },
+  tplVarChip: { backgroundColor: '#F3F0FF', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#DDD6FE' },
+  tplVarText: { fontSize: 11, fontWeight: '700', color: '#7C3AED', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+  tplGenBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#7C3AED', borderRadius: theme.borderRadius.md, paddingVertical: 11 },
+  tplGenBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
 });
 
 const mStyles = StyleSheet.create({
@@ -582,4 +997,13 @@ const pStyles = StyleSheet.create({
   btnDangerText: { fontSize: 14, fontWeight: '600', color: theme.colors.error },
   btnClose: { alignItems: 'center', paddingVertical: 12 },
   btnCloseText: { fontSize: 14, color: theme.colors.textSecondary, fontWeight: '500' },
+});
+
+const tplStyles = StyleSheet.create({
+  varChip: { backgroundColor: '#F3F0FF', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#DDD6FE' },
+  varChipText: { fontSize: 11, fontWeight: '700', color: '#7C3AED', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+  genTemplateInfo: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F3F0FF', borderRadius: 8, padding: 10, marginBottom: 8 },
+  genTemplateName: { fontSize: 13, fontWeight: '700', color: '#5B21B6' },
+  previewBox: { backgroundColor: theme.colors.background, borderRadius: 10, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: theme.colors.border },
+  previewText: { fontSize: 13, color: theme.colors.text, lineHeight: 22, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
 });

@@ -5,7 +5,7 @@
  */
 
 import type {
-    DbAbsence, DbAvailability, DbClockIn, DbConversation, DbDocument,
+    DbAbsence, DbAvailability, DbClockIn, DbConversation, DbDocument, DbDocumentTemplate,
     DbInvitation, DbLeaveRequest, DbLeaveType, DbMessage, DbPointsLedger,
     DbProfile, DbRestaurant, DbShift, DbShiftSwap, DbTask, DbTraining,
 } from './supabase';
@@ -627,6 +627,47 @@ export async function uploadDocumentFile(
     console.error('uploadDocumentFile', e);
     return null;
   }
+}
+
+// ─── Document Templates ───────────────────────────────────────────────────────
+
+export async function getDocumentTemplates(restaurantId: string): Promise<DbDocumentTemplate[]> {
+  const { data, error } = await supabase
+    .from('document_templates')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .order('created_at', { ascending: false });
+  if (error) { console.error('getDocumentTemplates', error); return []; }
+  return data as DbDocumentTemplate[];
+}
+
+export async function createDocumentTemplate(
+  restaurantId: string,
+  fields: { name: string; content: string; doc_type: string; created_by: string },
+): Promise<DbDocumentTemplate | null> {
+  const { data, error } = await supabase
+    .from('document_templates')
+    .insert({ restaurant_id: restaurantId, ...fields })
+    .select()
+    .single();
+  if (error) { console.error('createDocumentTemplate', error); return null; }
+  return data as DbDocumentTemplate;
+}
+
+export async function updateDocumentTemplate(
+  id: string,
+  fields: { name?: string; content?: string; doc_type?: string },
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('document_templates')
+    .update({ ...fields, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  return !error;
+}
+
+export async function deleteDocumentTemplate(id: string): Promise<boolean> {
+  const { error } = await supabase.from('document_templates').delete().eq('id', id);
+  return !error;
 }
 
 // ─── Conversations + Messages ────────────────────────────────────────────────
