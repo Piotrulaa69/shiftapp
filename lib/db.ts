@@ -584,7 +584,7 @@ export async function getDocuments(restaurantId: string, employeeId?: string): P
 
 export async function createDocument(
   restaurantId: string,
-  fields: { employee_id: string; name: string; doc_type: string; file_url?: string; expires_at?: string; uploaded_by: string },
+  fields: { employee_id?: string | null; guest_name?: string; name: string; doc_type: string; file_url?: string; content?: string; expires_at?: string; uploaded_by: string },
 ): Promise<DbDocument | null> {
   const { data, error } = await supabase
     .from('documents')

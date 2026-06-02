@@ -80,6 +80,11 @@ export default function DocumentsScreen() {
   const [showGenModal, setShowGenModal] = useState(false);
   const [genTemplate, setGenTemplate] = useState<DbDocumentTemplate | null>(null);
   const [genEmployee, setGenEmployee] = useState('');
+  const [genManualMode, setGenManualMode] = useState(false);
+  const [genManualFirst, setGenManualFirst] = useState('');
+  const [genManualLast, setGenManualLast] = useState('');
+  const [genManualRole, setGenManualRole] = useState('');
+  const [genManualEmail, setGenManualEmail] = useState('');
   const [genVars, setGenVars] = useState<Record<string, string>>({});
   const [genPreview, setGenPreview] = useState('');
   const [genStep, setGenStep] = useState<'form' | 'preview'>('form');
@@ -123,7 +128,7 @@ export default function DocumentsScreen() {
     setDocName(doc.name);
     setDocType(doc.doc_type as any);
     setDocExpiry(doc.expires_at ?? '');
-    setSelEmployee(doc.employee_id);
+    setSelEmployee(doc.employee_id ?? '');
     setPickedFile(null);
     setShowModal(true);
   };
@@ -304,12 +309,32 @@ export default function DocumentsScreen() {
     ]);
   };
 
+  const autoFillManual = (vars: string[]): Record<string, string> => {
+    const today = new Date().toLocaleDateString('pl-PL');
+    const MAP: Record<string, string> = {
+      imie_nazwisko: `${genManualFirst} ${genManualLast}`.trim(),
+      imie: genManualFirst,
+      nazwisko: genManualLast,
+      stanowisko: genManualRole,
+      email: genManualEmail,
+      restauracja: restaurant?.name ?? '',
+      data: today, data_dzisiaj: today, data_podpisania: today,
+      rok: String(new Date().getFullYear()),
+      miesiac: String(new Date().getMonth() + 1),
+    };
+    const result: Record<string, string> = {};
+    vars.forEach((v) => { result[v] = MAP[v.toLowerCase()] ?? ''; });
+    return result;
+  };
+
   const openGenerate = (tpl: DbDocumentTemplate) => {
     setGenTemplate(tpl);
     const vars = extractVars(tpl.content);
     const firstEmp = employees[0];
     const filled = firstEmp ? autoFill(vars, firstEmp) : Object.fromEntries(vars.map((v) => [v, '']));
     setGenEmployee(firstEmp?.id ?? '');
+    setGenManualMode(false);
+    setGenManualFirst(''); setGenManualLast(''); setGenManualRole(''); setGenManualEmail('');
     setGenVars(filled);
     setGenPreview('');
     setGenStep('form');
@@ -325,36 +350,59 @@ export default function DocumentsScreen() {
     setGenVars((prev) => {
       const auto = autoFill(vars, emp);
       const merged: Record<string, string> = {};
-      vars.forEach((v) => {
-        merged[v] = auto[v] || prev[v] || '';
-      });
+      vars.forEach((v) => { merged[v] = auto[v] || prev[v] || ''; });
       return merged;
     });
   };
 
   const handleGeneratePreview = () => {
     if (!genTemplate) return;
-    if (!genEmployee) { Alert.alert('Wymagane', 'Wybierz pracownika.'); return; }
-    setGenPreview(genTemplate.content.trim() ? fillTemplate(genTemplate.content, genVars) : '');
+    if (genManualMode) {
+      if (!genManualFirst.trim() && !genManualLast.trim()) {
+        Alert.alert('Wymagane', 'Wpisz imię i nazwisko pracownika.');
+        return;
+      }
+      const vars = extractVars(genTemplate.content);
+      const filled = autoFillManual(vars);
+      setGenVars(filled);
+      setGenPreview(genTemplate.content.trim() ? fillTemplate(genTemplate.content, filled) : '');
+    } else {
+      if (!genEmployee) { Alert.alert('Wymagane', 'Wybierz pracownika.'); return; }
+      setGenPreview(genTemplate.content.trim() ? fillTemplate(genTemplate.content, genVars) : '');
+    }
     setGenStep('preview');
   };
 
   const handleSaveGenerated = async () => {
-    if (!genTemplate || !genEmployee) return;
+    if (!genTemplate) return;
     setGenSaving(true);
-    const emp = employees.find((e) => e.id === genEmployee);
-    const docName = `${genTemplate.name} — ${emp ? `${emp.first_name} ${emp.last_name}` : ''} (${new Date().toLocaleDateString('pl-PL')})`;
+    let empName = '';
+    let empId: string | null = null;
+    let guestName: string | undefined;
+    if (genManualMode) {
+      empName = `${genManualFirst} ${genManualLast}`.trim();
+      guestName = empName || undefined;
+    } else {
+      if (!genEmployee) { setGenSaving(false); return; }
+      const emp = employees.find((e) => e.id === genEmployee);
+      empName = emp ? `${emp.first_name} ${emp.last_name}` : '';
+      empId = genEmployee;
+    }
+    const filledContent = genTemplate.content.trim() ? fillTemplate(genTemplate.content, genVars) : undefined;
+    const docName = `${genTemplate.name} — ${empName} (${new Date().toLocaleDateString('pl-PL')})`;
     await createDocument(rid, {
-      employee_id: genEmployee,
+      employee_id: empId,
+      guest_name: guestName,
       name: docName,
       doc_type: genTemplate.doc_type as any,
       file_url: genTemplate.file_url ?? undefined,
+      content: filledContent,
       uploaded_by: uid,
     });
     setGenSaving(false);
     setShowGenModal(false);
     load();
-    Alert.alert('Zapisano!', `Dokument "${docName}" jest dostępny w sekcji Dokumenty pracownika.${genTemplate.file_url ? '\n\nPlik szablonu został przypisany.' : ''}`);
+    Alert.alert('Zapisano!', `Dokument "${docName}" jest dostępny w sekcji Dokumenty.${filledContent ? ' Dane zostały wypełnione.' : ''}${genTemplate.file_url ? ' Plik szablonu został przypisany.' : ''}`);
   };
 
   return (
@@ -519,7 +567,7 @@ export default function DocumentsScreen() {
         ) : filtered.map((doc) => {
           const st = STATUS_MAP[doc.status] ?? STATUS_MAP.active;
           const emp = employees.find((e) => e.id === doc.employee_id);
-          const empName = emp ? `${emp.first_name} ${emp.last_name}` : '';
+          const empName = emp ? `${emp.first_name} ${emp.last_name}` : (doc.guest_name ?? '');
           return (
             <TouchableOpacity key={doc.id} style={styles.card} onPress={() => setPreviewDoc(doc)} activeOpacity={0.75}>
               <View style={[styles.cardIcon, { backgroundColor: st.bg }]}>
@@ -527,7 +575,7 @@ export default function DocumentsScreen() {
               </View>
               <View style={styles.cardInfo}>
                 {viewMode === 'all' && empName ? (
-                  <Text style={styles.cardEmp}>{empName}</Text>
+                  <Text style={styles.cardEmp}>{empName}{doc.guest_name && !emp ? ' (gość)' : ''}</Text>
                 ) : null}
                 <Text style={styles.cardName}>{doc.name}</Text>
                 <View style={styles.cardMeta}>
@@ -889,23 +937,66 @@ export default function DocumentsScreen() {
                   </View>
                 )}
 
-                <Text style={mStyles.label}>WYBIERZ PRACOWNIKA</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
-                  {employees.map((e) => {
-                    const active = genEmployee === e.id;
-                    return (
-                      <TouchableOpacity key={e.id} style={[mStyles.empChip, active && mStyles.empChipActive]} onPress={() => onGenEmpChange(e.id)}>
-                        <View style={[mStyles.empAvatar, { backgroundColor: active ? theme.colors.primary : e.avatar_color }]}>
-                          <Text style={mStyles.empInitials}>{(e.first_name[0] + e.last_name[0]).toUpperCase()}</Text>
-                        </View>
-                        <View>
-                          <Text style={[mStyles.empName, active && { color: theme.colors.primary }]}>{e.first_name} {e.last_name}</Text>
-                          <Text style={mStyles.empJob}>{e.job_title}</Text>
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
+                {/* Employee source toggle */}
+                <View style={{ flexDirection: 'row', backgroundColor: theme.colors.surface, borderRadius: 10, padding: 3, marginBottom: 14 }}>
+                  <TouchableOpacity
+                    style={[{ flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center' }, !genManualMode && { backgroundColor: theme.colors.card, ...theme.shadows.card }]}
+                    onPress={() => setGenManualMode(false)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: !genManualMode ? theme.colors.primary : theme.colors.textMuted }}>Z listy pracowników</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[{ flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center' }, genManualMode && { backgroundColor: theme.colors.card, ...theme.shadows.card }]}
+                    onPress={() => setGenManualMode(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: genManualMode ? theme.colors.primary : theme.colors.textMuted }}>Wpisz ręcznie</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {genManualMode ? (
+                  <View style={{ gap: 10, marginBottom: 14 }}>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={mStyles.label}>IMIĘ *</Text>
+                        <TextInput style={mStyles.input} value={genManualFirst} onChangeText={setGenManualFirst} placeholder="Jan" placeholderTextColor={theme.colors.textMuted} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={mStyles.label}>NAZWISKO *</Text>
+                        <TextInput style={mStyles.input} value={genManualLast} onChangeText={setGenManualLast} placeholder="Kowalski" placeholderTextColor={theme.colors.textMuted} />
+                      </View>
+                    </View>
+                    <View>
+                      <Text style={mStyles.label}>STANOWISKO</Text>
+                      <TextInput style={mStyles.input} value={genManualRole} onChangeText={setGenManualRole} placeholder="Kelner" placeholderTextColor={theme.colors.textMuted} />
+                    </View>
+                    <View>
+                      <Text style={mStyles.label}>EMAIL</Text>
+                      <TextInput style={mStyles.input} value={genManualEmail} onChangeText={setGenManualEmail} placeholder="jan@example.com" placeholderTextColor={theme.colors.textMuted} keyboardType="email-address" autoCapitalize="none" />
+                    </View>
+                  </View>
+                ) : (
+                  <>
+                    <Text style={mStyles.label}>WYBIERZ PRACOWNIKA</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
+                      {employees.map((e) => {
+                        const active = genEmployee === e.id;
+                        return (
+                          <TouchableOpacity key={e.id} style={[mStyles.empChip, active && mStyles.empChipActive]} onPress={() => onGenEmpChange(e.id)}>
+                            <View style={[mStyles.empAvatar, { backgroundColor: active ? theme.colors.primary : e.avatar_color }]}>
+                              <Text style={mStyles.empInitials}>{(e.first_name[0] + e.last_name[0]).toUpperCase()}</Text>
+                            </View>
+                            <View>
+                              <Text style={[mStyles.empName, active && { color: theme.colors.primary }]}>{e.first_name} {e.last_name}</Text>
+                              <Text style={mStyles.empJob}>{e.job_title}</Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </>
+                )}
 
                 {Object.keys(genVars).length > 0 && (
                   <>

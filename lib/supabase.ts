@@ -219,7 +219,8 @@ export type DbShiftSwap = {
 export type DbDocument = {
   id: string;
   restaurant_id: string;
-  employee_id: string;
+  employee_id: string | null;
+  guest_name: string | null;
   name: string;
   doc_type: 'contract' | 'certificate' | 'attestation' | 'other';
   file_url: string | null;
