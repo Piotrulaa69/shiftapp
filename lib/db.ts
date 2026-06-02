@@ -608,6 +608,15 @@ export async function deleteDocument(id: string): Promise<boolean> {
   return !error;
 }
 
+/** Ensure a Supabase Storage URL uses the public (unauthenticated) format. */
+export function normalizeStorageUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  // Already correct format
+  if (url.includes('/object/public/')) return url;
+  // Fix: /storage/v1/object/{bucket}/... → /storage/v1/object/public/{bucket}/...
+  return url.replace('/storage/v1/object/', '/storage/v1/object/public/');
+}
+
 export async function uploadDocumentFile(
   restaurantId: string,
   fileName: string,

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { createDocument, createDocumentTemplate, deleteDocument, deleteDocumentTemplate, getDocumentTemplates, getDocuments, getEmployees, updateDocument, updateDocumentTemplate, uploadDocumentFile, uploadTemplateFile } from '../../lib/db';
+import { createDocument, createDocumentTemplate, deleteDocument, deleteDocumentTemplate, getDocumentTemplates, getDocuments, getEmployees, normalizeStorageUrl, updateDocument, updateDocumentTemplate, uploadDocumentFile, uploadTemplateFile } from '../../lib/db';
 import type { DbDocument, DbDocumentTemplate, DbProfile } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
@@ -200,7 +200,7 @@ export default function DocumentsScreen() {
 
   const openFile = async (url: string) => {
     try {
-      await Linking.openURL(url);
+      await Linking.openURL(normalizeStorageUrl(url) ?? url);
     } catch {
       Alert.alert('Błąd', 'Nie można otworzyć pliku');
     }
