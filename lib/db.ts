@@ -641,9 +641,29 @@ export async function getDocumentTemplates(restaurantId: string): Promise<DbDocu
   return data as DbDocumentTemplate[];
 }
 
+export async function uploadTemplateFile(
+  restaurantId: string,
+  fileName: string,
+  fileUri: string,
+  mimeType: string,
+): Promise<string | null> {
+  try {
+    const path = `${restaurantId}/templates/${Date.now()}_${fileName.replace(/\s+/g, '_')}`;
+    const response = await fetch(fileUri);
+    const blob = await response.blob();
+    const { error } = await supabase.storage.from('documents').upload(path, blob, { contentType: mimeType, upsert: false });
+    if (error) { console.error('uploadTemplateFile', error); return null; }
+    const { data } = supabase.storage.from('documents').getPublicUrl(path);
+    return data.publicUrl;
+  } catch (e) {
+    console.error('uploadTemplateFile', e);
+    return null;
+  }
+}
+
 export async function createDocumentTemplate(
   restaurantId: string,
-  fields: { name: string; content: string; doc_type: string; created_by: string },
+  fields: { name: string; content: string; doc_type: string; created_by: string; file_url?: string },
 ): Promise<DbDocumentTemplate | null> {
   const { data, error } = await supabase
     .from('document_templates')
@@ -656,7 +676,7 @@ export async function createDocumentTemplate(
 
 export async function updateDocumentTemplate(
   id: string,
-  fields: { name?: string; content?: string; doc_type?: string },
+  fields: { name?: string; content?: string; doc_type?: string; file_url?: string },
 ): Promise<boolean> {
   const { error } = await supabase
     .from('document_templates')

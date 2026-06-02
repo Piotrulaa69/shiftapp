@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
-import { createDocument, createDocumentTemplate, deleteDocument, deleteDocumentTemplate, getDocumentTemplates, getDocuments, getEmployees, updateDocument, updateDocumentTemplate, uploadDocumentFile } from '../lib/db';
+import { createDocument, createDocumentTemplate, deleteDocument, deleteDocumentTemplate, getDocumentTemplates, getDocuments, getEmployees, updateDocument, updateDocumentTemplate, uploadDocumentFile, uploadTemplateFile } from '../lib/db';
 import type { DbDocument, DbDocumentTemplate, DbProfile } from '../lib/supabase';
 import { theme } from '../styles/theme';
 
@@ -74,6 +74,7 @@ export default function DocumentsScreen() {
   const [tplContent, setTplContent] = useState('');
   const [tplDocType, setTplDocType] = useState('contract');
   const [tplSaving, setTplSaving] = useState(false);
+  const [tplFile, setTplFile] = useState<{ name: string; uri: string; mimeType: string } | null>(null);
 
   // Generate from template
   const [showGenModal, setShowGenModal] = useState(false);
@@ -245,6 +246,7 @@ export default function DocumentsScreen() {
     setTplName('');
     setTplContent('');
     setTplDocType('contract');
+    setTplFile(null);
     setShowTplModal(true);
   };
 
@@ -253,19 +255,42 @@ export default function DocumentsScreen() {
     setTplName(tpl.name);
     setTplContent(tpl.content);
     setTplDocType(tpl.doc_type);
+    setTplFile(null);
     setShowTplModal(true);
   };
 
+  const pickTplFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
+      if (!result.canceled && result.assets?.length) {
+        const asset = result.assets[0];
+        setTplFile({ name: asset.name, uri: asset.uri, mimeType: asset.mimeType ?? 'application/octet-stream' });
+        if (!tplName) setTplName(asset.name.replace(/\.[^.]+$/, ''));
+      }
+    } catch {
+      Alert.alert('Błąd', 'Nie udało się wybrać pliku');
+    }
+  };
+
   const handleTplSave = async () => {
-    if (!tplName.trim() || !tplContent.trim()) {
-      Alert.alert('Wymagane', 'Wpisz nazwę i treść szablonu.');
+    if (!tplName.trim()) {
+      Alert.alert('Wymagane', 'Wpisz nazwę szablonu.');
+      return;
+    }
+    if (!tplFile && !editingTpl?.file_url && !tplContent.trim()) {
+      Alert.alert('Wymagane', 'Wgraj plik szablonu lub wpisz treść tekstową.');
       return;
     }
     setTplSaving(true);
+    let fileUrl = editingTpl?.file_url ?? null;
+    if (tplFile) {
+      const uploaded = await uploadTemplateFile(rid, tplFile.name, tplFile.uri, tplFile.mimeType);
+      if (uploaded) fileUrl = uploaded;
+    }
     if (editingTpl) {
-      await updateDocumentTemplate(editingTpl.id, { name: tplName.trim(), content: tplContent, doc_type: tplDocType });
+      await updateDocumentTemplate(editingTpl.id, { name: tplName.trim(), content: tplContent, doc_type: tplDocType, file_url: fileUrl ?? undefined });
     } else {
-      await createDocumentTemplate(rid, { name: tplName.trim(), content: tplContent, doc_type: tplDocType, created_by: uid });
+      await createDocumentTemplate(rid, { name: tplName.trim(), content: tplContent, doc_type: tplDocType, created_by: uid, file_url: fileUrl ?? undefined });
     }
     setTplSaving(false);
     setShowTplModal(false);
@@ -309,12 +334,13 @@ export default function DocumentsScreen() {
 
   const handleGeneratePreview = () => {
     if (!genTemplate) return;
-    setGenPreview(fillTemplate(genTemplate.content, genVars));
+    if (!genEmployee) { Alert.alert('Wymagane', 'Wybierz pracownika.'); return; }
+    setGenPreview(genTemplate.content.trim() ? fillTemplate(genTemplate.content, genVars) : '');
     setGenStep('preview');
   };
 
   const handleSaveGenerated = async () => {
-    if (!genTemplate || !genEmployee || !genPreview) return;
+    if (!genTemplate || !genEmployee) return;
     setGenSaving(true);
     const emp = employees.find((e) => e.id === genEmployee);
     const docName = `${genTemplate.name} — ${emp ? `${emp.first_name} ${emp.last_name}` : ''} (${new Date().toLocaleDateString('pl-PL')})`;
@@ -322,12 +348,13 @@ export default function DocumentsScreen() {
       employee_id: genEmployee,
       name: docName,
       doc_type: genTemplate.doc_type as any,
+      file_url: genTemplate.file_url ?? undefined,
       uploaded_by: uid,
     });
     setGenSaving(false);
     setShowGenModal(false);
     load();
-    Alert.alert('Zapisano!', 'Dokument jest dostępny w sekcji Dokumenty.');
+    Alert.alert('Zapisano!', `Dokument "${docName}" jest dostępny w sekcji Dokumenty pracownika.${genTemplate.file_url ? '\n\nPlik szablonu został przypisany.' : ''}`);
   };
 
   return (
@@ -435,7 +462,20 @@ export default function DocumentsScreen() {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.tplName}>{tpl.name}</Text>
-                    <Text style={styles.tplMeta}>{typeLabel} · {vars.length} zmiennych</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                      <Text style={styles.tplMeta}>{typeLabel} · {vars.length} zmiennych</Text>
+                      {tpl.file_url ? (
+                        <View style={styles.tplFileBadge}>
+                          <Ionicons name="attach" size={11} color="#7C3AED" />
+                          <Text style={styles.tplFileBadgeText}>Plik</Text>
+                        </View>
+                      ) : (
+                        <View style={[styles.tplFileBadge, { backgroundColor: '#FFF8EE', borderColor: '#FED7AA' }]}>
+                          <Ionicons name="alert-circle-outline" size={11} color="#F97316" />
+                          <Text style={[styles.tplFileBadgeText, { color: '#F97316' }]}>Brak pliku</Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
                   <TouchableOpacity style={styles.iconBtn} onPress={() => openTplEdit(tpl)}>
                     <Ionicons name="pencil-outline" size={16} color={theme.colors.textSecondary} />
@@ -746,7 +786,29 @@ export default function DocumentsScreen() {
                 ))}
               </View>
 
-              <Text style={mStyles.label}>TREŚĆ SZABLONU</Text>
+              <Text style={mStyles.label}>PLIK SZABLONU (PDF, DOCX, XLSX...)</Text>
+              <TouchableOpacity style={mStyles.filePicker} onPress={pickTplFile} activeOpacity={0.8}>
+                <Ionicons name="cloud-upload-outline" size={22} color="#7C3AED" />
+                <View style={{ flex: 1 }}>
+                  <Text style={[mStyles.filePickerText, { color: '#7C3AED' }]}>
+                    {tplFile ? tplFile.name : editingTpl?.file_url ? 'Kliknij, aby zmienić plik' : 'Wgraj plik szablonu (PDF, DOCX, XLSX)'}
+                  </Text>
+                  {editingTpl?.file_url && !tplFile && (
+                    <Text style={mStyles.filePickerSub}>Aktualnie: plik załadowany</Text>
+                  )}
+                </View>
+                {(tplFile || editingTpl?.file_url) && (
+                  <Ionicons name="checkmark-circle" size={18} color={theme.colors.green} />
+                )}
+              </TouchableOpacity>
+              {editingTpl?.file_url && !tplFile && (
+                <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }} onPress={() => openFile(editingTpl.file_url!)}>
+                  <Ionicons name="eye-outline" size={14} color={theme.colors.primary} />
+                  <Text style={{ fontSize: 12, color: theme.colors.primary, fontWeight: '600' }}>Podgląd aktualnego pliku</Text>
+                </TouchableOpacity>
+              )}
+
+              <Text style={mStyles.label}>TREŚĆ SZABLONU (opcjonalne — dla zmiennych)</Text>
               <Text style={{ fontSize: 11, color: theme.colors.textMuted, marginBottom: 8 }}>
                 Użyj {'{{nazwa_pola}}'} dla zmiennych. Np. {'{{imie_nazwisko}}'}, {'{{stanowisko}}'}, {'{{wynagrodzenie}}'}.
               </Text>
@@ -758,6 +820,10 @@ export default function DocumentsScreen() {
                 placeholder={'Umowa o pracę\n\nZawarta dnia {{data}} pomiędzy:\n{{restauracja}}\na pracownikiem:\n{{imie_nazwisko}}, {{stanowisko}}\n\nWynagrodzenie: {{wynagrodzenie}} PLN brutto\n...'}
                 placeholderTextColor={theme.colors.textMuted}
               />
+
+              <Text style={{ fontSize: 11, color: theme.colors.textMuted, marginBottom: 6, marginTop: 2 }}>
+                Opcjonalne: wpisz treść z {'{{zmiennymi}}'} jeśli chcesz wypełniać dane pracownika automatycznie.
+              </Text>
 
               {tplContent.length > 0 && (() => {
                 const vars = extractVars(tplContent);
@@ -806,8 +872,20 @@ export default function DocumentsScreen() {
               <ScrollView style={mStyles.body} keyboardShouldPersistTaps="handled">
                 {genTemplate && (
                   <View style={tplStyles.genTemplateInfo}>
-                    <Ionicons name="copy-outline" size={15} color="#7C3AED" />
-                    <Text style={tplStyles.genTemplateName}>{genTemplate.name}</Text>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Ionicons name="copy-outline" size={15} color="#7C3AED" />
+                        <Text style={tplStyles.genTemplateName}>{genTemplate.name}</Text>
+                      </View>
+                      {genTemplate.file_url ? (
+                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 }} onPress={() => openFile(genTemplate.file_url!)}>
+                          <Ionicons name="document-outline" size={13} color={theme.colors.primary} />
+                          <Text style={{ fontSize: 12, color: theme.colors.primary, fontWeight: '600' }}>Podgląd pliku szablonu</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <Text style={{ fontSize: 11, color: '#F97316', marginTop: 4 }}>Ten szablon nie ma wgranego pliku. Zostanie wygenerowany dokument tekstowy.</Text>
+                      )}
+                    </View>
                   </View>
                 )}
 
@@ -853,14 +931,27 @@ export default function DocumentsScreen() {
 
                 <TouchableOpacity style={[mStyles.saveBtn, { backgroundColor: '#7C3AED' }]} onPress={handleGeneratePreview} activeOpacity={0.85}>
                   <Ionicons name="sparkles" size={16} color="#fff" style={{ marginRight: 6 }} />
-                  <Text style={mStyles.saveBtnText}>Generuj podgląd</Text>
+                  <Text style={mStyles.saveBtnText}>{genTemplate?.file_url && !genTemplate?.content?.trim() ? 'Dalej — przypisz plik' : 'Generuj podgląd'}</Text>
                 </TouchableOpacity>
               </ScrollView>
             ) : (
               <ScrollView style={mStyles.body}>
-                <View style={tplStyles.previewBox}>
-                  <Text style={tplStyles.previewText}>{genPreview}</Text>
-                </View>
+                {genTemplate?.file_url && (
+                  <TouchableOpacity
+                    style={[pStyles.btnPrimary, { marginBottom: 12 }]}
+                    onPress={() => openFile(genTemplate.file_url!)}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="document-outline" size={17} color="#fff" />
+                    <Text style={pStyles.btnPrimaryText}>Otwórz plik szablonu</Text>
+                  </TouchableOpacity>
+                )}
+                {genPreview ? (
+                  <View style={tplStyles.previewBox}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: theme.colors.textMuted, marginBottom: 8 }}>WYPEŁNIONE DANE</Text>
+                    <Text style={tplStyles.previewText}>{genPreview}</Text>
+                  </View>
+                ) : null}
                 <TouchableOpacity
                   style={[mStyles.saveBtn, genSaving && { opacity: 0.5 }]}
                   onPress={handleSaveGenerated}
@@ -868,7 +959,7 @@ export default function DocumentsScreen() {
                   activeOpacity={0.85}
                 >
                   {genSaving ? <ActivityIndicator color={theme.colors.white} size="small" /> : (
-                    <Text style={mStyles.saveBtnText}>Zapisz jako dokument pracownika</Text>
+                    <Text style={mStyles.saveBtnText}>Zapisz dokument dla pracownika</Text>
                   )}
                 </TouchableOpacity>
               </ScrollView>
@@ -945,6 +1036,8 @@ const styles = StyleSheet.create({
   tplVarText: { fontSize: 11, fontWeight: '700', color: '#7C3AED', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
   tplGenBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#7C3AED', borderRadius: theme.borderRadius.md, paddingVertical: 11 },
   tplGenBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  tplFileBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#F3F0FF', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: '#DDD6FE' },
+  tplFileBadgeText: { fontSize: 10, fontWeight: '700', color: '#7C3AED' },
 });
 
 const mStyles = StyleSheet.create({

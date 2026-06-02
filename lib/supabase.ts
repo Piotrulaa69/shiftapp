@@ -236,6 +236,7 @@ export type DbDocumentTemplate = {
   name: string;
   content: string;
   doc_type: string;
+  file_url: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
