@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
 import { createDocument, createDocumentTemplate, deleteDocument, deleteDocumentTemplate, getDocumentTemplates, getDocuments, getEmployees, normalizeStorageUrl, updateDocument, updateDocumentTemplate, uploadDocumentFile, uploadTemplateFile } from '../../lib/db';
 import type { DbDocument, DbDocumentTemplate, DbProfile } from '../../lib/supabase';
@@ -37,6 +38,7 @@ const computeStatus = (expiresAt?: string | null): 'active' | 'expiring' | 'expi
 export default function DocumentsScreen() {
   const router = useRouter();
   const { user, restaurant, isOwner, isManager } = useAuth();
+  const { showConfirm, showSuccess } = useAlert();
   const canManage = isOwner || isManager;
   const rid = user?.restaurantId ?? '';
   const uid = user?.id ?? '';
@@ -197,10 +199,13 @@ export default function DocumentsScreen() {
   };
 
   const handleDelete = (doc: DbDocument) => {
-    Alert.alert('Usuń dokument', `Czy na pewno chcesz usunąć "${doc.name}"?`, [
-      { text: 'Anuluj', style: 'cancel' },
-      { text: 'Usuń', style: 'destructive', onPress: async () => { await deleteDocument(doc.id); load(); } },
-    ]);
+    showConfirm(
+      'Usuń dokument',
+      `Czy na pewno chcesz usunąć "${doc.name}"?`,
+      async () => { await deleteDocument(doc.id); load(); },
+      'Usuń',
+      'Anuluj',
+    );
   };
 
   const openFile = async (url: string) => {
@@ -303,10 +308,13 @@ export default function DocumentsScreen() {
   };
 
   const handleTplDelete = (tpl: DbDocumentTemplate) => {
-    Alert.alert('Usuń szablon', `Czy na pewno chcesz usunąć szablon "${tpl.name}"?`, [
-      { text: 'Anuluj', style: 'cancel' },
-      { text: 'Usuń', style: 'destructive', onPress: async () => { await deleteDocumentTemplate(tpl.id); load(); } },
-    ]);
+    showConfirm(
+      'Usuń szablon',
+      `Czy na pewno chcesz usunąć szablon "${tpl.name}"?`,
+      async () => { await deleteDocumentTemplate(tpl.id); load(); },
+      'Usuń',
+      'Anuluj',
+    );
   };
 
   const autoFillManual = (vars: string[]): Record<string, string> => {
@@ -402,7 +410,7 @@ export default function DocumentsScreen() {
     setGenSaving(false);
     setShowGenModal(false);
     load();
-    Alert.alert('Zapisano!', `Dokument "${docName}" jest dostępny w sekcji Dokumenty.${filledContent ? ' Dane zostały wypełnione.' : ''}${genTemplate.file_url ? ' Plik szablonu został przypisany.' : ''}`);
+    showSuccess('Zapisano!', `Dokument "${docName}" jest dostępny w sekcji Dokumenty.${filledContent ? ' Dane zostały wypełnione.' : ''}${genTemplate.file_url ? ' Plik szablonu został przypisany.' : ''}`);
   };
 
   return (
