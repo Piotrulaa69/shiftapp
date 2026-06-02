@@ -16,6 +16,7 @@ export type AuthUser = {
   avatarColor: string;
   onboardingDone: boolean;
   isSuperAdmin: boolean;
+  hasChildren: boolean;
 };
 
 export type Restaurant = {
@@ -73,6 +74,7 @@ function toAuthUser(profile: DbProfile, email: string): AuthUser {
     avatarColor: profile.avatar_color,
     onboardingDone: profile.onboarding_done ?? true,
     isSuperAdmin: profile.is_super_admin ?? false,
+    hasChildren: (profile as any).has_children ?? false,
   };
 }
 

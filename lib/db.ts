@@ -410,14 +410,16 @@ export async function setAvailability(
 // ─── Leave Types ─────────────────────────────────────────────────────────────
 
 const LEAVE_TYPE_DEFAULTS = [
-  { name: 'Urlop wypoczynkowy', days_per_year: 26, requires_attachment: false, requires_comment: false },
-  { name: 'L4 – Zwolnienie lekarskie', days_per_year: 0, requires_attachment: false, requires_comment: false },
-  { name: 'Urlop na żądanie', days_per_year: 4, requires_attachment: false, requires_comment: false },
-  { name: 'Urlop okolicznościowy', days_per_year: 2, requires_attachment: false, requires_comment: true },
-  { name: 'Urlop macierzyński', days_per_year: 0, requires_attachment: false, requires_comment: false },
-  { name: 'Urlop ojcowski', days_per_year: 14, requires_attachment: false, requires_comment: false },
-  { name: 'Urlop bezpłatny', days_per_year: 0, requires_attachment: false, requires_comment: true },
-  { name: 'Urlop szkoleniowy', days_per_year: 0, requires_attachment: false, requires_comment: false },
+  { name: 'Urlop wypoczynkowy',       days_per_year: 26, requires_attachment: false, requires_comment: false, payment_rate: 100, category: 'standard',  requires_children: false },
+  { name: 'L4 – Zwolnienie lekarskie',days_per_year: 0,  requires_attachment: false, requires_comment: false, payment_rate: 80,  category: 'standard',  requires_children: false },
+  { name: 'Urlop na żądanie',         days_per_year: 4,  requires_attachment: false, requires_comment: false, payment_rate: 100, category: 'standard',  requires_children: false },
+  { name: 'Urlop okolicznościowy',    days_per_year: 2,  requires_attachment: false, requires_comment: true,  payment_rate: 100, category: 'special',   requires_children: false },
+  { name: 'Urlop bezpłatny',          days_per_year: 0,  requires_attachment: false, requires_comment: true,  payment_rate: 0,   category: 'standard',  requires_children: false },
+  { name: 'Urlop szkoleniowy',        days_per_year: 0,  requires_attachment: false, requires_comment: false, payment_rate: 100, category: 'special',   requires_children: false },
+  { name: 'Urlop macierzyński',       days_per_year: 0,  requires_attachment: false, requires_comment: false, payment_rate: 100, category: 'parental',  requires_children: true  },
+  { name: 'Urlop ojcowski',           days_per_year: 14, requires_attachment: false, requires_comment: false, payment_rate: 100, category: 'parental',  requires_children: true  },
+  { name: 'Urlop rodzicielski',       days_per_year: 0,  requires_attachment: false, requires_comment: false, payment_rate: 70,  category: 'parental',  requires_children: true  },
+  { name: 'Urlop opiekuńczy',         days_per_year: 5,  requires_attachment: false, requires_comment: true,  payment_rate: 0,   category: 'parental',  requires_children: true  },
 ];
 
 export async function getLeaveTypes(restaurantId: string): Promise<DbLeaveType[]> {
@@ -454,7 +456,7 @@ export async function getLeaveRequests(restaurantId: string, employeeId?: string
 export async function createLeaveRequest(
   restaurantId: string,
   employeeId: string,
-  fields: { leave_type_id: string; date_from: string; date_to: string; days_count: number; comment?: string },
+  fields: { leave_type_id: string; date_from: string; date_to: string; days_count: number; comment?: string; expected_hours?: number },
 ): Promise<DbLeaveRequest | null> {
   const { data, error } = await supabase
     .from('leave_requests')
@@ -489,7 +491,7 @@ export async function reviewLeaveRequest(
 
 export async function updateLeaveRequest(
   id: string,
-  fields: { leave_type_id?: string; date_from?: string; date_to?: string; days_count?: number; comment?: string },
+  fields: { leave_type_id?: string; date_from?: string; date_to?: string; days_count?: number; comment?: string; expected_hours?: number },
 ): Promise<boolean> {
   const { error } = await supabase.from('leave_requests').update(fields).eq('id', id);
   return !error;

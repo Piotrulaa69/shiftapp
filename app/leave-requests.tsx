@@ -122,7 +122,11 @@ export default function LeaveRequestsScreen() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [comment, setComment] = useState('');
+  const [expectedHours, setExpectedHours] = useState('');
   const [formLoading, setFormLoading] = useState(false);
+
+  const hasChildren = user?.hasChildren ?? false;
+  const LEAVE_CATEGORIES: [string, string][] = [['standard', 'Standardowe'], ['special', 'Okolicznościowe'], ['parental', 'Rodzicielskie']];
 
   // Reject modal
   const [rejectTarget, setRejectTarget] = useState<DbLeaveRequest | null>(null);
@@ -150,11 +154,13 @@ export default function LeaveRequestsScreen() {
 
   const openCreate = () => {
     setEditingReq(null);
-    setSelType(leaveTypes[0]?.id ?? '');
+    const firstStandard = leaveTypes.find((lt) => lt.category !== 'parental' || hasChildren || canManage);
+    setSelType(firstStandard?.id ?? leaveTypes[0]?.id ?? '');
     setSelEmployee(user?.id ?? '');
     setDateFrom('');
     setDateTo('');
     setComment('');
+    setExpectedHours('');
     setShowModal(true);
   };
 
@@ -165,6 +171,7 @@ export default function LeaveRequestsScreen() {
     setDateFrom(r.date_from);
     setDateTo(r.date_to);
     setComment(r.comment ?? '');
+    setExpectedHours(r.expected_hours != null ? String(r.expected_hours) : '');
     setShowModal(true);
   };
 
@@ -174,6 +181,7 @@ export default function LeaveRequestsScreen() {
     try {
       const days = calcDays(dateFrom, dateTo);
       let ok = false;
+      const hours = expectedHours ? parseFloat(expectedHours) : undefined;
       if (editingReq) {
         ok = await updateLeaveRequest(editingReq.id, {
           leave_type_id: selType,
@@ -181,6 +189,7 @@ export default function LeaveRequestsScreen() {
           date_to: dateTo,
           days_count: days,
           comment: comment || undefined,
+          expected_hours: hours,
         });
       } else {
         const empId = canManage && selEmployee ? selEmployee : user!.id;
@@ -190,6 +199,7 @@ export default function LeaveRequestsScreen() {
           date_to: dateTo,
           days_count: days,
           comment: comment || undefined,
+          expected_hours: hours,
         });
         ok = !!created;
       }
@@ -301,6 +311,12 @@ export default function LeaveRequestsScreen() {
                 <Text style={styles.cardDates}>{r.date_from} → {r.date_to}</Text>
                 <View style={styles.daysBadge}><Text style={styles.daysText}>{r.days_count} dni</Text></View>
               </View>
+              {r.expected_hours != null && (
+                <View style={styles.hoursRow}>
+                  <Ionicons name="time-outline" size={13} color={theme.colors.textMuted} />
+                  <Text style={styles.hoursText}>Oczekiwane godziny: <Text style={{ fontWeight: '700', color: theme.colors.text }}>{r.expected_hours}h</Text></Text>
+                </View>
+              )}
               {r.comment ? <Text style={styles.cardComment}>"{r.comment}"</Text> : null}
               {r.review_comment ? (
                 <View style={styles.reviewRow}>
@@ -379,15 +395,51 @@ export default function LeaveRequestsScreen() {
               <Text style={mStyles.label}>TYP URLOPU</Text>
               {leaveTypes.length === 0 ? (
                 <Text style={{ fontSize: 13, color: theme.colors.textMuted, marginBottom: 8 }}>Brak zdefiniowanych typów urlopu</Text>
-              ) : leaveTypes.map((lt) => (
-                <TouchableOpacity key={lt.id} style={[mStyles.optionBtn, selType === lt.id && mStyles.optionActive]} onPress={() => setSelType(lt.id)}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[mStyles.optionText, selType === lt.id && mStyles.optionTextActive]}>{lt.name}</Text>
-                    <Text style={mStyles.optionSub}>{lt.days_per_year} dni / rok</Text>
-                  </View>
-                  {selType === lt.id && <Ionicons name="checkmark-circle" size={18} color={theme.colors.primary} />}
-                </TouchableOpacity>
-              ))}
+              ) : (
+                LEAVE_CATEGORIES.map(([cat, catLabel]) => {
+                  const items = leaveTypes.filter((lt) => (lt.category ?? 'standard') === cat);
+                  if (items.length === 0) return null;
+                  const isParental = cat === 'parental';
+                  const isLocked = isParental && !hasChildren && !canManage;
+                  return (
+                    <View key={cat}>
+                      <View style={mStyles.catHeader}>
+                        <Ionicons
+                          name={isParental ? 'people-outline' : cat === 'special' ? 'star-outline' : 'briefcase-outline'}
+                          size={13} color={isLocked ? theme.colors.textMuted : theme.colors.primary}
+                        />
+                        <Text style={[mStyles.catLabel, isLocked && { color: theme.colors.textMuted }]}>{catLabel}</Text>
+                        {isLocked && <View style={mStyles.lockBadge}><Ionicons name="lock-closed" size={11} color={theme.colors.textMuted} /><Text style={mStyles.lockText}>Odblokuj w profilu</Text></View>}
+                      </View>
+                      {items.map((lt) => {
+                        const disabled = isLocked;
+                        const active = selType === lt.id;
+                        const payRate = lt.payment_rate ?? 100;
+                        const payColor = payRate === 0 ? '#EF4444' : payRate < 100 ? '#F97316' : '#22C55E';
+                        return (
+                          <TouchableOpacity
+                            key={lt.id}
+                            style={[mStyles.optionBtn, active && mStyles.optionActive, disabled && { opacity: 0.4 }]}
+                            onPress={() => !disabled && setSelType(lt.id)}
+                            disabled={disabled}
+                          >
+                            <View style={{ flex: 1 }}>
+                              <Text style={[mStyles.optionText, active && mStyles.optionTextActive]}>{lt.name}</Text>
+                              <Text style={mStyles.optionSub}>{lt.days_per_year > 0 ? `${lt.days_per_year} dni / rok` : 'Bez limitu'}</Text>
+                            </View>
+                            <View style={[mStyles.payBadge, { backgroundColor: payColor + '20' }]}>
+                              <Text style={[mStyles.payBadgeText, { color: payColor }]}>
+                                {payRate === 0 ? 'Bezpłatny' : payRate === 100 ? 'Płatny' : `${payRate}% płatny`}
+                              </Text>
+                            </View>
+                            {active && <Ionicons name="checkmark-circle" size={18} color={theme.colors.primary} style={{ marginLeft: 6 }} />}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  );
+                })
+              )}
 
               <Text style={mStyles.label}>DATA OD</Text>
               <CalendarPicker value={dateFrom} onChange={setDateFrom} />
@@ -401,6 +453,16 @@ export default function LeaveRequestsScreen() {
                   <Text style={mStyles.daysPreviewText}>{calcDays(dateFrom, dateTo)} dni urlopu</Text>
                 </View>
               )}
+
+              <Text style={mStyles.label}>OCZEKIWANE GODZINY (opcjonalnie)</Text>
+              <TextInput
+                style={mStyles.input}
+                value={expectedHours}
+                onChangeText={setExpectedHours}
+                placeholder="np. 8 (godziny odjete z bilansu)"
+                placeholderTextColor={theme.colors.textMuted}
+                keyboardType="decimal-pad"
+              />
 
               <Text style={mStyles.label}>KOMENTARZ (opcjonalnie)</Text>
               <TextInput style={[mStyles.input, { minHeight: 60, textAlignVertical: 'top' }]} value={comment} onChangeText={setComment} placeholder="Dodaj notatkę..." placeholderTextColor={theme.colors.textMuted} multiline />
@@ -488,6 +550,8 @@ const styles = StyleSheet.create({
   cardDates: { fontSize: 13, color: theme.colors.textSecondary, flex: 1 },
   daysBadge: { backgroundColor: theme.colors.primaryLight, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
   daysText: { fontSize: 11, fontWeight: '700', color: theme.colors.primary },
+  hoursRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 },
+  hoursText: { fontSize: 12, color: theme.colors.textSecondary },
   cardComment: { fontSize: 12, color: theme.colors.textMuted, fontStyle: 'italic', marginBottom: 4 },
   reviewRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 5, marginBottom: 4 },
   cardReview: { fontSize: 12, color: theme.colors.primary, flex: 1 },
@@ -541,6 +605,12 @@ const mStyles = StyleSheet.create({
   empInitials: { fontSize: 12, fontWeight: '700', color: theme.colors.white },
   empName: { fontSize: 13, fontWeight: '600', color: theme.colors.text },
   empJob: { fontSize: 11, color: theme.colors.textMuted },
+  catHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, marginBottom: 6 },
+  catLabel: { fontSize: 12, fontWeight: '700', color: theme.colors.primary, flex: 1 },
+  lockBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: theme.colors.surface, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  lockText: { fontSize: 10, color: theme.colors.textMuted },
+  payBadge: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, marginRight: 4 },
+  payBadgeText: { fontSize: 10, fontWeight: '700' },
   saveBtn: { backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.md, paddingVertical: 14, alignItems: 'center', marginTop: 20, marginBottom: 30 },
   saveBtnText: { color: theme.colors.white, fontSize: 15, fontWeight: '700' },
 });

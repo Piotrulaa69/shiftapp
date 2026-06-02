@@ -125,14 +125,17 @@ export default function ProfileScreen() {
           <InfoRow icon="business-outline" label="Firma" value={restaurant?.name ?? '—'} />
         </View>
 
+        {/* Documents Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Dokumenty</Text>
+          <ActionRow icon="document-text-outline" label="Moje dokumenty" onPress={() => router.push('/documents' as any)} />
+        </View>
+
         {/* Settings Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Ustawienia</Text>
+          <Text style={styles.sectionTitle}>Ustawienia konta</Text>
           <ActionRow icon="lock-closed-outline" label="Zmień hasło" onPress={() => setShowPasswordModal(true)} />
           <ActionRow icon="notifications-outline" label="Preferencje powiadomień" onPress={() => setShowNotifModal(true)} />
-          <ActionRow icon="document-text-outline" label="Moje dokumenty" onPress={() => router.push('/documents' as any)} />
-          <ActionRow icon="calendar-outline" label="Dyspozycyjność" onPress={() => router.push('/availability' as any)} />
-          <ActionRow icon="airplane-outline" label="Wnioski urlopowe" onPress={() => router.push('/leave-requests' as any)} />
         </View>
 
         {/* Logout */}

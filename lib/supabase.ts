@@ -166,6 +166,9 @@ export type DbLeaveType = {
   days_per_year: number;
   requires_attachment: boolean;
   requires_comment: boolean;
+  payment_rate: number;
+  category: 'standard' | 'parental' | 'special';
+  requires_children: boolean;
   created_at: string;
 };
 
@@ -177,6 +180,7 @@ export type DbLeaveRequest = {
   date_from: string;
   date_to: string;
   days_count: number;
+  expected_hours: number | null;
   status: 'pending' | 'approved' | 'rejected' | 'cancelled';
   comment: string | null;
   attachment_url: string | null;

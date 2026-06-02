@@ -140,15 +140,21 @@ function Sidebar() {
 
       <View style={sideStyles.bottom}>
         <View style={sideStyles.userRow}>
-          <View style={sideStyles.userAvatar}>
-            <Text style={sideStyles.userInitials}>{user?.initials ?? '??'}</Text>
-          </View>
-          <View style={sideStyles.userInfo}>
-            <Text style={sideStyles.userName} numberOfLines={1}>{user?.name}</Text>
-            <Text style={sideStyles.userRole} numberOfLines={1}>{restaurant?.name ?? user?.jobTitle}</Text>
-          </View>
+          <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }} onPress={() => router.push('/profile' as any)} activeOpacity={0.7}>
+            <View style={sideStyles.userAvatar}>
+              <Text style={sideStyles.userInitials}>{user?.initials ?? '??'}</Text>
+            </View>
+            <View style={sideStyles.userInfo}>
+              <Text style={sideStyles.userName} numberOfLines={1}>{user?.name}</Text>
+              <Text style={sideStyles.userRole} numberOfLines={1}>{restaurant?.name ?? user?.jobTitle}</Text>
+            </View>
+          </TouchableOpacity>
           <NotificationBell />
         </View>
+        <TouchableOpacity style={sideStyles.sideActionBtn} onPress={() => router.push('/work-hub' as any)} activeOpacity={0.7}>
+          <Ionicons name="time-outline" size={16} color={theme.colors.primary} />
+          <Text style={sideStyles.sideActionText}>Czas pracy</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={sideStyles.logoutBtn} onPress={logout} activeOpacity={0.7}>
           <Ionicons name="log-out-outline" size={18} color={theme.colors.textMuted} />
           <Text style={sideStyles.logoutText}>Wyloguj</Text>
@@ -224,6 +230,14 @@ const sideStyles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   logoutText: { fontSize: 13, fontWeight: '600', color: theme.colors.textMuted },
+  sideActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  sideActionText: { fontSize: 13, fontWeight: '600', color: theme.colors.primary },
 });
 
 /* ─────────────── MOBILE TAB BAR ─────────────── */
@@ -270,14 +284,15 @@ function MobileTabBar({ state, navigation }: BottomTabBarProps) {
   const adminFocused = state.routes[state.index]?.name === 'admin';
 
   const adminActions: FabAction[] = [
+    { icon: 'time-outline', label: 'Czas pracy', onPress: () => router.push('/work-hub' as any) },
     { icon: 'build-outline', label: 'Narzędzia', onPress: () => router.push('/(tabs)/admin' as any) },
     { icon: 'sparkles-outline', label: 'Grafik AI', onPress: () => router.push('/(tabs)/schedule-ai' as any) },
     { icon: 'document-text-outline', label: 'Dokumenty AI', onPress: () => router.push('/(tabs)/documents-ai' as any) },
     { icon: 'time-outline', label: 'Ewidencja czasu', onPress: () => router.push('/(tabs)/time-tracking' as any) },
-    { icon: 'add-circle-outline', label: 'Nowe zadanie', onPress: () => router.push('/(tabs)/tasks' as any) },
   ];
 
   const employeeActions: FabAction[] = [
+    { icon: 'time-outline', label: 'Czas pracy', onPress: () => router.push('/work-hub' as any) },
     { icon: 'finger-print-outline', label: 'Moja zmiana', onPress: () => router.push('/shift-detail' as any) },
     { icon: 'list-outline', label: 'Zadania', onPress: () => router.push('/(tabs)/tasks' as any) },
     { icon: 'chatbubble-outline', label: 'Czat', onPress: () => router.push('/chat' as any) },
