@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
 import { createDocument, createDocumentTemplate, deleteDocument, deleteDocumentTemplate, getDocumentTemplates, getDocuments, getEmployees, normalizeStorageUrl, updateDocument, updateDocumentTemplate, uploadDocumentFile, uploadTemplateFile } from '../../lib/db';
+import { downloadBlob, generateFilledDocx, isDocxUrl } from '../../lib/docxGenerator';
 import type { DbDocument, DbDocumentTemplate, DbProfile } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
@@ -87,6 +88,13 @@ export default function DocumentsScreen() {
   const [genManualLast, setGenManualLast] = useState('');
   const [genManualRole, setGenManualRole] = useState('');
   const [genManualEmail, setGenManualEmail] = useState('');
+  const [genManualPesel, setGenManualPesel] = useState('');
+  const [genManualPhone, setGenManualPhone] = useState('');
+  const [genManualAddress, setGenManualAddress] = useState('');
+  const [genManualCity, setGenManualCity] = useState('');
+  const [genManualPostal, setGenManualPostal] = useState('');
+  const [genManualSalary, setGenManualSalary] = useState('');
+  const [genManualContract, setGenManualContract] = useState('');
   const [genVars, setGenVars] = useState<Record<string, string>>({});
   const [genPreview, setGenPreview] = useState('');
   const [genStep, setGenStep] = useState<'form' | 'preview'>('form');
@@ -319,13 +327,16 @@ export default function DocumentsScreen() {
 
   const autoFillManual = (vars: string[]): Record<string, string> => {
     const today = new Date().toLocaleDateString('pl-PL');
+    const fullName = `${genManualFirst} ${genManualLast}`.trim();
     const MAP: Record<string, string> = {
-      imie_nazwisko: `${genManualFirst} ${genManualLast}`.trim(),
-      imie: genManualFirst,
-      nazwisko: genManualLast,
-      stanowisko: genManualRole,
-      email: genManualEmail,
-      restauracja: restaurant?.name ?? '',
+      imie_nazwisko: fullName, imie: genManualFirst, nazwisko: genManualLast,
+      stanowisko: genManualRole, email: genManualEmail,
+      pesel: genManualPesel, telefon: genManualPhone,
+      adres: genManualAddress, adres_zamieszkania: genManualAddress,
+      miasto: genManualCity, kod_pocztowy: genManualPostal,
+      wynagrodzenie: genManualSalary, pensja: genManualSalary,
+      rodzaj_umowy: genManualContract, umowa: genManualContract,
+      pracodawca: restaurant?.name ?? '', restauracja: restaurant?.name ?? '',
       data: today, data_dzisiaj: today, data_podpisania: today,
       rok: String(new Date().getFullYear()),
       miesiac: String(new Date().getMonth() + 1),
@@ -343,6 +354,7 @@ export default function DocumentsScreen() {
     setGenEmployee(firstEmp?.id ?? '');
     setGenManualMode(false);
     setGenManualFirst(''); setGenManualLast(''); setGenManualRole(''); setGenManualEmail('');
+    setGenManualPesel(''); setGenManualPhone(''); setGenManualAddress(''); setGenManualCity(''); setGenManualPostal(''); setGenManualSalary(''); setGenManualContract('');
     setGenVars(filled);
     setGenPreview('');
     setGenStep('form');
@@ -398,12 +410,31 @@ export default function DocumentsScreen() {
     }
     const filledContent = genTemplate.content.trim() ? fillTemplate(genTemplate.content, genVars) : undefined;
     const docName = `${genTemplate.name} — ${empName} (${new Date().toLocaleDateString('pl-PL')})`;
+    const safeDocName = docName.replace(/[^a-zA-Z0-9_\-\u00C0-\u017E ]/g, '_');
+
+    // ── DOCX generation: fill variables in the template file ──
+    let finalFileUrl: string | undefined = genTemplate.file_url ?? undefined;
+    if (genTemplate.file_url && isDocxUrl(genTemplate.file_url)) {
+      const publicUrl = normalizeStorageUrl(genTemplate.file_url) ?? genTemplate.file_url;
+      const blob = await generateFilledDocx(publicUrl, genVars);
+      if (blob) {
+        const filledUri = URL.createObjectURL(blob);
+        const fileName = `${safeDocName}.docx`;
+        const uploaded = await uploadDocumentFile(rid, fileName, filledUri, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+        URL.revokeObjectURL(filledUri);
+        if (uploaded) {
+          finalFileUrl = uploaded;
+          downloadBlob(blob, fileName);
+        }
+      }
+    }
+
     await createDocument(rid, {
       employee_id: empId,
       guest_name: guestName,
       name: docName,
       doc_type: genTemplate.doc_type as any,
-      file_url: genTemplate.file_url ?? undefined,
+      file_url: finalFileUrl,
       content: filledContent,
       uploaded_by: uid,
     });
@@ -975,13 +1006,47 @@ export default function DocumentsScreen() {
                         <TextInput style={mStyles.input} value={genManualLast} onChangeText={setGenManualLast} placeholder="Kowalski" placeholderTextColor={theme.colors.textMuted} />
                       </View>
                     </View>
-                    <View>
-                      <Text style={mStyles.label}>STANOWISKO</Text>
-                      <TextInput style={mStyles.input} value={genManualRole} onChangeText={setGenManualRole} placeholder="Kelner" placeholderTextColor={theme.colors.textMuted} />
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={mStyles.label}>STANOWISKO</Text>
+                        <TextInput style={mStyles.input} value={genManualRole} onChangeText={setGenManualRole} placeholder="Kelner" placeholderTextColor={theme.colors.textMuted} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={mStyles.label}>TELEFON</Text>
+                        <TextInput style={mStyles.input} value={genManualPhone} onChangeText={setGenManualPhone} placeholder="+48 600 000 000" placeholderTextColor={theme.colors.textMuted} keyboardType="phone-pad" />
+                      </View>
                     </View>
                     <View>
                       <Text style={mStyles.label}>EMAIL</Text>
                       <TextInput style={mStyles.input} value={genManualEmail} onChangeText={setGenManualEmail} placeholder="jan@example.com" placeholderTextColor={theme.colors.textMuted} keyboardType="email-address" autoCapitalize="none" />
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={mStyles.label}>PESEL</Text>
+                        <TextInput style={mStyles.input} value={genManualPesel} onChangeText={setGenManualPesel} placeholder="00000000000" placeholderTextColor={theme.colors.textMuted} keyboardType="numeric" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={mStyles.label}>RODZAJ UMOWY</Text>
+                        <TextInput style={mStyles.input} value={genManualContract} onChangeText={setGenManualContract} placeholder="o pracę / zlecenie" placeholderTextColor={theme.colors.textMuted} />
+                      </View>
+                    </View>
+                    <View>
+                      <Text style={mStyles.label}>ADRES ZAMIESZKANIA</Text>
+                      <TextInput style={mStyles.input} value={genManualAddress} onChangeText={setGenManualAddress} placeholder="ul. Przykładowa 1/2" placeholderTextColor={theme.colors.textMuted} />
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <View style={{ flex: 2 }}>
+                        <Text style={mStyles.label}>MIASTO</Text>
+                        <TextInput style={mStyles.input} value={genManualCity} onChangeText={setGenManualCity} placeholder="Warszawa" placeholderTextColor={theme.colors.textMuted} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={mStyles.label}>KOD POCZT.</Text>
+                        <TextInput style={mStyles.input} value={genManualPostal} onChangeText={setGenManualPostal} placeholder="00-000" placeholderTextColor={theme.colors.textMuted} />
+                      </View>
+                    </View>
+                    <View>
+                      <Text style={mStyles.label}>WYNAGRODZENIE (zł brutto)</Text>
+                      <TextInput style={mStyles.input} value={genManualSalary} onChangeText={setGenManualSalary} placeholder="4500" placeholderTextColor={theme.colors.textMuted} keyboardType="decimal-pad" />
                     </View>
                   </View>
                 ) : (
