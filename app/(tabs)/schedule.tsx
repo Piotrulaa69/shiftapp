@@ -861,8 +861,18 @@ export default function ScheduleScreen() {
               </View>
               {weekDates.map((d, i) => {
                 const colLayout = layoutEvents(allShifts.filter((s) => s.day === d));
+                const isDropTarget = dragOverDate === d && dragShiftId !== null;
+                const webColProps = isOwner && Platform.OS === 'web' ? {
+                  onDragOver: (e: any) => { e.preventDefault(); handleDragOver(d); },
+                  onDragLeave: () => setDragOverDate(null),
+                  onDrop: (e: any) => { e.preventDefault(); handleDrop(d); },
+                } as any : {};
                 return (
-                  <View key={d} style={[wv.dayCol, (i === 5 || i === 6) && wv.weekendBg]}>
+                  <View
+                    key={d}
+                    style={[wv.dayCol, (i === 5 || i === 6) && wv.weekendBg, isDropTarget && wv.dayColDrop]}
+                    {...webColProps}
+                  >
                     {GRID_HOURS.map((h) => <View key={h} style={wv.hourLine} />)}
                     {colLayout.map(({ shift: s, col, totalCols }) => {
                       const top = shiftTop(s.start_time);
@@ -870,12 +880,24 @@ export default function ScheduleScreen() {
                       const cfg = STATUS_CONFIG[s.status as ShiftStatus];
                       const wPct = `${Math.floor(100 / totalCols) - 1}%`;
                       const lPct = `${Math.floor((col / totalCols) * 100) + 1}%`;
+                      const isDraggingThis = dragShiftId === s.id;
+                      const webShiftProps = isOwner && Platform.OS === 'web' ? {
+                        draggable: true,
+                        onDragStart: (e: any) => { e.dataTransfer.effectAllowed = 'move'; handleDragStart(s.id); },
+                        onDragEnd: () => { setDragShiftId(null); setDragOverDate(null); },
+                      } as any : {};
                       return (
                         <TouchableOpacity
                           key={s.id}
-                          style={[wv.event, { top, height, left: lPct as any, width: wPct as any, backgroundColor: cfg?.color ?? theme.colors.primary }]}
+                          style={[
+                            wv.event,
+                            { top, height, left: lPct as any, width: wPct as any, backgroundColor: cfg?.color ?? theme.colors.primary },
+                            isDraggingThis && { opacity: 0.35 },
+                            isOwner && Platform.OS === 'web' && { cursor: 'grab' } as any,
+                          ]}
                           activeOpacity={0.85}
                           onPress={() => setSelectedShift(s)}
+                          {...webShiftProps}
                         >
                           <Text style={wv.eventTitle} numberOfLines={1}>{s.start_time} {s.employee_name?.split(' ')[0]}</Text>
                           {height >= 42 && <Text style={wv.eventSub} numberOfLines={1}>{s.end_time}</Text>}
@@ -1121,6 +1143,9 @@ const wv = StyleSheet.create({
     borderLeftColor: theme.colors.border,
     position: 'relative',
     backgroundColor: theme.colors.card,
+  },
+  dayColDrop: {
+    backgroundColor: theme.colors.primaryLight,
   },
   hourLine: {
     height: HOUR_HEIGHT,

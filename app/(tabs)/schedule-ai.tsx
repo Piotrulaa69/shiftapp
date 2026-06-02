@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator, Platform, ScrollView, StyleSheet, Text,
+    ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text,
     TextInput, TouchableOpacity, useWindowDimensions, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { getEmployees } from '../../lib/db';
+import { createShift, getEmployees } from '../../lib/db';
 import {
     DEFAULT_PREFS, EmpAvail,
     GeneratedShift,
@@ -50,9 +50,15 @@ export default function ScheduleAIScreen() {
   const [prefs, setPrefs] = useState<SchedulePrefs | null>(null);
   const [availability, setAvailability] = useState<EmpAvail[]>([]);
   const [result, setResult] = useState<GenerationResult | null>(null);
+  const [editableShifts, setEditableShifts] = useState<GeneratedShift[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+
+  const dragRef = useRef<{ empId: string; dayIdx: number } | null>(null);
+  const [dragOver, setDragOver] = useState<{ empId: string; dayIdx: number } | null>(null);
+  const [dragging, setDragging] = useState<{ empId: string; dayIdx: number } | null>(null);
 
   // Prefs edit state
   const [editPrefs, setEditPrefs] = useState<SchedulePrefs | null>(null);
@@ -88,6 +94,65 @@ export default function ScheduleAIScreen() {
     setGenerating(false);
   };
 
+  useEffect(() => {
+    setEditableShifts(result?.shifts ?? []);
+  }, [result]);
+
+  const moveShift = (fromEmpId: string, fromDay: number, toEmpId: string, toDay: number) => {
+    if (fromEmpId === toEmpId && fromDay === toDay) return;
+    setEditableShifts(prev => {
+      const updated = prev.map(sh => {
+        if (sh.employee_id === fromEmpId && sh.day_of_week === fromDay)
+          return { ...sh, employee_id: toEmpId, day_of_week: toDay };
+        if (sh.employee_id === toEmpId && sh.day_of_week === toDay)
+          return { ...sh, employee_id: fromEmpId, day_of_week: fromDay };
+        return sh;
+      });
+      return updated;
+    });
+  };
+
+  const handlePublish = () => {
+    if (!editableShifts.length) return;
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(
+        `Opublikować ${editableShifts.length} zmian na tydzień ${weekLabel(weekStart)}?\n\nPracownicy zobaczą je w swoim grafiku. Jeśli istnieją już zmiany na ten tydzień, zostaną dodane duplikaty.`
+      );
+      if (confirmed) doPublish();
+    } else {
+      Alert.alert(
+        'Opublikować grafik?',
+        `Zapisać ${editableShifts.length} zmian na tydzień ${weekLabel(weekStart)}? Pracownicy zobaczą je w grafiku.`,
+        [{ text: 'Anuluj', style: 'cancel' }, { text: 'Opublikuj', onPress: doPublish }]
+      );
+    }
+  };
+
+  const doPublish = async () => {
+    setPublishing(true);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    let ok = 0;
+    for (const sh of editableShifts) {
+      const d = new Date(weekStart);
+      d.setDate(d.getDate() + sh.day_of_week);
+      const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      const emp = employees.find(e => e.id === sh.employee_id);
+      const created = await createShift(rid, {
+        employee_id: sh.employee_id,
+        employee_name: sh.employee_name,
+        job_title: emp?.job_title ?? '',
+        day: dateStr,
+        start_time: sh.start_time,
+        end_time: sh.end_time,
+        status: 'zaplanowana',
+        location: 'Restauracja',
+      });
+      if (created) ok++;
+    }
+    setPublishing(false);
+    Alert.alert('Opublikowano!', `Zapisano ${ok} z ${editableShifts.length} zmian. Pracownicy zobaczą je w grafiku.`);
+  };
+
   const handleSavePrefs = async () => {
     if (!editPrefs) return;
     setSaving(true);
@@ -113,9 +178,9 @@ export default function ScheduleAIScreen() {
     return a === undefined ? true : a.available;
   };
 
-  // Build shift map for grid
+  // Build shift map from editable shifts
   const shiftMap: Record<string, GeneratedShift[]> = {};
-  (result?.shifts ?? []).forEach(sh => {
+  editableShifts.forEach(sh => {
     const key = sh.employee_id;
     if (!shiftMap[key]) shiftMap[key] = [];
     shiftMap[key].push(sh);
@@ -239,6 +304,25 @@ export default function ScheduleAIScreen() {
               </View>
             ) : (
               <>
+                {/* Publish bar */}
+                <View style={s.publishBar}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.publishTitle}>Gotowy do publikacji</Text>
+                    <Text style={s.publishSub}>{editableShifts.length} zmian · przeciągnij, aby przesunąć</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[s.publishBtn, publishing && { opacity: 0.6 }]}
+                    onPress={handlePublish}
+                    disabled={publishing}
+                    activeOpacity={0.85}
+                  >
+                    {publishing
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Ionicons name="cloud-upload-outline" size={16} color="#fff" />}
+                    <Text style={s.publishBtnText}>{publishing ? 'Zapisywanie...' : 'Opublikuj grafik'}</Text>
+                  </TouchableOpacity>
+                </View>
+
                 {/* Schedule grid */}
                 <View style={s.grid}>
                   <View style={s.gridHeader}>
@@ -270,10 +354,41 @@ export default function ScheduleAIScreen() {
                           const shift = empShifts.find(sh => sh.day_of_week === dayIdx);
                           const avail = getAvail(emp.id, dayIdx);
                           const color = emp.avatar_color ?? theme.colors.primary;
+                          const isThisDragOver = dragOver?.empId === emp.id && dragOver?.dayIdx === dayIdx;
+                          const isThisDragging = dragging?.empId === emp.id && dragging?.dayIdx === dayIdx;
+                          const webDropProps = Platform.OS === 'web' ? {
+                            onDragOver: (e: any) => { e.preventDefault(); setDragOver({ empId: emp.id, dayIdx }); },
+                            onDragLeave: () => setDragOver(null),
+                            onDrop: (e: any) => {
+                              e.preventDefault();
+                              setDragOver(null);
+                              if (dragRef.current) {
+                                moveShift(dragRef.current.empId, dragRef.current.dayIdx, emp.id, dayIdx);
+                                dragRef.current = null;
+                                setDragging(null);
+                              }
+                            },
+                          } as any : {};
                           return (
-                            <View key={dayIdx} style={s.gridDayCol}>
+                            <View
+                              key={dayIdx}
+                              style={[s.gridDayCol, isThisDragOver && s.gridDayColDrop]}
+                              {...webDropProps}
+                            >
                               {shift ? (
-                                <View style={[s.shiftBlock, { backgroundColor: color + '18', borderColor: color }]}>
+                                <View
+                                  style={[s.shiftBlock, { backgroundColor: color + '18', borderColor: color }, isThisDragging && { opacity: 0.3 }]}
+                                  {...(Platform.OS === 'web' ? {
+                                    draggable: true,
+                                    onDragStart: (e: any) => {
+                                      dragRef.current = { empId: emp.id, dayIdx };
+                                      setDragging({ empId: emp.id, dayIdx });
+                                      e.dataTransfer.effectAllowed = 'move';
+                                    },
+                                    onDragEnd: () => { dragRef.current = null; setDragging(null); setDragOver(null); },
+                                    style: { cursor: 'grab', backgroundColor: color + '18', borderColor: color, borderWidth: 1, borderLeftWidth: 3, width: '92%', borderRadius: 6, paddingVertical: 3, alignItems: 'center' },
+                                  } as any : {})}
+                                >
                                   <Text style={[s.shiftTime, { color }]}>{shift.start_time}</Text>
                                   <Text style={[s.shiftHours, { color }]}>{shift.hours}h</Text>
                                 </View>
@@ -283,7 +398,7 @@ export default function ScheduleAIScreen() {
                                 </View>
                               ) : (
                                 <View style={s.freeBlock}>
-                                  <Ionicons name="ellipse-outline" size={12} color={theme.colors.border} />
+                                  <Ionicons name="ellipse-outline" size={12} color={isThisDragOver ? theme.colors.primary : theme.colors.border} />
                                 </View>
                               )}
                             </View>
@@ -514,6 +629,12 @@ const s = StyleSheet.create({
   emptySub: { fontSize: 13, color: theme.colors.textMuted, textAlign: 'center', maxWidth: 280, lineHeight: 18 },
   generateBigBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#7C3AED', paddingHorizontal: 24, paddingVertical: 13, borderRadius: 14, marginTop: 8 },
   generateBigBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  publishBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EDE9FE', borderRadius: 12, padding: 14, gap: 12 },
+  publishTitle: { fontSize: 13, fontWeight: '700', color: '#5B21B6' },
+  publishSub: { fontSize: 11, color: '#7C3AED', marginTop: 1 },
+  publishBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#7C3AED', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10 },
+  publishBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  gridDayColDrop: { backgroundColor: '#EDE9FE', borderRadius: 6 },
   grid: { backgroundColor: theme.colors.card, borderRadius: 14, overflow: 'hidden', ...theme.shadows.card },
   gridHeader: { flexDirection: 'row', backgroundColor: theme.colors.surface, paddingVertical: 7 },
   gridEmpCol: { width: 76, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, gap: 6 },
