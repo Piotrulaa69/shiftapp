@@ -4,10 +4,10 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '../context/AuthContext';
-import { createDocument, createDocumentTemplate, deleteDocument, deleteDocumentTemplate, getDocumentTemplates, getDocuments, getEmployees, updateDocument, updateDocumentTemplate, uploadDocumentFile, uploadTemplateFile } from '../lib/db';
-import type { DbDocument, DbDocumentTemplate, DbProfile } from '../lib/supabase';
-import { theme } from '../styles/theme';
+import { useAuth } from '../../context/AuthContext';
+import { createDocument, createDocumentTemplate, deleteDocument, deleteDocumentTemplate, getDocumentTemplates, getDocuments, getEmployees, updateDocument, updateDocumentTemplate, uploadDocumentFile, uploadTemplateFile } from '../../lib/db';
+import type { DbDocument, DbDocumentTemplate, DbProfile } from '../../lib/supabase';
+import { theme } from '../../styles/theme';
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string; icon: string }> = {
   active: { label: 'Aktywny', color: '#22C55E', bg: '#E8F8ED', icon: 'checkmark-circle' },

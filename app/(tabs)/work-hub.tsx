@@ -2,8 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '../context/AuthContext';
-import { theme } from '../styles/theme';
+import { useAuth } from '../../context/AuthContext';
+import { theme } from '../../styles/theme';
 
 type HubTile = {
   id: string;

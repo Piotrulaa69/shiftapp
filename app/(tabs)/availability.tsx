@@ -3,10 +3,10 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '../context/AuthContext';
-import { getAvailability, getAvailabilityAll, getEmployees, getShifts, setAvailability } from '../lib/db';
-import type { DbAvailability, DbProfile, DbShift } from '../lib/supabase';
-import { theme } from '../styles/theme';
+import { useAuth } from '../../context/AuthContext';
+import { getAvailability, getAvailabilityAll, getEmployees, getShifts, setAvailability } from '../../lib/db';
+import type { DbAvailability, DbProfile, DbShift } from '../../lib/supabase';
+import { theme } from '../../styles/theme';
 
 const DAY_NAMES = ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'So', 'Nd'];
 const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];

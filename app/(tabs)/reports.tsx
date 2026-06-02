@@ -3,9 +3,9 @@ import { useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
-import { theme } from '../styles/theme';
+import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../../lib/supabase';
+import { theme } from '../../styles/theme';
 
 type ReportType = 'shifts' | 'attendance' | 'tasks' | 'hours';
 

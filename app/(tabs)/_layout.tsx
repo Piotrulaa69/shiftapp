@@ -472,6 +472,12 @@ export default function TabLayout() {
             <Tabs.Screen name="time-tracking" options={{ href: null }} />
             <Tabs.Screen name="documents-ai" options={{ href: null }} />
             <Tabs.Screen name="team" options={{ href: null }} />
+            <Tabs.Screen name="documents" options={{ href: null }} />
+            <Tabs.Screen name="work-hub" options={{ href: null }} />
+            <Tabs.Screen name="leave-requests" options={{ href: null }} />
+            <Tabs.Screen name="reports" options={{ href: null }} />
+            <Tabs.Screen name="notifications" options={{ href: null }} />
+            <Tabs.Screen name="availability" options={{ href: null }} />
           </Tabs>
           </View>
         </View>
@@ -493,6 +499,12 @@ export default function TabLayout() {
       <Tabs.Screen name="time-tracking" options={{ href: null }} />
       <Tabs.Screen name="documents-ai" options={{ href: null }} />
       <Tabs.Screen name="team" options={{ href: null }} />
+      <Tabs.Screen name="documents" options={{ href: null }} />
+      <Tabs.Screen name="work-hub" options={{ href: null }} />
+      <Tabs.Screen name="leave-requests" options={{ href: null }} />
+      <Tabs.Screen name="reports" options={{ href: null }} />
+      <Tabs.Screen name="notifications" options={{ href: null }} />
+      <Tabs.Screen name="availability" options={{ href: null }} />
     </Tabs>
   );
 }

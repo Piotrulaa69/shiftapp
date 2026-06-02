@@ -3,8 +3,8 @@ import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, FlatList, Platform, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AppNotification, useNotifications } from '../context/NotificationsContext';
-import { theme } from '../styles/theme';
+import { AppNotification, useNotifications } from '../../context/NotificationsContext';
+import { theme } from '../../styles/theme';
 
 const ICON_MAP: Record<string, { name: string; color: string; bg: string }> = {
   shift: { name: 'calendar', color: theme.colors.primary, bg: '#E3F2FD' },
