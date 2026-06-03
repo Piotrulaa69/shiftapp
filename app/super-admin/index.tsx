@@ -91,16 +91,6 @@ export default function SuperAdminDashboard() {
   // Impersonation state
   const [impersonating, setImpersonating] = useState<string | null>(null);
 
-  // Promo codes state
-  const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
-  const [showPromoModal, setShowPromoModal] = useState(false);
-  const [promoCode, setPromoCode] = useState('');
-  const [promoDiscount, setPromoDiscount] = useState('10');
-  const [promoMaxUses, setPromoMaxUses] = useState('');
-
-  // Impersonation state
-  const [impersonating, setImpersonating] = useState<string | null>(null);
-
   // Create restaurant modal
   const [showCreate, setShowCreate] = useState(false);
   const [createdCode, setCreatedCode] = useState<string | null>(null);
