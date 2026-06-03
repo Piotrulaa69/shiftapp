@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileHeader from '../../components/MobileHeader';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
-import { createQuizQuestion, createTraining, deleteQuizQuestion, deleteTraining, generateInvitation, getAbsences, getEmployees, getInvitations, getLeaveRequests, getQuizQuestions, getTrainings, removeEmployee, reviewAbsence, reviewLeaveRequest, updateRestaurant, updateTraining } from '../../lib/db';
+import { createQuizQuestion, createTraining, deleteQuizQuestion, deleteTraining, generateInvitation, getAbsences, getEmployees, getInvitations, getLeaveRequests, getQuizQuestions, getTrainings, removeEmployee, reviewAbsence, updateRestaurant, updateTraining } from '../../lib/db';
 import type { DbAbsence, DbInvitation, DbLeaveRequest, DbProfile, DbTraining } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
@@ -38,6 +38,12 @@ export default function AdminScreen() {
   const [leaveRequests, setLeaveRequests] = useState<DbLeaveRequest[]>([]);
   const [absences, setAbsences] = useState<DbAbsence[]>([]);
   const [groups, setGroups] = useState<(DbEmployeeGroup & { members: string[] })[]>([]);
+
+  // Leave request review state (with notes)
+  const [reviewingRequest, setReviewingRequest] = useState<DbLeaveRequest | null>(null);
+  const [reviewAction, setReviewAction] = useState<'approve' | 'reject' | null>(null);
+  const [reviewNote, setReviewNote] = useState('');
+  const [reviewing, setReviewing] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [editingGroup, setEditingGroup] = useState<(DbEmployeeGroup & { members: string[] }) | null>(null);
@@ -693,10 +699,10 @@ export default function AdminScreen() {
                       </View>
                       {isPending && user && (
                         <View style={{ flexDirection: 'row', gap: 6 }}>
-                          <TouchableOpacity style={s.approveBtn} onPress={async () => { await reviewLeaveRequest(lr.id, user.id, 'approved'); refresh(); }} activeOpacity={0.7}>
+                          <TouchableOpacity style={s.approveBtn} onPress={() => { setReviewingRequest(lr); setReviewAction('approve'); setReviewNote(''); }} activeOpacity={0.7}>
                             <Ionicons name="checkmark" size={14} color={theme.colors.white} />
                           </TouchableOpacity>
-                          <TouchableOpacity style={s.rejectBtn} onPress={async () => { await reviewLeaveRequest(lr.id, user.id, 'rejected'); refresh(); }} activeOpacity={0.7}>
+                          <TouchableOpacity style={s.rejectBtn} onPress={() => { setReviewingRequest(lr); setReviewAction('reject'); setReviewNote(''); }} activeOpacity={0.7}>
                             <Ionicons name="close" size={14} color={theme.colors.white} />
                           </TouchableOpacity>
                         </View>
@@ -1210,6 +1216,66 @@ export default function AdminScreen() {
                 activeOpacity={0.8}
               >
                 <Text style={s.saveText}>Zapisz zmiany</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── LEAVE REQUEST REVIEW MODAL ─── */}
+      <Modal visible={!!reviewingRequest} animationType="fade" transparent onRequestClose={() => { setReviewingRequest(null); setReviewAction(null); }}>
+        <View style={s.mOverlay}>
+          <View style={[s.mSheet, isDesktop && s.mSheetDesktop]}>
+            <View style={s.mHeader}>
+              <View>
+                <Text style={s.mTitle}>{reviewAction === 'approve' ? 'Zatwierdź wniosek' : 'Odrzuć wniosek'}</Text>
+                <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 2 }}>
+                  {reviewingRequest ? `${reviewingRequest.employee_name || 'Pracownik'}: ${reviewingRequest.date_from} — ${reviewingRequest.date_to}` : ''}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => { setReviewingRequest(null); setReviewAction(null); }}>
+                <Ionicons name="close" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={s.mBody}>
+              <Text style={s.mLabel}>{reviewAction === 'approve' ? 'Notatka (opcjonalna)' : 'Powód odrzucenia (opcjonalny)'}</Text>
+              <TextInput
+                style={[s.mInput, s.mInputMulti, { minHeight: 100 }]}
+                value={reviewNote}
+                onChangeText={setReviewNote}
+                placeholder={reviewAction === 'approve' ? 'np. Wniosek zatwierdzony, życzymy udanych wakacji...' : 'np. Brak dostępnych dni urlopowych...'}
+                placeholderTextColor={theme.colors.textMuted}
+                multiline
+                numberOfLines={4}
+              />
+            </ScrollView>
+
+            <View style={s.footer}>
+              <TouchableOpacity style={s.cancelBtn} onPress={() => { setReviewingRequest(null); setReviewAction(null); }} activeOpacity={0.7}>
+                <Text style={s.cancelText}>Anuluj</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.saveBtn, reviewAction === 'reject' && { backgroundColor: theme.colors.error }]}
+                onPress={async () => {
+                  if (!reviewingRequest || !user || !reviewAction) return;
+                  setReviewing(true);
+                  const status = reviewAction === 'approve' ? 'approved' : 'rejected';
+                  await reviewLeaveRequestWithNotes(reviewingRequest.id, user.id, status, reviewNote.trim() || null);
+                  setReviewing(false);
+                  setReviewingRequest(null);
+                  setReviewAction(null);
+                  setReviewNote('');
+                  refresh();
+                }}
+                activeOpacity={0.8}
+                disabled={reviewing}
+              >
+                {reviewing ? (
+                  <ActivityIndicator size="small" color={theme.colors.white} />
+                ) : (
+                  <Text style={s.saveText}>{reviewAction === 'approve' ? 'Zatwierdź' : 'Odrzuć'}</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
