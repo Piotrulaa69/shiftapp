@@ -10,15 +10,18 @@ import { useAuth } from '../../context/AuthContext';
 import {
     createRestaurantWithInvite,
     getAllRestaurantsWithStats,
+    getPromoCodes,
     getRecentActivity,
     getSubscriptions,
     getSubscriptionsOverview,
     getSystemStats,
+    impersonateRestaurant,
+    upsertSubscription,
+    type PromoCode,
     type RestaurantWithStats,
     type Subscription,
     type SubscriptionStatus,
-    type SystemStats,
-    upsertSubscription,
+    type SystemStats
 } from '../../lib/super-admin';
 import { theme } from '../../styles/theme';
 
@@ -78,24 +81,46 @@ export default function SuperAdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
+  // Promo codes state
+  const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
+  const [showPromoModal, setShowPromoModal] = useState(false);
+  const [promoCode, setPromoCode] = useState('');
+  const [promoDiscount, setPromoDiscount] = useState('10');
+  const [promoMaxUses, setPromoMaxUses] = useState('');
+
+  // Impersonation state
+  const [impersonating, setImpersonating] = useState<string | null>(null);
+
+  // Promo codes state
+  const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
+  const [showPromoModal, setShowPromoModal] = useState(false);
+  const [promoCode, setPromoCode] = useState('');
+  const [promoDiscount, setPromoDiscount] = useState('10');
+  const [promoMaxUses, setPromoMaxUses] = useState('');
+
+  // Impersonation state
+  const [impersonating, setImpersonating] = useState<string | null>(null);
+
   // Create restaurant modal
   const [showCreate, setShowCreate] = useState(false);
   const [createdCode, setCreatedCode] = useState<string | null>(null);
 
   const loadAll = async () => {
     setLoading(true);
-    const [s, r, a, subs, subOvr] = await Promise.all([
+    const [s, r, a, subs, subOvr, promos] = await Promise.all([
       getSystemStats(),
       getAllRestaurantsWithStats(),
       getRecentActivity(),
       getSubscriptions(),
       getSubscriptionsOverview(),
+      getPromoCodes(),
     ]);
     setStats(s);
     setRestaurants(r);
     setActivity(a);
     setSubscriptions(subs);
     setSubOverview(subOvr);
+    setPromoCodes(promos);
     setLoading(false);
   };
 
@@ -417,12 +442,29 @@ function RestaurantsTab({ restaurants, search, setSearch, onAdd }: any) {
         </TouchableOpacity>
       </View>
       {restaurants.length === 0 && <Text style={{ textAlign: 'center', color: theme.colors.textMuted, marginTop: 24 }}>Brak restauracji</Text>}
-      {restaurants.map((r: RestaurantWithStats) => <RestaurantRow key={r.id} r={r} expanded />)}
+      {restaurants.map((r: RestaurantWithStats) => (
+  <RestaurantRow
+    key={r.id}
+    r={r}
+    expanded
+    onImpersonate={async (id) => {
+      if (!user?.id) return;
+      setImpersonating(id);
+      const result = await impersonateRestaurant(user.id, id);
+      if (result.success) {
+        Alert.alert('Sukces', `Zalogowano jako restauracja ID: ${id}\nToken: ${result.token?.slice(0, 20)}...`);
+      } else {
+        Alert.alert('Błąd', result.error || 'Nie udało się zalogować');
+      }
+      setImpersonating(null);
+    }}
+  />
+))}
     </View>
   );
 }
 
-function RestaurantRow({ r, expanded = false }: { r: RestaurantWithStats; expanded?: boolean }) {
+function RestaurantRow({ r, expanded = false, onImpersonate }: { r: RestaurantWithStats; expanded?: boolean; onImpersonate?: (id: string) => void }) {
   const plan = PLAN_CFG[r.plan as keyof typeof PLAN_CFG] ?? PLAN_CFG.basic;
   const day = new Date(r.created_at).toLocaleDateString('pl-PL');
   return (
@@ -438,9 +480,16 @@ function RestaurantRow({ r, expanded = false }: { r: RestaurantWithStats; expand
         <Text style={s.restMeta}>{r.owner_name ?? 'brak właściciela'} · {day}</Text>
         {expanded && r.address ? <Text style={s.restAddress} numberOfLines={1}>{r.address}</Text> : null}
       </View>
-      <View style={s.restStats}>
-        <View style={s.restStatItem}><Ionicons name="people-outline" size={13} color={theme.colors.textMuted} /><Text style={s.restStatText}>{r.employee_count}</Text></View>
-        <View style={s.restStatItem}><Ionicons name="list-outline" size={13} color={theme.colors.textMuted} /><Text style={s.restStatText}>{r.task_count}</Text></View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View style={s.restStats}>
+          <View style={s.restStatItem}><Ionicons name="people-outline" size={13} color={theme.colors.textMuted} /><Text style={s.restStatText}>{r.employee_count}</Text></View>
+          <View style={s.restStatItem}><Ionicons name="list-outline" size={13} color={theme.colors.textMuted} /><Text style={s.restStatText}>{r.task_count}</Text></View>
+        </View>
+        {onImpersonate && (
+          <TouchableOpacity style={s.loginAsBtn} onPress={() => onImpersonate(r.id)} activeOpacity={0.7}>
+            <Ionicons name="enter-outline" size={16} color={theme.colors.primary} />
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );

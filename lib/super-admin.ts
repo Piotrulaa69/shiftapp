@@ -129,6 +129,133 @@ export async function getRecentActivity(): Promise<{ type: string; text: string;
 
 // ── Create restaurant + owner invite ──────────────────
 
+// ── Promo Code types ────────────────────────────────────
+
+export type PromoCode = {
+  id?: string;
+  code: string;
+  discount_percent: number;
+  valid_from: string;
+  valid_until: string | null;
+  max_uses: number | null;
+  used_count: number;
+  is_active: boolean;
+  created_by: string;
+  created_at?: string;
+};
+
+// ── Impersonation ──────────────────────────────────────
+
+export async function impersonateRestaurant(
+  superAdminId: string,
+  restaurantId: string
+): Promise<{ success: boolean; token?: string; error?: string }> {
+  // Log impersonation attempt
+  const { error: logError } = await supabase.from('impersonation_logs').insert({
+    super_admin_id: superAdminId,
+    target_restaurant_id: restaurantId,
+    impersonated_at: new Date().toISOString(),
+  });
+  if (logError) console.error('impersonation log', logError);
+
+  // Get restaurant owner session token (requires 2FA verification first)
+  const { data, error } = await supabase
+    .rpc('generate_impersonation_token', { target_restaurant_id: restaurantId });
+  
+  if (error) return { success: false, error: error.message };
+  return { success: true, token: data };
+}
+
+// ── Password Reset ───────────────────────────────────────
+
+export async function resetEmployeePassword(
+  employeeId: string,
+  newPassword: string
+): Promise<boolean> {
+  const { error } = await supabase.auth.admin.updateUserById(employeeId, { password: newPassword });
+  if (error) { console.error('resetEmployeePassword', error); return false; }
+  return true;
+}
+
+// ── Promo Codes ─────────────────────────────────────────
+
+export async function createPromoCode(
+  code: string,
+  discountPercent: number,
+  validFrom: string,
+  validUntil: string | null,
+  maxUses: number | null,
+  createdBy: string
+): Promise<PromoCode | null> {
+  const { data, error } = await supabase
+    .from('promo_codes')
+    .insert({
+      code: code.toUpperCase(),
+      discount_percent: discountPercent,
+      valid_from: validFrom,
+      valid_until: validUntil,
+      max_uses: maxUses,
+      created_by: createdBy,
+      is_active: true,
+      used_count: 0,
+    })
+    .select()
+    .single();
+  if (error) { console.error('createPromoCode', error); return null; }
+  return data as PromoCode;
+}
+
+export async function getPromoCodes(): Promise<PromoCode[]> {
+  const { data, error } = await supabase
+    .from('promo_codes')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) { console.error('getPromoCodes', error); return []; }
+  return (data as PromoCode[]) || [];
+}
+
+export async function togglePromoCode(codeId: string, isActive: boolean): Promise<boolean> {
+  const { error } = await supabase
+    .from('promo_codes')
+    .update({ is_active: isActive })
+    .eq('id', codeId);
+  return !error;
+}
+
+// ── Subscription Adjustments ─────────────────────────────
+
+export async function adjustSubscription(
+  restaurantId: string,
+  adjustmentType: 'pause' | 'resume' | 'discount' | 'extend_trial',
+  reason: string,
+  adjustedBy: string,
+  discountPercent?: number,
+  newPeriodEnd?: string
+): Promise<boolean> {
+  const { error } = await supabase.from('subscription_adjustments').insert({
+    restaurant_id: restaurantId,
+    adjustment_type: adjustmentType,
+    reason,
+    adjusted_by: adjustedBy,
+    discount_percent: discountPercent || null,
+    new_period_end: newPeriodEnd || null,
+  });
+  if (error) { console.error('adjustSubscription', error); return false; }
+  return true;
+}
+
+export async function applyPromoToSubscription(
+  restaurantId: string,
+  promoCodeId: string
+): Promise<{ success: boolean; error?: string }> {
+  const { data, error } = await supabase
+    .rpc('apply_promo_code', { p_restaurant_id: restaurantId, p_promo_code_id: promoCodeId });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+// ── Create restaurant + owner invite ──────────────────
+
 export async function createRestaurantWithInvite(
   superAdminId: string,
   data: { name: string; address: string; phone: string; plan: 'basic' | 'premium' }
