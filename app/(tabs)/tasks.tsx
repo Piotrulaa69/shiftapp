@@ -78,6 +78,12 @@ function TaskCard({ task, onToggle, onDelete, onDetail, onStart, onFinish, assig
             <Ionicons name="timer-outline" size={12} color={theme.colors.textMuted} />
             <Text style={tStyles.durationText}>{task.duration_min} min</Text>
           </View>
+          {(task.points || 0) > 0 && (
+            <View style={tStyles.pointsBadge}>
+              <Ionicons name="star" size={10} color={theme.colors.yellow} />
+              <Text style={tStyles.pointsText}>{task.points} pkt</Text>
+            </View>
+          )}
           {assigneeName && (
             <View style={tStyles.assigneeTag}>
               <Ionicons name="person-outline" size={11} color={theme.colors.textSecondary} />
@@ -180,6 +186,8 @@ const tStyles = StyleSheet.create({
   assigneeText: { fontSize: 11, fontWeight: '600', color: theme.colors.textSecondary },
   rejectionBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FFF0EF', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginTop: 4, marginBottom: 2, borderLeftWidth: 3, borderLeftColor: theme.colors.error },
   rejectionText: { fontSize: 12, fontWeight: '600', color: theme.colors.error, flex: 1 },
+  pointsBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: theme.colors.yellowLight, borderRadius: theme.borderRadius.full, paddingHorizontal: 7, paddingVertical: 2 },
+  pointsText: { fontSize: 11, fontWeight: '700', color: theme.colors.yellow },
 });
 
 type CfgValueItem = { id: string; name: string; unit: string; min: string; max: string };
@@ -232,6 +240,9 @@ export default function TasksScreen() {
   const [recurrencePattern, setRecurrencePattern] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('daily');
   const [recurrenceEndDate, setRecurrenceEndDate] = useState('');
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
+
+  // Points (admin/manager only)
+  const [points, setPoints] = useState<string>('');
 
   useFocusEffect(useCallback(() => {
     if (!rid) return;
@@ -322,6 +333,7 @@ export default function TasksScreen() {
       recurrence_pattern: isRecurring ? recurrencePattern : null,
       recurrence_days: isRecurring ? recurrenceDays : null,
       recurrence_end_date: isRecurring && recurrenceEndDate ? recurrenceEndDate : null,
+      points: canApprove && points ? parseInt(points) || 0 : 0,
     });
     if (created) setTasks((prev) => [...prev, created]);
     setSaving(false);
@@ -329,6 +341,7 @@ export default function TasksScreen() {
     setNewTitle(''); setNewDesc(''); setNewTime('08:00'); setNewPriority('normalny'); setNewDuration('30'); setNewConfirm(null); setNewAssignedTo('');
     setCfgValueItems([]); setCfgCheckItems([]); setCfgPrompt('');
     setIsRecurring(false); setRecurrencePattern('daily'); setRecurrenceEndDate(''); setSelectedDays([]);
+    setPoints('');
   };
 
   if (loading) return (
@@ -692,6 +705,20 @@ export default function TasksScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
+
+              {canApprove && (
+                <>
+                  <Text style={mStyles.label}>Punkty (opcjonalnie)</Text>
+                  <TextInput
+                    style={mStyles.input}
+                    value={points}
+                    onChangeText={setPoints}
+                    keyboardType="numeric"
+                    placeholder="np. 10 (punkty za wykonanie zadania)"
+                    placeholderTextColor={theme.colors.textMuted}
+                  />
+                </>
+              )}
 
               <Text style={mStyles.label}>Potwierdzenie</Text>
               <View style={mStyles.chips}>
