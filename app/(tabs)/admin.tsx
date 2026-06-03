@@ -44,6 +44,12 @@ export default function AdminScreen() {
   const [groupName, setGroupName] = useState('');
   const [groupColor, setGroupColor] = useState('#2563EB');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+
+  // Employee edit state
+  const [showEmployeeModal, setShowEmployeeModal] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<DbProfile | null>(null);
+  const [empLeaveDays, setEmpLeaveDays] = useState<string>('');
+  const [empLeaveTypeSettings, setEmpLeaveTypeSettings] = useState<{type: string, enabled: boolean, days: string}[]>([]);
   const [jobTitle, setJobTitle] = useState('Kelner');
   const [lastCode, setLastCode] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
@@ -415,7 +421,16 @@ export default function AdminScreen() {
                 </View>
               ) : (
                 staff.map((emp) => (
-                  <View key={emp.id} style={s.empRow}>
+                  <TouchableOpacity key={emp.id} style={s.empRow} onPress={() => {
+                    setEditingEmployee(emp);
+                    setEmpLeaveDays('20'); // Default, would fetch from API
+                    setEmpLeaveTypeSettings([
+                      { type: 'annual', enabled: true, days: '20' },
+                      { type: 'sick', enabled: true, days: '' },
+                      { type: 'unpaid', enabled: true, days: '' },
+                    ]);
+                    setShowEmployeeModal(true);
+                  }} activeOpacity={0.7}>
                     <View style={[s.empAvatar, { backgroundColor: emp.avatar_color }]}>
                       <Text style={s.empInitials}>{`${emp.first_name[0] ?? ''}${emp.last_name[0] ?? ''}`.toUpperCase()}</Text>
                     </View>
@@ -423,16 +438,8 @@ export default function AdminScreen() {
                       <Text style={s.empName}>{emp.first_name} {emp.last_name}</Text>
                       <Text style={s.empRole}>{emp.job_title}</Text>
                     </View>
-                    {emp.id !== user?.id && (
-                      <TouchableOpacity
-                        style={s.removeBtn}
-                        onPress={() => removeEmp(emp.id, `${emp.first_name} ${emp.last_name}`)}
-                        activeOpacity={0.7}
-                      >
-                        <Ionicons name="person-remove-outline" size={16} color={theme.colors.error} />
-                      </TouchableOpacity>
-                    )}
-                  </View>
+                    <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+                  </TouchableOpacity>
                 ))
               )}
             </View>
@@ -1093,6 +1100,116 @@ export default function AdminScreen() {
                 activeOpacity={0.8}
               >
                 <Text style={s.saveText}>{editingGroup ? 'Zapisz zmiany' : 'Utwórz zespół'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── EMPLOYEE EDIT MODAL ─── */}
+      <Modal visible={showEmployeeModal} animationType="fade" transparent onRequestClose={() => setShowEmployeeModal(false)}>
+        <View style={s.mOverlay}>
+          <View style={[s.mSheet, isDesktop && s.mSheetDesktop, { maxHeight: '90%' }]}>
+            <View style={s.mHeader}>
+              <View>
+                <Text style={s.mTitle}>Edytuj pracownika</Text>
+                <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 2 }}>
+                  {editingEmployee ? `${editingEmployee.first_name} ${editingEmployee.last_name}` : ''}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowEmployeeModal(false)}>
+                <Ionicons name="close" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={s.mBody}>
+              {/* Leave Quota Section */}
+              <View style={tm.section}>
+                <View style={tm.sectionHeader}>
+                  <View style={[tm.sectionDot, { backgroundColor: theme.colors.primary }]} />
+                  <Text style={tm.sectionLabel}>NORMA URLOPOWA</Text>
+                </View>
+
+                <Text style={s.mLabel}>Dni urlopu wypoczynkowego (rocznie)</Text>
+                <TextInput
+                  style={s.mInput}
+                  value={empLeaveDays}
+                  onChangeText={setEmpLeaveDays}
+                  keyboardType="numeric"
+                  placeholder="np. 20"
+                  placeholderTextColor={theme.colors.textMuted}
+                />
+
+                <Text style={[s.mLabel, { marginTop: 16 }]}>Typy urlopów</Text>
+                {empLeaveTypeSettings.map((setting, idx) => (
+                  <View key={setting.type} style={{ marginBottom: 12 }}>
+                    <TouchableOpacity
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}
+                      onPress={() => {
+                        setEmpLeaveTypeSettings(prev => prev.map((s, i) => i === idx ? { ...s, enabled: !s.enabled } : s));
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={{
+                        width: 22, height: 22, borderRadius: 6, borderWidth: 2,
+                        borderColor: setting.enabled ? theme.colors.primary : theme.colors.border,
+                        backgroundColor: setting.enabled ? theme.colors.primary : 'transparent',
+                        alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        {setting.enabled && <Ionicons name="checkmark" size={16} color="#fff" />}
+                      </View>
+                      <Text style={{ fontSize: 14, fontWeight: '600', color: theme.colors.text }}>
+                        {setting.type === 'annual' ? 'Urlop wypoczynkowy' :
+                         setting.type === 'sick' ? 'Zwolnienie lekarskie' :
+                         setting.type === 'unpaid' ? 'Urlop bezpłatny' : setting.type}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {setting.enabled && setting.type !== 'unpaid' && (
+                      <TextInput
+                        style={[s.mInput, { marginLeft: 32 }]}
+                        value={setting.days}
+                        onChangeText={(v) => {
+                          setEmpLeaveTypeSettings(prev => prev.map((s, i) => i === idx ? { ...s, days: v } : s));
+                        }}
+                        keyboardType="numeric"
+                        placeholder={setting.type === 'annual' ? 'Dni rocznie (np. 20)' : 'Dni rocznie (np. 14)'}
+                        placeholderTextColor={theme.colors.textMuted}
+                      />
+                    )}
+                  </View>
+                ))}
+              </View>
+
+              {/* Groups Section */}
+              <View style={tm.section}>
+                <View style={tm.sectionHeader}>
+                  <View style={[tm.sectionDot, { backgroundColor: '#7C3AED' }]} />
+                  <Text style={tm.sectionLabel}>PRZYPISANE ZESPOŁY</Text>
+                </View>
+                <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginBottom: 10 }}>
+                  Zarządzanie zespołami pracownika w zakładce "Zespoły"
+                </Text>
+              </View>
+
+              <View style={{ height: 20 }} />
+            </ScrollView>
+
+            <View style={s.footer}>
+              <TouchableOpacity style={s.cancelBtn} onPress={() => setShowEmployeeModal(false)} activeOpacity={0.7}>
+                <Text style={s.cancelText}>Anuluj</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={s.saveBtn}
+                onPress={async () => {
+                  if (!editingEmployee) return;
+                  // TODO: Save leave quota and type settings via API
+                  setShowEmployeeModal(false);
+                  refresh();
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={s.saveText}>Zapisz zmiany</Text>
               </TouchableOpacity>
             </View>
           </View>
