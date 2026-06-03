@@ -110,7 +110,7 @@ export type DbTask = {
   proof_comment: string | null;
   rejection_comment: string | null;
   is_recurring: boolean;
-  recurrence_pattern: 'daily' | 'weekly' | 'monthly' | 'custom' | null;
+  recurrence_pattern: 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom' | null;
   recurrence_days: number[] | null;
   recurrence_week_day: number | null;
   recurrence_month_day: number | null;
@@ -269,7 +269,7 @@ export type DbShiftSwap = {
   requester_shift: string;
   responder_shift: string | null;
   swap_type: 'swap' | 'give';
-  status: 'pending_responder' | 'pending_manager' | 'approved' | 'rejected_responder' | 'rejected_manager';
+  status: 'pending_responder' | 'pending_manager' | 'approved' | 'rejected_responder' | 'rejected_manager' | 'cancelled';
   manager_id: string | null;
   created_at: string;
 };

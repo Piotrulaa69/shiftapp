@@ -11,7 +11,7 @@ import {
     TextInput,
     TouchableOpacity,
     useWindowDimensions,
-    View,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TeamSkeleton } from '../../components/Skeleton';
@@ -50,6 +50,14 @@ export default function TeamScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
 
+  // Leave quota state
+  const [leaveTypes, setLeaveTypes] = useState<DbLeaveType[]>([]);
+  const [leaveSettings, setLeaveSettings] = useState<DbEmployeeLeaveTypeSetting[]>([]);
+  const [loadingLeave, setLoadingLeave] = useState(false);
+  const [savingLeave, setSavingLeave] = useState(false);
+  // local editable leave config: { [leaveTypeId]: { days: string, periodStart: string, periodEnd: string } }
+  const [leaveEdits, setLeaveEdits] = useState<Record<string, { days: string; periodStart: string; periodEnd: string }>>({});
+
   const loadTeam = useCallback(async () => {
     if (!rid) return;
     const data = await getEmployees(rid);
@@ -68,7 +76,7 @@ export default function TeamScreen() {
     setRefreshing(false);
   }, [loadTeam]);
 
-  const openProfile = (emp: DbProfile) => {
+  const openProfile = async (emp: DbProfile) => {
     setSelectedEmp(emp);
     setEditing(false);
     setEditJobTitle(emp.job_title ?? '');
@@ -81,6 +89,45 @@ export default function TeamScreen() {
     setEditActive(emp.is_active);
     setEmpPoints(0);
     getPointsForEmployee(rid, emp.id).then((pts) => setEmpPoints(pts.reduce((s, p) => s + p.points, 0)));
+    // Load leave types and settings
+    setLoadingLeave(true);
+    const [types, settings] = await Promise.all([
+      ensureDefaultLeaveTypes(rid),
+      getEmployeeLeaveTypeSettings(emp.id),
+    ]);
+    setLeaveTypes(types);
+    setLeaveSettings(settings);
+    // Build initial edits map
+    const edits: Record<string, { days: string; periodStart: string; periodEnd: string }> = {};
+    types.forEach((lt) => {
+      const s = settings.find((x) => x.leave_type_id === lt.id);
+      edits[lt.id] = {
+        days: s?.custom_days_per_year != null ? String(s.custom_days_per_year) : String(lt.days_per_year),
+        periodStart: (s as any)?.period_start ?? `${new Date().getFullYear()}-01-01`,
+        periodEnd: (s as any)?.period_end ?? `${new Date().getFullYear()}-12-31`,
+      };
+    });
+    setLeaveEdits(edits);
+    setLoadingLeave(false);
+  };
+
+  const saveLeaveQuota = async () => {
+    if (!selectedEmp) return;
+    setSavingLeave(true);
+    const results = await Promise.all(
+      leaveTypes.map((lt) => {
+        const edit = leaveEdits[lt.id];
+        if (!edit) return Promise.resolve(true);
+        return setEmployeeLeaveTypeSetting(selectedEmp.id, lt.id, {
+          is_enabled: true,
+          custom_days_per_year: edit.days !== '' ? parseInt(edit.days) || 0 : null,
+        });
+      })
+    );
+    setSavingLeave(false);
+    if (results.every(Boolean)) {
+      Alert.alert('Zapisano', 'Wymiar urlopu został zaktualizowany.');
+    }
   };
 
   const saveEdit = async () => {
@@ -284,6 +331,81 @@ export default function TeamScreen() {
                   </>
                 )}
               </View>
+
+              {/* ─── Vacation Quota Section ─── */}
+              {isManager && (
+                <View style={mStyles.section}>
+                  <View style={mStyles.sectionTitleRow}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Ionicons name="umbrella-outline" size={16} color={theme.colors.primary} />
+                      <Text style={mStyles.sectionTitle}>Wymiar urlopu</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[mStyles.editBtn, { backgroundColor: theme.colors.greenLight }]}
+                      onPress={saveLeaveQuota}
+                      disabled={savingLeave || loadingLeave}
+                      activeOpacity={0.8}
+                    >
+                      {savingLeave
+                        ? <ActivityIndicator size="small" color={theme.colors.green} />
+                        : <>
+                            <Ionicons name="save-outline" size={14} color={theme.colors.green} />
+                            <Text style={[mStyles.editBtnText, { color: theme.colors.green }]}>Zapisz urlopy</Text>
+                          </>
+                      }
+                    </TouchableOpacity>
+                  </View>
+
+                  {loadingLeave ? (
+                    <ActivityIndicator color={theme.colors.primary} style={{ marginVertical: 20 }} />
+                  ) : leaveTypes.length === 0 ? (
+                    <Text style={{ fontSize: 13, color: theme.colors.textMuted, fontStyle: 'italic' }}>Brak typów urlopu</Text>
+                  ) : (
+                    <>
+                      {leaveTypes.map((lt) => {
+                        const LEAVE_ICONS: Record<string, { icon: string; color: string; bg: string }> = {
+                          standard: { icon: 'sunny-outline', color: '#2563EB', bg: '#EFF6FF' },
+                          special: { icon: 'heart-outline', color: '#A855F7', bg: '#F5F3FF' },
+                          parental: { icon: 'people-outline', color: '#F97316', bg: '#FFF4E5' },
+                        };
+                        const cat = lt.category ?? 'standard';
+                        const ico = LEAVE_ICONS[cat] ?? LEAVE_ICONS.standard;
+                        const edit = leaveEdits[lt.id] ?? { days: String(lt.days_per_year), periodStart: '', periodEnd: '' };
+                        return (
+                          <View key={lt.id} style={leaveStyles.row}>
+                            <View style={[leaveStyles.iconBox, { backgroundColor: ico.bg }]}>
+                              <Ionicons name={ico.icon as any} size={18} color={ico.color} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={leaveStyles.typeName}>{lt.name}</Text>
+                              <Text style={leaveStyles.typeSub}>
+                                {lt.payment_rate === 0 ? 'Bezpłatny' : lt.payment_rate === 100 ? 'Płatny' : `${lt.payment_rate}% płatny`}
+                              </Text>
+                            </View>
+                            <View style={leaveStyles.daysRow}>
+                              <TextInput
+                                style={leaveStyles.daysInput}
+                                value={edit.days}
+                                onChangeText={(v) => setLeaveEdits((prev) => ({ ...prev, [lt.id]: { ...prev[lt.id], days: v } }))}
+                                keyboardType="numeric"
+                                selectTextOnFocus
+                              />
+                              <Text style={leaveStyles.daysLabel}>dni</Text>
+                            </View>
+                          </View>
+                        );
+                      })}
+                      <View style={leaveStyles.periodRow}>
+                        <Ionicons name="calendar-outline" size={14} color={theme.colors.textMuted} />
+                        <Text style={leaveStyles.periodLabel}>Okres naliczania:</Text>
+                        <Text style={leaveStyles.periodValue}>
+                          {`01.01.${new Date().getFullYear()} – 31.12.${new Date().getFullYear()}`}
+                        </Text>
+                      </View>
+                    </>
+                  )}
+                </View>
+              )}
             </ScrollView>
           </View>
         </View>
@@ -360,4 +482,49 @@ const mStyles = StyleSheet.create({
   chipTextActive: { color: theme.colors.primary },
   saveBtn: { backgroundColor: theme.colors.primary, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
   saveBtnText: { fontSize: 14, fontWeight: '700', color: theme.colors.white },
+});
+
+const leaveStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  iconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  typeName: { fontSize: 14, fontWeight: '600', color: theme.colors.text },
+  typeSub: { fontSize: 11, color: theme.colors.textMuted, marginTop: 1 },
+  daysRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  daysInput: {
+    width: 52,
+    height: 36,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+    borderRadius: 8,
+    textAlign: 'center',
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.colors.text,
+    backgroundColor: theme.colors.surface,
+  },
+  daysLabel: { fontSize: 12, color: theme.colors.textMuted, fontWeight: '600' },
+  periodRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+    backgroundColor: theme.colors.surface,
+    borderRadius: 8,
+    padding: 10,
+  },
+  periodLabel: { fontSize: 12, color: theme.colors.textSecondary, fontWeight: '600' },
+  periodValue: { fontSize: 12, color: theme.colors.text, fontWeight: '700', flex: 1 },
 });

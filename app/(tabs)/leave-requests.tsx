@@ -8,6 +8,14 @@ import { createLeaveRequest, deleteLeaveRequest, ensureDefaultLeaveTypes, getEmp
 import type { DbLeaveRequest, DbLeaveType, DbProfile } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
+const LEAVE_TYPE_ICONS: Record<string, { icon: string; color: string; bg: string }> = {
+  standard: { icon: 'sunny-outline', color: '#2563EB', bg: '#EFF6FF' },
+  special: { icon: 'heart-outline', color: '#A855F7', bg: '#F5F3FF' },
+  parental: { icon: 'people-outline', color: '#F97316', bg: '#FFF4E5' },
+};
+
+const getLeaveIcon = (category?: string) => LEAVE_TYPE_ICONS[category ?? 'standard'] ?? LEAVE_TYPE_ICONS.standard;
+
 const MONTHS = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
 const DAY_NAMES = ['Pn','Wt','Śr','Cz','Pt','Sb','Nd'];
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -113,6 +121,17 @@ export default function LeaveRequestsScreen() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'my' | 'team'>('my');
+
+  // Date range filter
+  const today = new Date();
+  const firstOfMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+  const lastOfMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()}`;
+  const [dateRangeFrom, setDateRangeFrom] = useState('');
+  const [dateRangeTo, setDateRangeTo] = useState('');
+  const [showDateFilter, setShowDateFilter] = useState(false);
+
+  // Action menu
+  const [actionMenuReq, setActionMenuReq] = useState<DbLeaveRequest | null>(null);
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
@@ -236,10 +255,18 @@ export default function LeaveRequestsScreen() {
     load();
   };
 
-  const filtered = filter === 'all' ? requests : requests.filter((r) => r.status === filter);
-  const displayList = viewMode === 'team'
-    ? (filter === 'all' ? teamRequests : teamRequests.filter((r) => r.status === filter))
-    : filtered;
+  const applyDateFilter = (list: DbLeaveRequest[]) => {
+    if (!dateRangeFrom && !dateRangeTo) return list;
+    return list.filter((r) => {
+      const from = dateRangeFrom ? r.date_from >= dateRangeFrom : true;
+      const to = dateRangeTo ? r.date_to <= dateRangeTo : true;
+      return from && to;
+    });
+  };
+
+  const base = viewMode === 'team' ? teamRequests : requests;
+  const statusFiltered = filter === 'all' ? base : base.filter((r) => r.status === filter);
+  const displayList = applyDateFilter(statusFiltered);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -266,13 +293,43 @@ export default function LeaveRequestsScreen() {
         </View>
       )}
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.filters, isDesktop && styles.filtersDesktop]}>
-        {[{ key: 'all', label: 'Wszystkie' }, { key: 'pending', label: 'Oczekujące' }, { key: 'approved', label: 'Zatwierdzone' }, { key: 'rejected', label: 'Odrzucone' }].map((f) => (
-          <TouchableOpacity key={f.key} style={[styles.filterBtn, filter === f.key && styles.filterActive]} onPress={() => setFilter(f.key)}>
-            <Text style={[styles.filterText, filter === f.key && styles.filterTextActive]}>{f.label}</Text>
+      {/* Date range filter bar */}
+      <View style={[styles.dateFilterBar, isDesktop && styles.dateFilterBarDesktop]}>
+        <TouchableOpacity style={styles.dateRangeBtn} onPress={() => setShowDateFilter((v) => !v)} activeOpacity={0.8}>
+          <Ionicons name="calendar-outline" size={14} color={theme.colors.primary} />
+          <Text style={styles.dateRangeBtnText}>
+            {dateRangeFrom || dateRangeTo
+              ? `${dateRangeFrom || '...'} – ${dateRangeTo || '...'}`
+              : 'Filtruj po dacie'}
+          </Text>
+          <Ionicons name={showDateFilter ? 'chevron-up' : 'chevron-down'} size={14} color={theme.colors.textMuted} />
+        </TouchableOpacity>
+        {(dateRangeFrom || dateRangeTo) && (
+          <TouchableOpacity onPress={() => { setDateRangeFrom(''); setDateRangeTo(''); }} style={styles.clearDateBtn}>
+            <Ionicons name="close-circle" size={16} color={theme.colors.textMuted} />
           </TouchableOpacity>
-        ))}
-      </ScrollView>
+        )}
+        <View style={styles.filtersInline}>
+          {[{ key: 'all', label: 'Wszystkie' }, { key: 'pending', label: 'Oczekujące' }, { key: 'approved', label: 'Zatwierdzone' }, { key: 'rejected', label: 'Odrzucone' }].map((f) => (
+            <TouchableOpacity key={f.key} style={[styles.filterChip, filter === f.key && styles.filterChipActive]} onPress={() => setFilter(f.key)}>
+              <Text style={[styles.filterChipText, filter === f.key && styles.filterChipTextActive]}>{f.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      {showDateFilter && (
+        <View style={[styles.dateExpandedRow, isDesktop && styles.dateFilterBarDesktop]}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.dateRangeLabel}>Od</Text>
+            <CalendarPicker value={dateRangeFrom} onChange={setDateRangeFrom} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.dateRangeLabel}>Do</Text>
+            <CalendarPicker value={dateRangeTo} onChange={setDateRangeTo} minDate={dateRangeFrom || undefined} />
+          </View>
+        </View>
+      )}
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]} style={isDesktop ? { width: '100%' } : undefined}>
         {loading ? (
@@ -290,34 +347,72 @@ export default function LeaveRequestsScreen() {
           const isOwn = r.employee_id === user?.id;
           const canEdit = isOwn && r.status === 'pending';
           const canDelete = isOwn && (r.status === 'pending' || r.status === 'cancelled');
+          const typeObj = leaveTypes.find((lt) => lt.id === r.leave_type_id);
+          const leaveIcon = getLeaveIcon(typeObj?.category);
+          const reviewerEmp = employees.find((e) => e.id === r.reviewed_by);
+          const reviewerName = reviewerEmp ? `${reviewerEmp.first_name} ${reviewerEmp.last_name}` : null;
+          const submittedAt = r.created_at ? new Date(r.created_at).toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : null;
+
           return (
             <View key={r.id} style={styles.card}>
-              {viewMode === 'team' && empName ? (
-                <View style={styles.empRow}>
-                  <View style={[styles.empAvatar, { backgroundColor: emp?.avatar_color ?? theme.colors.primary }]}>
-                    <Text style={styles.empInitials}>{empName.split(' ').map((n) => n[0]).join('').toUpperCase()}</Text>
-                  </View>
-                  <Text style={styles.empName}>{empName}</Text>
+              {/* Card Header: Avatar + Name + Status + Menu */}
+              <View style={styles.cardHeader}>
+                <View style={[styles.empAvatar, { backgroundColor: emp?.avatar_color ?? theme.colors.primary }]}>
+                  <Text style={styles.empInitials}>
+                    {(viewMode === 'team' && empName ? empName : (user?.name ?? ''))
+                      .split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
+                  </Text>
                 </View>
-              ) : null}
-              <View style={styles.cardTop}>
-                <Text style={styles.cardType}>{typeName}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.empNameBold}>
+                    {viewMode === 'team' && empName ? empName : user?.name ?? ''}
+                  </Text>
+                  <Text style={styles.empJobSub}>{typeObj?.category === 'parental' ? 'Urlop rodzicielski' : typeObj?.category === 'special' ? 'Urlop okolicznościowy' : 'Pracownik'}</Text>
+                </View>
                 <View style={[styles.badge, { backgroundColor: st.bg }]}>
                   <Text style={[styles.badgeText, { color: st.color }]}>{st.label}</Text>
                 </View>
+                <TouchableOpacity onPress={() => setActionMenuReq(r)} style={styles.menuBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="ellipsis-vertical" size={18} color={theme.colors.textMuted} />
+                </TouchableOpacity>
               </View>
-              <View style={styles.datesRow}>
-                <Ionicons name="calendar-outline" size={13} color={theme.colors.textMuted} />
-                <Text style={styles.cardDates}>{r.date_from} → {r.date_to}</Text>
-                <View style={styles.daysBadge}><Text style={styles.daysText}>{r.days_count} dni</Text></View>
-              </View>
-              {r.expected_hours != null && (
-                <View style={styles.hoursRow}>
-                  <Ionicons name="time-outline" size={13} color={theme.colors.textMuted} />
-                  <Text style={styles.hoursText}>Oczekiwane godziny: <Text style={{ fontWeight: '700', color: theme.colors.text }}>{r.expected_hours}h</Text></Text>
+
+              {/* Leave type row */}
+              <View style={styles.leaveTypeRow}>
+                <View style={styles.leaveTypeLeft}>
+                  <Text style={styles.leaveTypeLabel}>Rodzaj nieobecności</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                    <View style={[styles.leaveIconBadge, { backgroundColor: leaveIcon.bg }]}>
+                      <Ionicons name={leaveIcon.icon as any} size={13} color={leaveIcon.color} />
+                    </View>
+                    <Text style={styles.leaveTypeName}>{typeName}</Text>
+                  </View>
                 </View>
+                <View style={styles.leaveTypeRight}>
+                  <Text style={styles.leaveTypeLabel}>Okres nieobecności</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 }}>
+                    <Ionicons name="calendar-outline" size={12} color={theme.colors.textMuted} />
+                    <Text style={styles.leaveDatesText}>
+                      {r.date_from?.split('-').reverse().join('.')} – {r.date_to?.split('-').reverse().join('.')}
+                    </Text>
+                  </View>
+                  <Text style={styles.leaveDayCount}>({r.days_count} {r.days_count === 1 ? 'dzień' : 'dni'})</Text>
+                </View>
+              </View>
+
+              {/* Submitted at */}
+              {submittedAt && (
+                <Text style={styles.submittedAt}>Zgłoszono: {submittedAt}</Text>
               )}
-              {r.comment ? <Text style={styles.cardComment}>"{r.comment}"</Text> : null}
+
+              {/* Reviewer info */}
+              {r.status === 'approved' && reviewerName && (
+                <Text style={styles.reviewerInfo}>Zatwierdził: {reviewerName}</Text>
+              )}
+              {r.status === 'rejected' && reviewerName && (
+                <Text style={[styles.reviewerInfo, { color: theme.colors.error }]}>Odrzucił: {reviewerName}</Text>
+              )}
+
               {r.review_comment ? (
                 <View style={styles.reviewRow}>
                   <Ionicons name="chatbubble-outline" size={12} color={theme.colors.primary} />
@@ -325,33 +420,19 @@ export default function LeaveRequestsScreen() {
                 </View>
               ) : null}
 
-              {/* Actions row */}
-              <View style={styles.actionsRow}>
-                {canEdit && (
-                  <TouchableOpacity style={styles.actionEdit} onPress={() => openEdit(r)}>
-                    <Ionicons name="pencil-outline" size={13} color={theme.colors.primary} />
-                    <Text style={styles.actionEditText}>Edytuj</Text>
+              {/* Approve/Reject actions for managers */}
+              {canManage && r.status === 'pending' && (
+                <View style={styles.actionsRow}>
+                  <TouchableOpacity style={styles.actionApprove} onPress={() => handleApprove(r)}>
+                    <Ionicons name="checkmark" size={13} color={theme.colors.green} />
+                    <Text style={styles.actionApproveText}>Zatwierdź</Text>
                   </TouchableOpacity>
-                )}
-                {canDelete && (
-                  <TouchableOpacity style={styles.actionDelete} onPress={() => handleDelete(r)}>
-                    <Ionicons name="trash-outline" size={13} color={theme.colors.error} />
-                    <Text style={styles.actionDeleteText}>Usuń</Text>
+                  <TouchableOpacity style={styles.actionReject} onPress={() => { setRejectTarget(r); setRejectComment(''); }}>
+                    <Ionicons name="close" size={13} color={theme.colors.error} />
+                    <Text style={styles.actionRejectText}>Odrzuć</Text>
                   </TouchableOpacity>
-                )}
-                {canManage && r.status === 'pending' && (
-                  <>
-                    <TouchableOpacity style={styles.actionApprove} onPress={() => handleApprove(r)}>
-                      <Ionicons name="checkmark" size={13} color={theme.colors.green} />
-                      <Text style={styles.actionApproveText}>Zatwierdź</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.actionReject} onPress={() => { setRejectTarget(r); setRejectComment(''); }}>
-                      <Ionicons name="close" size={13} color={theme.colors.error} />
-                      <Text style={styles.actionRejectText}>Odrzuć</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-              </View>
+                </View>
+              )}
             </View>
           );
         })}
@@ -480,6 +561,55 @@ export default function LeaveRequestsScreen() {
         </View>
       </Modal>
 
+      {/* Action Menu Modal (⋮) */}
+      <Modal visible={!!actionMenuReq} animationType="fade" transparent onRequestClose={() => setActionMenuReq(null)}>
+        <TouchableOpacity style={mStyles.overlay} activeOpacity={1} onPress={() => setActionMenuReq(null)}>
+          <View style={[mStyles.actionMenuSheet, isDesktop && { maxWidth: 360, alignSelf: 'center' as const }]}>
+            <Text style={mStyles.actionMenuTitle}>
+              {actionMenuReq ? (leaveTypes.find((lt) => lt.id === actionMenuReq.leave_type_id)?.name ?? 'Wniosek') : ''}
+            </Text>
+            {actionMenuReq && (() => {
+              const r = actionMenuReq;
+              const isOwn = r.employee_id === user?.id;
+              const canEdit2 = isOwn && r.status === 'pending';
+              const canDelete2 = isOwn && (r.status === 'pending' || r.status === 'cancelled');
+              return (
+                <>
+                  <TouchableOpacity style={mStyles.actionMenuItem} onPress={() => { setActionMenuReq(null); }} activeOpacity={0.7}>
+                    <Ionicons name="eye-outline" size={18} color={theme.colors.text} />
+                    <Text style={mStyles.actionMenuItemText}>Podgląd</Text>
+                  </TouchableOpacity>
+                  {canEdit2 && (
+                    <TouchableOpacity style={mStyles.actionMenuItem} onPress={() => { setActionMenuReq(null); openEdit(r); }} activeOpacity={0.7}>
+                      <Ionicons name="pencil-outline" size={18} color={theme.colors.primary} />
+                      <Text style={[mStyles.actionMenuItemText, { color: theme.colors.primary }]}>Edytuj</Text>
+                    </TouchableOpacity>
+                  )}
+                  {canDelete2 && (
+                    <TouchableOpacity style={mStyles.actionMenuItem} onPress={() => { setActionMenuReq(null); handleDelete(r); }} activeOpacity={0.7}>
+                      <Ionicons name="trash-outline" size={18} color={theme.colors.error} />
+                      <Text style={[mStyles.actionMenuItemText, { color: theme.colors.error }]}>Usuń</Text>
+                    </TouchableOpacity>
+                  )}
+                  {canManage && r.status === 'pending' && (
+                    <>
+                      <TouchableOpacity style={mStyles.actionMenuItem} onPress={() => { setActionMenuReq(null); handleApprove(r); }} activeOpacity={0.7}>
+                        <Ionicons name="checkmark-circle-outline" size={18} color={theme.colors.green} />
+                        <Text style={[mStyles.actionMenuItemText, { color: theme.colors.green }]}>Zatwierdź</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={mStyles.actionMenuItem} onPress={() => { setActionMenuReq(null); setRejectTarget(r); setRejectComment(''); }} activeOpacity={0.7}>
+                        <Ionicons name="close-circle-outline" size={18} color={theme.colors.error} />
+                        <Text style={[mStyles.actionMenuItemText, { color: theme.colors.error }]}>Odrzuć</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </>
+              );
+            })()}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Reject with comment Modal */}
       <Modal visible={!!rejectTarget} animationType="fade" transparent onRequestClose={() => setRejectTarget(null)}>
         <View style={mStyles.overlay}>
@@ -527,43 +657,66 @@ const styles = StyleSheet.create({
   modeBtnActive: { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primary },
   modeBtnText: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary },
   modeBtnTextActive: { color: theme.colors.primary },
+  // Date filter bar
+  dateFilterBar: { paddingHorizontal: 16, paddingBottom: 8, gap: 8 },
+  dateFilterBarDesktop: { maxWidth: 720, marginHorizontal: 'auto' as any, width: '100%', paddingHorizontal: 32 },
+  dateRangeBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.colors.card, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: theme.colors.border, alignSelf: 'flex-start' as const },
+  dateRangeBtnText: { fontSize: 13, fontWeight: '600', color: theme.colors.primary },
+  clearDateBtn: { position: 'absolute', right: 0, top: 0, padding: 4 },
+  filtersInline: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' as const, marginTop: 4 },
+  filterChip: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
+  filterChipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  filterChipText: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary },
+  filterChipTextActive: { color: theme.colors.white },
+  dateExpandedRow: { flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingBottom: 8 },
+  dateRangeLabel: { fontSize: 11, fontWeight: '700', color: theme.colors.textMuted, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: 0.5 },
+  content: { padding: 16, paddingBottom: 40 },
+  contentDesktop: { maxWidth: 720, marginHorizontal: 'auto' as any, width: '100%', paddingHorizontal: 32 },
+  empty: { alignItems: 'center', paddingVertical: 60, gap: 10 },
+  emptyText: { fontSize: 14, color: theme.colors.textMuted },
+  // Card redesign
+  card: { backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.lg, padding: 14, marginBottom: 12, ...theme.shadows.card },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
+  empAvatar: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  empInitials: { fontSize: 13, fontWeight: '700', color: theme.colors.white },
+  empNameBold: { fontSize: 14, fontWeight: '700', color: theme.colors.text },
+  empJobSub: { fontSize: 11, color: theme.colors.textMuted, marginTop: 1 },
+  menuBtn: { padding: 4 },
+  badge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
+  badgeText: { fontSize: 11, fontWeight: '700' },
+  leaveTypeRow: { flexDirection: 'row', gap: 12, marginBottom: 8 },
+  leaveTypeLeft: { flex: 1 },
+  leaveTypeRight: { flex: 1 },
+  leaveTypeLabel: { fontSize: 11, fontWeight: '600', color: theme.colors.textMuted },
+  leaveIconBadge: { width: 22, height: 22, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  leaveTypeName: { fontSize: 13, fontWeight: '600', color: theme.colors.text },
+  leaveDatesText: { fontSize: 12, color: theme.colors.text, fontWeight: '600' },
+  leaveDayCount: { fontSize: 11, color: theme.colors.textMuted, marginTop: 1 },
+  submittedAt: { fontSize: 11, color: theme.colors.textMuted, marginBottom: 4 },
+  reviewerInfo: { fontSize: 11, fontWeight: '600', color: theme.colors.green, marginBottom: 4 },
+  reviewRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 5, marginBottom: 4 },
+  cardReview: { fontSize: 12, color: theme.colors.primary, flex: 1 },
+  actionsRow: { flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' as const },
+  actionApprove: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderRadius: 8, backgroundColor: theme.colors.greenLight },
+  actionApproveText: { fontSize: 13, fontWeight: '700', color: theme.colors.green },
+  actionReject: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderRadius: 8, backgroundColor: theme.colors.errorLight },
+  actionRejectText: { fontSize: 13, fontWeight: '700', color: theme.colors.error },
+  // legacy - keep for compatibility
+  empRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  empName: { fontSize: 13, fontWeight: '600', color: theme.colors.text },
+  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  cardType: { fontSize: 15, fontWeight: '700', color: theme.colors.text, flex: 1 },
+  datesRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  cardDates: { fontSize: 13, color: theme.colors.textSecondary, flex: 1 },
+  daysBadge: { backgroundColor: theme.colors.primaryLight, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
+  daysText: { fontSize: 11, fontWeight: '700', color: theme.colors.primary },
+  cardComment: { fontSize: 12, color: theme.colors.textMuted, fontStyle: 'italic', marginBottom: 4 },
   filters: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 8, paddingBottom: 8 },
   filtersDesktop: { paddingHorizontal: 32 },
   filterBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
   filterActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
   filterText: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary },
   filterTextActive: { color: theme.colors.white },
-  content: { padding: 16, paddingBottom: 40 },
-  contentDesktop: { maxWidth: 720, marginHorizontal: 'auto' as any, width: '100%', paddingHorizontal: 32 },
-  empty: { alignItems: 'center', paddingVertical: 60, gap: 10 },
-  emptyText: { fontSize: 14, color: theme.colors.textMuted },
-  card: { backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.lg, padding: 16, marginBottom: 12 },
-  empRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  empAvatar: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  empInitials: { fontSize: 11, fontWeight: '700', color: theme.colors.white },
-  empName: { fontSize: 13, fontWeight: '600', color: theme.colors.text },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  cardType: { fontSize: 15, fontWeight: '700', color: theme.colors.text, flex: 1 },
-  badge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
-  badgeText: { fontSize: 11, fontWeight: '700' },
-  datesRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
-  cardDates: { fontSize: 13, color: theme.colors.textSecondary, flex: 1 },
-  daysBadge: { backgroundColor: theme.colors.primaryLight, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
-  daysText: { fontSize: 11, fontWeight: '700', color: theme.colors.primary },
-  hoursRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 },
-  hoursText: { fontSize: 12, color: theme.colors.textSecondary },
-  cardComment: { fontSize: 12, color: theme.colors.textMuted, fontStyle: 'italic', marginBottom: 4 },
-  reviewRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 5, marginBottom: 4 },
-  cardReview: { fontSize: 12, color: theme.colors.primary, flex: 1 },
-  actionsRow: { flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' },
-  actionEdit: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: theme.colors.primaryLight },
-  actionEditText: { fontSize: 12, fontWeight: '600', color: theme.colors.primary },
-  actionDelete: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: theme.colors.errorLight },
-  actionDeleteText: { fontSize: 12, fontWeight: '600', color: theme.colors.error },
-  actionApprove: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: theme.colors.greenLight },
-  actionApproveText: { fontSize: 12, fontWeight: '600', color: theme.colors.green },
-  actionReject: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: theme.colors.errorLight },
-  actionRejectText: { fontSize: 12, fontWeight: '600', color: theme.colors.error },
 });
 
 const calSt = StyleSheet.create({
@@ -613,4 +766,8 @@ const mStyles = StyleSheet.create({
   payBadgeText: { fontSize: 10, fontWeight: '700' },
   saveBtn: { backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.md, paddingVertical: 14, alignItems: 'center', marginTop: 20, marginBottom: 30 },
   saveBtnText: { color: theme.colors.white, fontSize: 15, fontWeight: '700' },
+  actionMenuSheet: { backgroundColor: theme.colors.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, paddingBottom: 32 },
+  actionMenuTitle: { fontSize: 15, fontWeight: '700', color: theme.colors.text, marginBottom: 12, paddingHorizontal: 4 },
+  actionMenuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  actionMenuItemText: { fontSize: 15, fontWeight: '500', color: theme.colors.text },
 });

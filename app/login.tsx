@@ -147,6 +147,16 @@ function buildLoginPortal(showPw: boolean, loading: boolean, err: string) {
         </div>
         <button data-action="register" type="button" style="background:none;border:none;color:#64748b;font-size:13px;cursor:pointer;padding:0;">Mam kod aktywacyjny →</button>
       </div>
+      <button data-action="help" type="button" style="margin-top:20px;width:100%;padding:14px 16px;background:#F0F9FF;border-radius:12px;border:1px solid #BAE6FD;display:flex;align-items:center;gap:10px;cursor:pointer;">
+        <div style="width:36px;height:36px;border-radius:10px;background:#DBEAFE;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#0284C7" stroke-width="1.5"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+        </div>
+        <div style="flex:1;text-align:left;">
+          <div style="font-size:13px;font-weight:700;color:#0369A1;">Potrzebujesz pomocy?</div>
+          <div style="font-size:12px;color:#0284C7;font-weight:500;">Centrum pomocy &nbsp;·&nbsp; FAQ &nbsp;·&nbsp; Kontakt</div>
+        </div>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#0284C7" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
     </div>
   </div>`;
 }
@@ -244,6 +254,7 @@ export default function LoginScreen() {
       if (action === 'register') { window.location.href = '/join'; return; }
       if (action === 'register-restaurant') { window.location.href = '/register'; return; }
       if (action === 'forgot') { router.push('/forgot-password' as any); return; }
+      if (action === 'help') { window.location.href = '/help'; return; }
       if (action === 'togglepw') {
         const emailVal = (portal.querySelector('#al-email') as HTMLInputElement)?.value || '';
         const pwVal = (portal.querySelector('#al-pw') as HTMLInputElement)?.value || '';
@@ -347,6 +358,18 @@ export default function LoginScreen() {
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#0084FF' }}>Zarejestruj restaurację</Text>
               </TouchableOpacity>
             </View>
+
+            {/* Support link */}
+            <TouchableOpacity style={mob.supportBox} onPress={() => router.push('/help' as any)} activeOpacity={0.8}>
+              <View style={mob.supportIconBox}>
+                <Ionicons name="headset-outline" size={18} color="#0284C7" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={mob.supportTitle}>Potrzebujesz pomocy?</Text>
+                <Text style={mob.supportContact}>Centrum pomocy · FAQ · Kontakt</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#0284C7" />
+            </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -367,4 +390,8 @@ const mob = StyleSheet.create({
   eye: { position: 'absolute', right: 14, top: 12 },
   btn: { marginTop: 24, height: 52, backgroundColor: '#0084FF', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   btnTxt: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  supportBox: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 28, marginHorizontal: 4, backgroundColor: '#F0F9FF', borderRadius: 12, borderWidth: 1, borderColor: '#BAE6FD', padding: 14 },
+  supportIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center' },
+  supportTitle: { fontSize: 13, fontWeight: '700', color: '#0369A1', marginBottom: 2 },
+  supportContact: { fontSize: 12, fontWeight: '500', color: '#0284C7' },
 });

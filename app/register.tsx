@@ -127,6 +127,13 @@ function buildStep1(loading: boolean, err: string) {
       <div class="al-footer">
         Masz już konto? <button class="al-fl" data-action="login" type="button">Zaloguj się</button>
       </div>
+      <button data-action="help" type="button" style="margin-top:16px;width:100%;padding:14px 16px;background:#F0F9FF;border-radius:12px;border:1px solid #BAE6FD;display:flex;align-items:center;gap:10px;cursor:pointer;">
+        <div style="width:36px;height:36px;border-radius:10px;background:#DBEAFE;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#0284C7" stroke-width="1.5"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+        </div>
+        <div style="flex:1;text-align:left;"><div style="font-size:13px;font-weight:700;color:#0369A1;">Potrzebujesz pomocy?</div><div style="font-size:12px;color:#0284C7;font-weight:500;">Centrum pomocy &nbsp;·&nbsp; FAQ &nbsp;·&nbsp; Kontakt</div></div>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#0284C7" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
     </div>
   </div>`;
 }
@@ -175,6 +182,13 @@ function buildStep2(showPw: boolean, loading: boolean, err: string) {
       <div class="al-footer">
         Masz już konto? <button class="al-fl" data-action="login" type="button">Zaloguj się</button>
       </div>
+      <button data-action="help" type="button" style="margin-top:16px;width:100%;padding:14px 16px;background:#F0F9FF;border-radius:12px;border:1px solid #BAE6FD;display:flex;align-items:center;gap:10px;cursor:pointer;">
+        <div style="width:36px;height:36px;border-radius:10px;background:#DBEAFE;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#0284C7" stroke-width="1.5"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+        </div>
+        <div style="flex:1;text-align:left;"><div style="font-size:13px;font-weight:700;color:#0369A1;">Potrzebujesz pomocy?</div><div style="font-size:12px;color:#0284C7;font-weight:500;">Centrum pomocy &nbsp;·&nbsp; FAQ &nbsp;·&nbsp; Kontakt</div></div>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#0284C7" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
     </div>
   </div>`;
 }
@@ -261,6 +275,7 @@ export default function RegisterScreen() {
       const action = trigger.getAttribute('data-action') || '';
 
       if (action === 'login' || action === 'back-login') { window.location.href = '/login'; return; }
+      if (action === 'help') { window.location.href = '/help'; return; }
 
       if (action === 'next') {
         const name = (portal.querySelector('#ar-name') as HTMLInputElement)?.value?.trim() || '';
@@ -412,6 +427,18 @@ export default function RegisterScreen() {
               <Text style={s.footerText}>Masz już konto?</Text>
               <TouchableOpacity onPress={() => router.push('/login' as any)}><Text style={s.footerLink}>Zaloguj się</Text></TouchableOpacity>
             </View>
+
+            {/* Support link */}
+            <TouchableOpacity style={s.supportBox} onPress={() => router.push('/help' as any)} activeOpacity={0.8}>
+              <View style={s.supportIconBox}>
+                <Ionicons name="headset-outline" size={18} color="#0284C7" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.supportTitle}>Potrzebujesz pomocy?</Text>
+                <Text style={s.supportContact}>Centrum pomocy · FAQ · Kontakt</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#0284C7" />
+            </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -444,4 +471,8 @@ const s = StyleSheet.create({
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 24 },
   footerText: { fontSize: 14, color: theme.colors.textSecondary },
   footerLink: { fontSize: 14, fontWeight: '700', color: theme.colors.primary },
+  supportBox: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 20, marginBottom: 8, backgroundColor: '#F0F9FF', borderRadius: 12, borderWidth: 1, borderColor: '#BAE6FD', padding: 14 },
+  supportIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center' },
+  supportTitle: { fontSize: 13, fontWeight: '700', color: '#0369A1', marginBottom: 2 },
+  supportContact: { fontSize: 12, fontWeight: '500', color: '#0284C7' },
 });

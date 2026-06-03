@@ -2,11 +2,13 @@ import { Stack } from 'expo-router';
 import { AlertProvider } from '../context/AlertContext';
 import { AuthProvider } from '../context/AuthContext';
 import { NotificationsProvider } from '../context/NotificationsContext';
+import { SubscriptionProvider } from '../context/SubscriptionContext';
 
 export default function RootLayout() {
   return (
     <AlertProvider>
       <AuthProvider>
+        <SubscriptionProvider>
         <NotificationsProvider>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />
@@ -25,8 +27,10 @@ export default function RootLayout() {
           <Stack.Screen name="task/confirm-values" />
           <Stack.Screen name="task/confirm-description" />
           <Stack.Screen name="training/quiz" />
+          <Stack.Screen name="help" />
         </Stack>
         </NotificationsProvider>
+        </SubscriptionProvider>
       </AuthProvider>
     </AlertProvider>
   );

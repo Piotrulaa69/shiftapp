@@ -16,6 +16,7 @@ import {
     View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import TrialBanner from '../../components/TrialBanner';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationsContext';
 import { theme } from '../../styles/theme';
@@ -456,6 +457,7 @@ export default function TabLayout() {
       <View style={{ flex: 1, flexDirection: 'row', backgroundColor: theme.colors.background }}>
         <Sidebar />
         <View style={{ flex: 1, flexDirection: 'column' }}>
+          <TrialBanner />
           <View style={{ flex: 1 }}>
           <Tabs
             tabBar={() => null}
@@ -485,6 +487,8 @@ export default function TabLayout() {
   }
 
   return (
+    <>
+      <TrialBanner />
     <Tabs
       tabBar={(props) => <MobileTabBar {...props} />}
       screenOptions={{ headerShown: false }}
@@ -506,5 +510,6 @@ export default function TabLayout() {
       <Tabs.Screen name="availability" options={{ href: null }} />
       <Tabs.Screen name="announcements" options={{ href: null }} />
     </Tabs>
+    </>
   );
 }

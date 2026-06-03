@@ -240,12 +240,38 @@ export default function TasksScreen() {
 
   // Recurrence state
   const [isRecurring, setIsRecurring] = useState(false);
-  const [recurrencePattern, setRecurrencePattern] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('daily');
+  const [recurrencePattern, setRecurrencePattern] = useState<'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom'>('daily');
   const [recurrenceEndDate, setRecurrenceEndDate] = useState('');
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
 
   // Points (admin/manager only)
   const [points, setPoints] = useState<string>('');
+
+  // Task start date
+  const [taskDate, setTaskDate] = useState<string>('');
+  const [showCustomDate, setShowCustomDate] = useState(false);
+  const [customDateInput, setCustomDateInput] = useState('');
+
+  // Modal step: 1 = basic info, 2 = recurrence settings
+  const [modalStep, setModalStep] = useState(1);
+  // Weekly quick-select for step 1 summary
+  const [recurrenceTime, setRecurrenceTime] = useState('10:00');
+  const [recurrenceEndNoLimit, setRecurrenceEndNoLimit] = useState(true);
+
+  const todayStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const offsetDate = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const formatDateDisplay = (iso: string) => {
+    if (!iso) return '';
+    const [y, m, day] = iso.split('-');
+    return `${day}.${m}.${y}`;
+  };
 
   useFocusEffect(useCallback(() => {
     if (!rid) return;
@@ -328,15 +354,16 @@ export default function TasksScreen() {
     } else if (newConfirm === 'photo') {
       confirmationConfig = { prompt: cfgPrompt.trim() || null };
     }
-    const recurrenceDays = recurrencePattern === 'custom' ? selectedDays :
-                           recurrencePattern === 'weekly' ? [1] : // Monday for weekly
-                           null;
+    const recurrenceDays = (recurrencePattern === 'weekly' || recurrencePattern === 'biweekly' || recurrencePattern === 'custom')
+      ? (selectedDays.length > 0 ? selectedDays : [1])
+      : null;
 
     const created = await createTask(rid, {
       title: newTitle.trim(),
       description: newDesc.trim(),
       assigned_to: assignTo,
       assigned_time: newTime,
+      scheduled_date: taskDate || todayStr(),
       priority: newPriority,
       duration_min: parseInt(newDuration) || 30,
       confirmation_type: newConfirm,
@@ -351,10 +378,13 @@ export default function TasksScreen() {
     if (created) setTasks((prev) => [...prev, created]);
     setSaving(false);
     setShowModal(false);
+    setModalStep(1);
     setNewTitle(''); setNewDesc(''); setNewTime('08:00'); setNewPriority('normalny'); setNewDuration('30'); setNewConfirm(null); setNewAssignedTo(''); setNewAssignedGroup(null);
     setCfgValueItems([]); setCfgCheckItems([]); setCfgPrompt('');
     setIsRecurring(false); setRecurrencePattern('daily'); setRecurrenceEndDate(''); setSelectedDays([]);
     setPoints('');
+    setTaskDate(''); setShowCustomDate(false); setCustomDateInput('');
+    setRecurrenceTime('10:00'); setRecurrenceEndNoLimit(true);
   };
 
   if (loading) return (
@@ -659,267 +689,326 @@ export default function TasksScreen() {
         </View>
       </ScrollView>
 
-      {/* Create Task Modal */}
-      <Modal visible={showModal} animationType="fade" transparent onRequestClose={() => setShowModal(false)}>
+      {/* Create Task Modal – 2-step */}
+      <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => { if (modalStep === 2) setModalStep(1); else setShowModal(false); }}>
         <View style={mStyles.overlay}>
           <View style={[mStyles.sheet, isDesktop && mStyles.sheetDesktop]}>
-            <View style={mStyles.header}>
-              <Text style={mStyles.headerTitle}>Nowe zadanie</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)}>
-                <Ionicons name="close" size={24} color={theme.colors.text} />
-              </TouchableOpacity>
-            </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={mStyles.body}>
-              {canApprove && employees.length > 0 && (
-                <>
-                  <Text style={mStyles.label}>Przypisz do *</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
-                    <TouchableOpacity key="all" style={[mStyles.empChipModal, newAssignedTo === 'ALL' && mStyles.empChipModalActive]} onPress={() => setNewAssignedTo('ALL')} activeOpacity={0.75}>
-                      <View style={[mStyles.empAvatarSmall, { backgroundColor: newAssignedTo === 'ALL' ? theme.colors.primary : theme.colors.textMuted }]}>
-                        <Text style={mStyles.empAvatarSmallText}>Ws</Text>
-                      </View>
-                      <Text style={[mStyles.empChipModalText, newAssignedTo === 'ALL' && mStyles.empChipModalTextActive]}>Wszyscy</Text>
-                    </TouchableOpacity>
-                    {employees.map((e) => {
-                      const active = newAssignedTo === e.id;
-                      const initials = `${e.first_name?.[0] ?? ''}${e.last_name?.[0] ?? ''}`.toUpperCase();
-                      return (
-                        <TouchableOpacity key={e.id} style={[mStyles.empChipModal, active && mStyles.empChipModalActive]} onPress={() => setNewAssignedTo(e.id)} activeOpacity={0.75}>
-                          <View style={[mStyles.empAvatarSmall, { backgroundColor: active ? theme.colors.primary : (e.avatar_color ?? theme.colors.primary) }]}>
-                            <Text style={mStyles.empAvatarSmallText}>{initials}</Text>
-                          </View>
-                          <Text style={[mStyles.empChipModalText, active && mStyles.empChipModalTextActive]} numberOfLines={1}>{e.first_name} {e.last_name}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                </>
-              )}
-
-              {canApprove && groups.length > 0 && (
-                <>
-                  <Text style={mStyles.label}>Lub przypisz do grupy</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
-                    <TouchableOpacity key="none" style={[mStyles.empChipModal, newAssignedGroup === null && mStyles.empChipModalActive]} onPress={() => setNewAssignedGroup(null)} activeOpacity={0.75}>
-                      <View style={[mStyles.empAvatarSmall, { backgroundColor: newAssignedGroup === null ? theme.colors.textMuted : theme.colors.border }]}>
-                        <Text style={mStyles.empAvatarSmallText}>--</Text>
-                      </View>
-                      <Text style={[mStyles.empChipModalText, newAssignedGroup === null && mStyles.empChipModalTextActive]}>Brak</Text>
-                    </TouchableOpacity>
-                    {groups.map((g) => {
-                      const active = newAssignedGroup === g.id;
-                      return (
-                        <TouchableOpacity key={g.id} style={[mStyles.empChipModal, active && mStyles.empChipModalActive]} onPress={() => setNewAssignedGroup(g.id)} activeOpacity={0.75}>
-                          <View style={[mStyles.empAvatarSmall, { backgroundColor: active ? g.color : theme.colors.border }]}>
-                            <Text style={mStyles.empAvatarSmallText}>{g.name.substring(0, 2).toUpperCase()}</Text>
-                          </View>
-                          <Text style={[mStyles.empChipModalText, active && mStyles.empChipModalTextActive]} numberOfLines={1}>{g.name}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                </>
-              )}
-
-              <Text style={mStyles.label}>Tytuł *</Text>
-              <TextInput style={mStyles.input} value={newTitle} onChangeText={setNewTitle} placeholder="np. Przygotowanie sali" placeholderTextColor={theme.colors.textMuted} />
-
-              <Text style={mStyles.label}>Opis</Text>
-              <TextInput style={[mStyles.input, mStyles.inputMulti]} value={newDesc} onChangeText={setNewDesc} placeholder="Szczegóły zadania..." placeholderTextColor={theme.colors.textMuted} multiline numberOfLines={3} />
-
-              <TimePickerRow label="Godzina" value={newTime} onChange={setNewTime} />
-              <View style={[mStyles.row, { marginTop: 8 }]}>
-                <View style={mStyles.half}>
-                  <Text style={mStyles.label}>Czas (min)</Text>
-                  <TextInput style={mStyles.input} value={newDuration} onChangeText={setNewDuration} keyboardType="numeric" placeholder="30" placeholderTextColor={theme.colors.textMuted} />
+            {/* ── STEP 1: Basic info ── */}
+            {modalStep === 1 && (
+              <>
+                <View style={mStyles.header}>
+                  <Text style={mStyles.headerTitle}>Nowe zadanie</Text>
+                  <TouchableOpacity onPress={() => setShowModal(false)}>
+                    <Ionicons name="close" size={24} color={theme.colors.text} />
+                  </TouchableOpacity>
                 </View>
-              </View>
 
-              <Text style={mStyles.label}>Priorytet</Text>
-              <View style={mStyles.chips}>
-                {PRIORITIES.map((p) => (
-                  <TouchableOpacity key={p} style={[mStyles.chip, newPriority === p && mStyles.chipActive]} onPress={() => setNewPriority(p)} activeOpacity={0.7}>
-                    <Text style={[mStyles.chipText, newPriority === p && mStyles.chipTextActive]}>{p.charAt(0).toUpperCase() + p.slice(1)}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={mStyles.body}>
 
-              {canApprove && (
-                <>
-                  <Text style={mStyles.label}>Punkty (opcjonalnie)</Text>
-                  <TextInput
-                    style={mStyles.input}
-                    value={points}
-                    onChangeText={setPoints}
-                    keyboardType="numeric"
-                    placeholder="np. 10 (punkty za wykonanie zadania)"
-                    placeholderTextColor={theme.colors.textMuted}
-                  />
-                </>
-              )}
-
-              <Text style={mStyles.label}>Potwierdzenie</Text>
-              <View style={mStyles.chips}>
-                {CONFIRM_TYPES.map((c) => (
-                  <TouchableOpacity key={String(c.value)} style={[mStyles.chip, newConfirm === c.value && mStyles.chipActive]} onPress={() => { setNewConfirm(c.value); setCfgValueItems([]); setCfgCheckItems([]); setCfgPrompt(''); }} activeOpacity={0.7}>
-                    <Text style={[mStyles.chipText, newConfirm === c.value && mStyles.chipTextActive]}>{c.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* Dynamic confirmation config editor */}
-              {newConfirm === 'values' && (
-                <View style={{ marginTop: 12, gap: 8 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={mStyles.label}>Definiuj pomiary</Text>
-                    <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.colors.primaryLight, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 }} onPress={() => setCfgValueItems(prev => [...prev, { id: Date.now().toString(), name: '', unit: '°C', min: '0', max: '100' }])} activeOpacity={0.7}>
-                      <Ionicons name="add" size={14} color={theme.colors.primary} />
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.primary }}>Dodaj pomiar</Text>
-                    </TouchableOpacity>
-                  </View>
-                  {cfgValueItems.length === 0 && (
-                    <Text style={{ fontSize: 12, color: theme.colors.textMuted, fontStyle: 'italic', lineHeight: 16 }}>Brak pomiarów — kliknij "Dodaj pomiar" aby zdefiniować własne, lub pozostaw puste aby użyć domyślnych (HACCP).</Text>
+                  {/* Assignee */}
+                  {canApprove && employees.length > 0 && (
+                    <>
+                      <Text style={mStyles.label}>Przypisz do *</Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
+                        <TouchableOpacity key="all" style={[mStyles.empChipModal, newAssignedTo === 'ALL' && mStyles.empChipModalActive]} onPress={() => setNewAssignedTo('ALL')} activeOpacity={0.75}>
+                          <View style={[mStyles.empAvatarSmall, { backgroundColor: newAssignedTo === 'ALL' ? theme.colors.primary : theme.colors.textMuted }]}><Text style={mStyles.empAvatarSmallText}>Ws</Text></View>
+                          <Text style={[mStyles.empChipModalText, newAssignedTo === 'ALL' && mStyles.empChipModalTextActive]}>Wszyscy</Text>
+                        </TouchableOpacity>
+                        {employees.map((e) => {
+                          const active = newAssignedTo === e.id;
+                          const initials = `${e.first_name?.[0] ?? ''}${e.last_name?.[0] ?? ''}`.toUpperCase();
+                          return (
+                            <TouchableOpacity key={e.id} style={[mStyles.empChipModal, active && mStyles.empChipModalActive]} onPress={() => setNewAssignedTo(e.id)} activeOpacity={0.75}>
+                              <View style={[mStyles.empAvatarSmall, { backgroundColor: active ? theme.colors.primary : (e.avatar_color ?? theme.colors.primary) }]}><Text style={mStyles.empAvatarSmallText}>{initials}</Text></View>
+                              <Text style={[mStyles.empChipModalText, active && mStyles.empChipModalTextActive]} numberOfLines={1}>{e.first_name} {e.last_name}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </>
                   )}
-                  {cfgValueItems.map((item, idx) => (
-                    <View key={item.id} style={{ backgroundColor: theme.colors.surface, borderRadius: 10, padding: 10, gap: 6 }}>
+                  {canApprove && groups.length > 0 && (
+                    <>
+                      <Text style={mStyles.label}>Lub przypisz do grupy</Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
+                        <TouchableOpacity key="none" style={[mStyles.empChipModal, newAssignedGroup === null && mStyles.empChipModalActive]} onPress={() => setNewAssignedGroup(null)} activeOpacity={0.75}>
+                          <View style={[mStyles.empAvatarSmall, { backgroundColor: newAssignedGroup === null ? theme.colors.textMuted : theme.colors.border }]}><Text style={mStyles.empAvatarSmallText}>--</Text></View>
+                          <Text style={[mStyles.empChipModalText, newAssignedGroup === null && mStyles.empChipModalTextActive]}>Brak</Text>
+                        </TouchableOpacity>
+                        {groups.map((g) => {
+                          const active = newAssignedGroup === g.id;
+                          return (
+                            <TouchableOpacity key={g.id} style={[mStyles.empChipModal, active && mStyles.empChipModalActive]} onPress={() => setNewAssignedGroup(g.id)} activeOpacity={0.75}>
+                              <View style={[mStyles.empAvatarSmall, { backgroundColor: active ? g.color : theme.colors.border }]}><Text style={mStyles.empAvatarSmallText}>{g.name.substring(0, 2).toUpperCase()}</Text></View>
+                              <Text style={[mStyles.empChipModalText, active && mStyles.empChipModalTextActive]} numberOfLines={1}>{g.name}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </>
+                  )}
+
+                  {/* Title */}
+                  <Text style={mStyles.label}>Nazwa zadania *</Text>
+                  <TextInput style={mStyles.input} value={newTitle} onChangeText={setNewTitle} placeholder="np. Przygotowanie sali na catering" placeholderTextColor={theme.colors.textMuted} />
+
+                  {/* Confirmation type */}
+                  <Text style={mStyles.label}>Potwierdzenie wykonania</Text>
+                  <View style={mStyles.confirmRow}>
+                    {CONFIRM_TYPES.map((c) => {
+                      const iconMap: Record<string, string> = { photo: 'camera-outline', values: 'thermometer-outline', description: 'document-text-outline' };
+                      const isActive = newConfirm === c.value;
+                      const isNone = c.value === null;
+                      return (
+                        <TouchableOpacity key={String(c.value)} style={[mStyles.confirmBtn, isActive && mStyles.confirmBtnActive]} onPress={() => { setNewConfirm(c.value); setCfgValueItems([]); setCfgCheckItems([]); setCfgPrompt(''); }} activeOpacity={0.75}>
+                          <Ionicons name={(isNone ? 'ban-outline' : iconMap[c.value as string] ?? 'checkmark-circle-outline') as any} size={20} color={isActive ? theme.colors.primary : theme.colors.textMuted} />
+                          <Text style={[mStyles.confirmBtnText, isActive && mStyles.confirmBtnTextActive]}>{c.label}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  {/* Confirmation config editors */}
+                  {newConfirm === 'values' && (
+                    <View style={{ marginTop: 8, gap: 8 }}>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text style={{ fontSize: 12, fontWeight: '700', color: theme.colors.textSecondary }}>Pomiar {idx + 1}</Text>
-                        <TouchableOpacity onPress={() => setCfgValueItems(prev => prev.filter(i => i.id !== item.id))}>
-                          <Ionicons name="trash-outline" size={15} color={theme.colors.error} />
+                        <Text style={mStyles.label}>Definiuj pomiary</Text>
+                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.colors.primaryLight, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 }} onPress={() => setCfgValueItems(prev => [...prev, { id: Date.now().toString(), name: '', unit: '°C', min: '0', max: '100' }])} activeOpacity={0.7}>
+                          <Ionicons name="add" size={14} color={theme.colors.primary} />
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.primary }}>Dodaj pomiar</Text>
                         </TouchableOpacity>
                       </View>
-                      <TextInput style={mStyles.input} value={item.name} onChangeText={v => setCfgValueItems(prev => prev.map(i => i.id === item.id ? { ...i, name: v } : i))} placeholder="Nazwa (np. Lodówka 1)" placeholderTextColor={theme.colors.textMuted} />
-                      <View style={{ flexDirection: 'row', gap: 6 }}>
-                        <TextInput style={[mStyles.input, { flex: 1 }]} value={item.unit} onChangeText={v => setCfgValueItems(prev => prev.map(i => i.id === item.id ? { ...i, unit: v } : i))} placeholder="Jed. (°C...)" placeholderTextColor={theme.colors.textMuted} />
-                        <TextInput style={[mStyles.input, { flex: 1 }]} value={item.min} onChangeText={v => setCfgValueItems(prev => prev.map(i => i.id === item.id ? { ...i, min: v } : i))} placeholder="Min" keyboardType="numeric" placeholderTextColor={theme.colors.textMuted} />
-                        <TextInput style={[mStyles.input, { flex: 1 }]} value={item.max} onChangeText={v => setCfgValueItems(prev => prev.map(i => i.id === item.id ? { ...i, max: v } : i))} placeholder="Max" keyboardType="numeric" placeholderTextColor={theme.colors.textMuted} />
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              {newConfirm === 'description' && (
-                <View style={{ marginTop: 12, gap: 8 }}>
-                  <Text style={mStyles.label}>Polecenie dla pracownika (opcjonalne)</Text>
-                  <TextInput style={[mStyles.input, mStyles.inputMulti]} value={cfgPrompt} onChangeText={setCfgPrompt} placeholder="np. Opisz dokładnie co zostało zrobione i jakie napotkano problemy..." placeholderTextColor={theme.colors.textMuted} multiline numberOfLines={2} />
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                    <Text style={mStyles.label}>Lista kontrolna (opcjonalne)</Text>
-                    <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.colors.primaryLight, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 }} onPress={() => setCfgCheckItems(prev => [...prev, { id: Date.now().toString(), label: '' }])} activeOpacity={0.7}>
-                      <Ionicons name="add" size={14} color={theme.colors.primary} />
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.primary }}>Dodaj punkt</Text>
-                    </TouchableOpacity>
-                  </View>
-                  {cfgCheckItems.map((item, idx) => (
-                    <View key={item.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <Ionicons name="checkbox-outline" size={16} color={theme.colors.textMuted} />
-                      <TextInput style={[mStyles.input, { flex: 1 }]} value={item.label} onChangeText={v => setCfgCheckItems(prev => prev.map(i => i.id === item.id ? { ...i, label: v } : i))} placeholder={`Punkt ${idx + 1}...`} placeholderTextColor={theme.colors.textMuted} />
-                      <TouchableOpacity onPress={() => setCfgCheckItems(prev => prev.filter(i => i.id !== item.id))}>
-                        <Ionicons name="close-circle-outline" size={18} color={theme.colors.error} />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              {newConfirm === 'photo' && (
-                <View style={{ marginTop: 12 }}>
-                  <Text style={mStyles.label}>Wskazówka dla pracownika (opcjonalne)</Text>
-                  <TextInput style={[mStyles.input, mStyles.inputMulti]} value={cfgPrompt} onChangeText={setCfgPrompt} placeholder="np. Zrób zdjęcie czystej kuchni po sprzątaniu..." placeholderTextColor={theme.colors.textMuted} multiline numberOfLines={2} />
-                </View>
-              )}
-
-              {/* ─── RECURRENCE SECTION ─── */}
-              <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: theme.colors.border }}>
-                <TouchableOpacity
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: isRecurring ? 12 : 0 }}
-                  onPress={() => setIsRecurring(!isRecurring)}
-                  activeOpacity={0.7}
-                >
-                  <View style={{
-                    width: 22, height: 22, borderRadius: 6, borderWidth: 2,
-                    borderColor: isRecurring ? theme.colors.primary : theme.colors.border,
-                    backgroundColor: isRecurring ? theme.colors.primary : 'transparent',
-                    alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    {isRecurring && <Ionicons name="checkmark" size={16} color="#fff" />}
-                  </View>
-                  <Text style={{ fontSize: 14, fontWeight: '600', color: theme.colors.text }}>Zadanie cykliczne</Text>
-                </TouchableOpacity>
-
-                {isRecurring && (
-                  <View style={{ gap: 12 }}>
-                    <Text style={mStyles.label}>Powtarzaj</Text>
-                    <View style={mStyles.chips}>
-                      {[
-                        { key: 'daily', label: 'Codziennie' },
-                        { key: 'weekly', label: 'Co tydzień' },
-                        { key: 'monthly', label: 'Co miesiąc' },
-                        { key: 'custom', label: 'Niestandardowe' },
-                      ].map((opt) => (
-                        <TouchableOpacity
-                          key={opt.key}
-                          style={[mStyles.chip, recurrencePattern === opt.key && mStyles.chipActive]}
-                          onPress={() => setRecurrencePattern(opt.key as any)}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={[mStyles.chipText, recurrencePattern === opt.key && mStyles.chipTextActive]}>{opt.label}</Text>
-                        </TouchableOpacity>
+                      {cfgValueItems.length === 0 && <Text style={{ fontSize: 12, color: theme.colors.textMuted, fontStyle: 'italic' }}>Pozostaw puste aby użyć domyślnych (HACCP).</Text>}
+                      {cfgValueItems.map((item, idx) => (
+                        <View key={item.id} style={{ backgroundColor: theme.colors.surface, borderRadius: 10, padding: 10, gap: 6 }}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                            <Text style={{ fontSize: 12, fontWeight: '700', color: theme.colors.textSecondary }}>Pomiar {idx + 1}</Text>
+                            <TouchableOpacity onPress={() => setCfgValueItems(prev => prev.filter(i => i.id !== item.id))}><Ionicons name="trash-outline" size={15} color={theme.colors.error} /></TouchableOpacity>
+                          </View>
+                          <TextInput style={mStyles.input} value={item.name} onChangeText={v => setCfgValueItems(prev => prev.map(i => i.id === item.id ? { ...i, name: v } : i))} placeholder="Nazwa (np. Lodówka 1)" placeholderTextColor={theme.colors.textMuted} />
+                          <View style={{ flexDirection: 'row', gap: 6 }}>
+                            <TextInput style={[mStyles.input, { flex: 1 }]} value={item.unit} onChangeText={v => setCfgValueItems(prev => prev.map(i => i.id === item.id ? { ...i, unit: v } : i))} placeholder="Jed." placeholderTextColor={theme.colors.textMuted} />
+                            <TextInput style={[mStyles.input, { flex: 1 }]} value={item.min} onChangeText={v => setCfgValueItems(prev => prev.map(i => i.id === item.id ? { ...i, min: v } : i))} placeholder="Min" keyboardType="numeric" placeholderTextColor={theme.colors.textMuted} />
+                            <TextInput style={[mStyles.input, { flex: 1 }]} value={item.max} onChangeText={v => setCfgValueItems(prev => prev.map(i => i.id === item.id ? { ...i, max: v } : i))} placeholder="Max" keyboardType="numeric" placeholderTextColor={theme.colors.textMuted} />
+                          </View>
+                        </View>
                       ))}
                     </View>
-
-                    {recurrencePattern === 'custom' && (
-                      <>
-                        <Text style={mStyles.label}>Wybierz dni tygodnia</Text>
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                          {['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb', 'Nd'].map((day, idx) => (
-                            <TouchableOpacity
-                              key={idx}
-                              style={{
-                                width: 40, height: 40, borderRadius: 20,
-                                backgroundColor: selectedDays.includes(idx) ? theme.colors.primary : theme.colors.surface,
-                                borderWidth: 1.5, borderColor: selectedDays.includes(idx) ? theme.colors.primary : theme.colors.border,
-                                alignItems: 'center', justifyContent: 'center',
-                              }}
-                              onPress={() => {
-                                setSelectedDays((prev) =>
-                                  prev.includes(idx) ? prev.filter((d) => d !== idx) : [...prev, idx]
-                                );
-                              }}
-                              activeOpacity={0.7}
-                            >
-                              <Text style={{
-                                fontSize: 13, fontWeight: '700',
-                                color: selectedDays.includes(idx) ? '#fff' : theme.colors.text,
-                              }}>{day}</Text>
-                            </TouchableOpacity>
-                          ))}
+                  )}
+                  {newConfirm === 'description' && (
+                    <View style={{ marginTop: 8, gap: 8 }}>
+                      <Text style={mStyles.label}>Polecenie (opcjonalne)</Text>
+                      <TextInput style={[mStyles.input, mStyles.inputMulti]} value={cfgPrompt} onChangeText={setCfgPrompt} placeholder="np. Opisz co zostało zrobione..." placeholderTextColor={theme.colors.textMuted} multiline numberOfLines={2} />
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={mStyles.label}>Lista kontrolna</Text>
+                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.colors.primaryLight, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 }} onPress={() => setCfgCheckItems(prev => [...prev, { id: Date.now().toString(), label: '' }])} activeOpacity={0.7}>
+                          <Ionicons name="add" size={14} color={theme.colors.primary} />
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.primary }}>Dodaj punkt</Text>
+                        </TouchableOpacity>
+                      </View>
+                      {cfgCheckItems.map((item, idx) => (
+                        <View key={item.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                          <Ionicons name="checkbox-outline" size={16} color={theme.colors.textMuted} />
+                          <TextInput style={[mStyles.input, { flex: 1 }]} value={item.label} onChangeText={v => setCfgCheckItems(prev => prev.map(i => i.id === item.id ? { ...i, label: v } : i))} placeholder={`Punkt ${idx + 1}...`} placeholderTextColor={theme.colors.textMuted} />
+                          <TouchableOpacity onPress={() => setCfgCheckItems(prev => prev.filter(i => i.id !== item.id))}><Ionicons name="close-circle-outline" size={18} color={theme.colors.error} /></TouchableOpacity>
                         </View>
-                      </>
-                    )}
+                      ))}
+                    </View>
+                  )}
+                  {newConfirm === 'photo' && (
+                    <View style={{ marginTop: 8 }}>
+                      <Text style={mStyles.label}>Wskazówka (opcjonalne)</Text>
+                      <TextInput style={[mStyles.input, mStyles.inputMulti]} value={cfgPrompt} onChangeText={setCfgPrompt} placeholder="np. Zrób zdjęcie czystej kuchni..." placeholderTextColor={theme.colors.textMuted} multiline numberOfLines={2} />
+                    </View>
+                  )}
 
-                    <Text style={mStyles.label}>Data zakończenia (opcjonalna)</Text>
-                    <TextInput
-                      style={mStyles.input}
-                      value={recurrenceEndDate}
-                      onChangeText={setRecurrenceEndDate}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor={theme.colors.textMuted}
-                    />
+                  {/* Task type: recurring / one-time */}
+                  <Text style={[mStyles.label, { marginTop: 16 }]}>Typ zadania</Text>
+                  <View style={{ flexDirection: 'row', gap: 12, marginBottom: 4 }}>
+                    <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} onPress={() => setIsRecurring(true)} activeOpacity={0.7}>
+                      <View style={[mStyles.checkbox, isRecurring && mStyles.checkboxActive]}>{isRecurring && <Ionicons name="checkmark" size={14} color="#fff" />}</View>
+                      <Text style={{ fontSize: 14, fontWeight: '600', color: theme.colors.text }}>Zadanie cykliczne</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} onPress={() => setIsRecurring(false)} activeOpacity={0.7}>
+                      <View style={[mStyles.checkbox, !isRecurring && mStyles.checkboxActive]}>{!isRecurring && <Ionicons name="checkmark" size={14} color="#fff" />}</View>
+                      <Text style={{ fontSize: 14, fontWeight: '600', color: theme.colors.text }}>Jednorazowe</Text>
+                    </TouchableOpacity>
                   </View>
-                )}
-              </View>
-            </ScrollView>
 
-            <View style={mStyles.footer}>
-              <TouchableOpacity style={mStyles.cancelBtn} onPress={() => setShowModal(false)} activeOpacity={0.7}>
-                <Text style={mStyles.cancelText}>Anuluj</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[mStyles.saveBtn, !newTitle.trim() && mStyles.saveBtnDisabled]} onPress={handleCreate} activeOpacity={0.85} disabled={saving || !newTitle.trim()}>
-                {saving ? <ActivityIndicator size="small" color={theme.colors.white} /> : <Text style={mStyles.saveText}>Dodaj zadanie</Text>}
-              </TouchableOpacity>
-            </View>
+                  {/* Start date quick-select */}
+                  <Text style={[mStyles.label, { marginTop: 14 }]}>Rozpocznij</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                    {[
+                      { label: 'Dziś', value: todayStr() },
+                      { label: 'Jutro', value: offsetDate(1) },
+                      { label: 'Za 3 dni', value: offsetDate(3) },
+                    ].map((opt) => (
+                      <TouchableOpacity key={opt.label} style={[mStyles.startChip, taskDate === opt.value && !showCustomDate && mStyles.startChipActive]}
+                        onPress={() => { setTaskDate(opt.value); setShowCustomDate(false); setCustomDateInput(''); }} activeOpacity={0.7}>
+                        <Text style={[mStyles.startChipText, taskDate === opt.value && !showCustomDate && mStyles.startChipTextActive]}>{opt.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                    <TouchableOpacity style={[mStyles.startChip, showCustomDate && mStyles.startChipActive]} onPress={() => setShowCustomDate(v => !v)} activeOpacity={0.7}>
+                      <Ionicons name="calendar-outline" size={14} color={showCustomDate ? '#fff' : theme.colors.textSecondary} />
+                      <Text style={[mStyles.startChipText, showCustomDate && mStyles.startChipTextActive]}>{showCustomDate && taskDate ? formatDateDisplay(taskDate) : 'Wybierz datę'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {showCustomDate && (
+                    <TextInput style={[mStyles.input, { marginBottom: 4 }]} value={customDateInput}
+                      onChangeText={(v) => { setCustomDateInput(v); if (/^\d{4}-\d{2}-\d{2}$/.test(v)) setTaskDate(v); }}
+                      placeholder="YYYY-MM-DD" placeholderTextColor={theme.colors.textMuted} keyboardType="numbers-and-punctuation" />
+                  )}
+                  {!!taskDate && !showCustomDate && (
+                    <View style={mStyles.dateInfoBadge}>
+                      <Ionicons name="calendar" size={13} color={theme.colors.primary} />
+                      <Text style={mStyles.dateInfoText}>Wybrana: {formatDateDisplay(taskDate)}</Text>
+                    </View>
+                  )}
+
+                  {/* Recurrence summary row (only if recurring) */}
+                  {isRecurring && (
+                    <View style={mStyles.recurrenceSummaryRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={mStyles.recurrenceSummaryLabel}>Powtarzaj</Text>
+                        <Text style={mStyles.recurrenceSummaryValue}>
+                          {(() => {
+                            const DAY_SHORT = ['Pn','Wt','Śr','Cz','Pt','Sb','Nd'];
+                            const daysStr = selectedDays.length > 0 ? selectedDays.map(d => DAY_SHORT[d]).join(', ') : '';
+                            if (recurrencePattern === 'daily') return 'Codziennie';
+                            if (recurrencePattern === 'weekly') return daysStr ? `Co tydzień: ${daysStr}` : 'Co tydzień (wybierz dni →)';
+                            if (recurrencePattern === 'biweekly') return daysStr ? `Co 2 tygodnie: ${daysStr}` : 'Co 2 tygodnie (wybierz dni →)';
+                            if (recurrencePattern === 'monthly') return 'Co miesiąc';
+                            return daysStr ? `Niestandardowe: ${daysStr}` : 'Niestandardowe (wybierz dni →)';
+                          })()}
+                        </Text>
+                      </View>
+                      <TouchableOpacity onPress={() => setModalStep(2)} style={mStyles.changeBtn}>
+                        <Text style={mStyles.changeBtnText}>Zmień</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {/* End date for recurrence */}
+                  {isRecurring && (
+                    <>
+                      <Text style={mStyles.label}>Data zakończenia (opcjonalna)</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8, backgroundColor: theme.colors.surface, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, paddingHorizontal: 12, height: 46 }}>
+                        <Ionicons name="calendar-outline" size={16} color={theme.colors.textMuted} />
+                        <TextInput style={{ flex: 1, fontSize: 14, color: theme.colors.text }}
+                          value={recurrenceEndDate} onChangeText={setRecurrenceEndDate}
+                          placeholder="YYYY-MM-DD" placeholderTextColor={theme.colors.textMuted} />
+                      </View>
+                    </>
+                  )}
+
+                  <TimePickerRow label="Godzina" value={newTime} onChange={setNewTime} />
+                  <View style={[mStyles.row, { marginTop: 8 }]}>
+                    <View style={mStyles.half}>
+                      <Text style={mStyles.label}>Czas (min)</Text>
+                      <TextInput style={mStyles.input} value={newDuration} onChangeText={setNewDuration} keyboardType="numeric" placeholder="30" placeholderTextColor={theme.colors.textMuted} />
+                    </View>
+                  </View>
+                  <Text style={mStyles.label}>Priorytet</Text>
+                  <View style={mStyles.chips}>
+                    {PRIORITIES.map((p) => (
+                      <TouchableOpacity key={p} style={[mStyles.chip, newPriority === p && mStyles.chipActive]} onPress={() => setNewPriority(p)} activeOpacity={0.7}>
+                        <Text style={[mStyles.chipText, newPriority === p && mStyles.chipTextActive]}>{p.charAt(0).toUpperCase() + p.slice(1)}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  {canApprove && (
+                    <>
+                      <Text style={mStyles.label}>Punkty (opcjonalnie)</Text>
+                      <TextInput style={mStyles.input} value={points} onChangeText={setPoints} keyboardType="numeric" placeholder="np. 10" placeholderTextColor={theme.colors.textMuted} />
+                    </>
+                  )}
+                </ScrollView>
+
+                <View style={mStyles.footer}>
+                  <TouchableOpacity style={mStyles.cancelBtn} onPress={() => setShowModal(false)} activeOpacity={0.7}>
+                    <Text style={mStyles.cancelText}>Anuluj</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[mStyles.saveBtn, !newTitle.trim() && mStyles.saveBtnDisabled]} onPress={handleCreate} activeOpacity={0.85} disabled={saving || !newTitle.trim()}>
+                    {saving ? <ActivityIndicator size="small" color={theme.colors.white} /> : <Text style={mStyles.saveText}>Dodaj zadanie</Text>}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
+            {/* ── STEP 2: Recurrence settings ── */}
+            {modalStep === 2 && (
+              <>
+                <View style={mStyles.header}>
+                  <TouchableOpacity onPress={() => setModalStep(1)} style={{ padding: 4 }}>
+                    <Ionicons name="chevron-back" size={22} color={theme.colors.text} />
+                  </TouchableOpacity>
+                  <Text style={mStyles.headerTitle}>Ustawienia cykliczności</Text>
+                  <TouchableOpacity onPress={() => setShowModal(false)}>
+                    <Ionicons name="close" size={24} color={theme.colors.text} />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={mStyles.body}>
+                  <Text style={mStyles.label}>Powtarzaj</Text>
+                  {[
+                    { key: 'daily', label: 'Codziennie' },
+                    { key: 'weekly', label: 'Co tydzień' },
+                    { key: 'biweekly', label: 'Co 2 tygodnie' },
+                    { key: 'monthly', label: 'Co miesiąc' },
+                    { key: 'custom', label: 'Niestandardowe' },
+                  ].map((opt) => (
+                    <TouchableOpacity key={opt.key} style={mStyles.radioRow} onPress={() => setRecurrencePattern(opt.key as any)} activeOpacity={0.7}>
+                      <View style={[mStyles.radioOuter, recurrencePattern === opt.key && mStyles.radioOuterActive]}>
+                        {recurrencePattern === opt.key && <View style={mStyles.radioInner} />}
+                      </View>
+                      <Text style={[mStyles.radioLabel, recurrencePattern === opt.key && { color: theme.colors.primary, fontWeight: '700' }]}>{opt.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+
+                  {(recurrencePattern === 'weekly' || recurrencePattern === 'biweekly' || recurrencePattern === 'custom') && (
+                    <>
+                      <Text style={[mStyles.label, { marginTop: 16 }]}>Dni tygodnia</Text>
+                      <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                        {['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb', 'Nd'].map((day, idx) => (
+                          <TouchableOpacity key={idx} style={[mStyles.dayCircle, selectedDays.includes(idx) && mStyles.dayCircleActive]}
+                            onPress={() => setSelectedDays(prev => prev.includes(idx) ? prev.filter(d => d !== idx) : [...prev, idx])} activeOpacity={0.7}>
+                            <Text style={[mStyles.dayCircleText, selectedDays.includes(idx) && mStyles.dayCircleTextActive]}>{day}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </>
+                  )}
+
+                  <Text style={[mStyles.label, { marginTop: 20 }]}>Dodatkowe opcje</Text>
+                  <Text style={[mStyles.label, { fontSize: 12 }]}>Czas wykonania (opcjonalnie)</Text>
+                  <TextInput style={mStyles.input} value={recurrenceTime} onChangeText={setRecurrenceTime} placeholder="10:00" placeholderTextColor={theme.colors.textMuted} />
+
+                  <Text style={[mStyles.label, { marginTop: 14 }]}>Termin wykonania</Text>
+                  <TouchableOpacity style={mStyles.radioRow} onPress={() => setRecurrenceEndNoLimit(true)} activeOpacity={0.7}>
+                    <View style={[mStyles.radioOuter, recurrenceEndNoLimit && mStyles.radioOuterActive]}>
+                      {recurrenceEndNoLimit && <View style={mStyles.radioInner} />}
+                    </View>
+                    <Text style={[mStyles.radioLabel, recurrenceEndNoLimit && { color: theme.colors.primary, fontWeight: '700' }]}>Bez terminu końcowego</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={mStyles.radioRow} onPress={() => setRecurrenceEndNoLimit(false)} activeOpacity={0.7}>
+                    <View style={[mStyles.radioOuter, !recurrenceEndNoLimit && mStyles.radioOuterActive]}>
+                      {!recurrenceEndNoLimit && <View style={mStyles.radioInner} />}
+                    </View>
+                    <Text style={[mStyles.radioLabel, !recurrenceEndNoLimit && { color: theme.colors.primary, fontWeight: '700' }]}>Zakończ dnia</Text>
+                    {!recurrenceEndNoLimit && (
+                      <TextInput style={[mStyles.input, { flex: 1, marginLeft: 12, marginBottom: 0 }]} value={recurrenceEndDate} onChangeText={setRecurrenceEndDate} placeholder="YYYY-MM-DD" placeholderTextColor={theme.colors.textMuted} />
+                    )}
+                  </TouchableOpacity>
+                </ScrollView>
+
+                <View style={mStyles.footer}>
+                  <TouchableOpacity style={mStyles.saveBtn} onPress={() => setModalStep(1)} activeOpacity={0.85}>
+                    <Text style={mStyles.saveText}>Zapisz</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -1354,7 +1443,7 @@ const mStyles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 12 },
   half: { flex: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: theme.borderRadius.full, borderWidth: 1.5, borderColor: theme.colors.border },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 8, borderRadius: theme.borderRadius.full, borderWidth: 1.5, borderColor: theme.colors.border },
   chipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
   chipText: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary },
   chipTextActive: { color: theme.colors.white },
@@ -1370,4 +1459,38 @@ const mStyles = StyleSheet.create({
   empAvatarSmallText: { fontSize: 10, fontWeight: '700', color: theme.colors.white },
   empChipModalText: { fontSize: 13, fontWeight: '500', color: theme.colors.textSecondary },
   empChipModalTextActive: { color: theme.colors.primary, fontWeight: '600' },
+
+  confirmRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
+  confirmBtn: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
+  confirmBtnActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primaryLight },
+  confirmBtnText: { fontSize: 11, fontWeight: '600', color: theme.colors.textMuted },
+  confirmBtnTextActive: { color: theme.colors.primary },
+
+  checkbox: { width: 20, height: 20, borderRadius: 5, borderWidth: 2, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center' },
+  checkboxActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+
+  startChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 8, borderRadius: theme.borderRadius.full, borderWidth: 1.5, borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
+  startChipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  startChipText: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary },
+  startChipTextActive: { color: '#fff' },
+
+  dateInfoBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.colors.primaryLight, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 8 },
+  dateInfoText: { fontSize: 13, fontWeight: '600', color: theme.colors.primary },
+
+  recurrenceSummaryRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.surface, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.border, paddingHorizontal: 14, paddingVertical: 12, marginTop: 4, marginBottom: 4 },
+  recurrenceSummaryLabel: { fontSize: 11, fontWeight: '700', color: theme.colors.textMuted, textTransform: 'uppercase' as const, letterSpacing: 0.5, marginBottom: 2 },
+  recurrenceSummaryValue: { fontSize: 14, fontWeight: '600', color: theme.colors.text },
+  changeBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: theme.colors.primaryLight },
+  changeBtnText: { fontSize: 13, fontWeight: '700', color: theme.colors.primary },
+
+  radioRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  radioOuter: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center' },
+  radioOuterActive: { borderColor: theme.colors.primary },
+  radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: theme.colors.primary },
+  radioLabel: { fontSize: 15, fontWeight: '500', color: theme.colors.text },
+
+  dayCircle: { width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: theme.colors.border, backgroundColor: theme.colors.surface, alignItems: 'center', justifyContent: 'center' },
+  dayCircleActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  dayCircleText: { fontSize: 13, fontWeight: '700', color: theme.colors.text },
+  dayCircleTextActive: { color: '#fff' },
 });

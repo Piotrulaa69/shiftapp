@@ -135,12 +135,13 @@ export async function createTask(
     description: string;
     assigned_to: string | null;
     assigned_time: string;
+    scheduled_date?: string | null;
     priority: 'wysoki' | 'normalny' | 'niski';
     duration_min: number;
     confirmation_type: 'photo' | 'values' | 'description' | null;
     confirmation_config?: any;
     is_recurring?: boolean;
-    recurrence_pattern?: 'daily' | 'weekly' | 'monthly' | 'custom' | null;
+    recurrence_pattern?: 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom' | null;
     recurrence_days?: number[] | null;
     recurrence_end_date?: string | null;
     target_group_id?: string | null;
@@ -572,15 +573,39 @@ export async function getShiftSwaps(restaurantId: string): Promise<DbShiftSwap[]
 }
 
 export async function updateSwapStatus(id: string, status: string, managerId?: string): Promise<boolean> {
-  const { data: swap } = await supabase.from('shift_swaps').select('restaurant_id, requester_id, responder_id').eq('id', id).single();
+  const { data: swap } = await supabase
+    .from('shift_swaps')
+    .select('restaurant_id, requester_id, responder_id, requester_shift, responder_shift, swap_type')
+    .eq('id', id)
+    .single();
   const updates: any = { status };
   if (managerId) updates.manager_id = managerId;
   const { error } = await supabase.from('shift_swaps').update(updates).eq('id', id);
   if (!error && swap) {
-    if (status === 'accepted') {
-      notify(swap.restaurant_id, swap.requester_id, 'swap', 'Wymiana zaakceptowana ✅', 'Twoja prośba o wymianę zmiany została zaakceptowana.', id);
-    } else if (status === 'rejected') {
-      notify(swap.restaurant_id, swap.requester_id, 'swap', 'Wymiana odrzucona', 'Twoja prośba o wymianę zmiany została odrzucona.', id);
+    if (status === 'approved') {
+      // Actually perform the shift swap / give in the database
+      if (swap.swap_type === 'swap' && swap.requester_shift && swap.responder_shift) {
+        // Get both shifts
+        const { data: reqShift } = await supabase.from('shifts').select('employee_id').eq('id', swap.requester_shift).single();
+        const { data: resShift } = await supabase.from('shifts').select('employee_id').eq('id', swap.responder_shift).single();
+        if (reqShift && resShift) {
+          // Swap employee_id between the two shifts
+          await supabase.from('shifts').update({ employee_id: resShift.employee_id }).eq('id', swap.requester_shift);
+          await supabase.from('shifts').update({ employee_id: reqShift.employee_id }).eq('id', swap.responder_shift);
+        }
+      } else if (swap.swap_type === 'give' && swap.requester_shift) {
+        // Transfer the shift to the responder
+        await supabase.from('shifts').update({ employee_id: swap.responder_id }).eq('id', swap.requester_shift);
+      }
+      notify(swap.restaurant_id, swap.requester_id, 'swap', 'Wymiana zatwierdzona ✅', 'Manager zatwierdził Twoją prośbę o wymianę zmiany.', id);
+      notify(swap.restaurant_id, swap.responder_id, 'swap', 'Wymiana zatwierdzona ✅', 'Manager zatwierdził wymianę zmiany.', id);
+    } else if (status === 'rejected_manager') {
+      notify(swap.restaurant_id, swap.requester_id, 'swap', 'Wymiana odrzucona', 'Manager odrzucił prośbę o wymianę zmiany.', id);
+      notify(swap.restaurant_id, swap.responder_id, 'swap', 'Wymiana odrzucona', 'Manager odrzucił wymianę zmiany.', id);
+    } else if (status === 'rejected_responder') {
+      notify(swap.restaurant_id, swap.requester_id, 'swap', 'Prośba odrzucona', 'Pracownik odrzucił Twoją prośbę o wymianę zmiany.', id);
+    } else if (status === 'cancelled') {
+      notify(swap.restaurant_id, swap.responder_id, 'swap', 'Wniosek anulowany', 'Prośba o wymianę zmiany została anulowana.', id);
     } else if (status === 'pending_manager') {
       notifyManagers(swap.restaurant_id, 'swap', 'Wymiana zmiany do zatwierdzenia', 'Pracownicy uzgodnili wymianę zmiany — wymagane zatwierdzenie.', id);
     }
@@ -1272,6 +1297,92 @@ export async function createSubscriptionAdjustment(
 ): Promise<boolean> {
   const { error } = await supabase.from('subscription_adjustments')
     .insert({ restaurant_id: restaurantId, admin_id: adminId, type, value, duration_months: durationMonths, reason: reason || null });
+  return !error;
+}
+
+// ─── Restaurant Settings ──────────────────────────────────────────────────────
+
+export type RestaurantSettings = {
+  min_staffing: Record<string, any>;
+  availability_contract_all_available: boolean;
+  availability_freelance_all_available: boolean;
+  availability_require_unavailability_reason: boolean;
+  availability_require_manager_approval: boolean;
+  availability_freelance_self_report: boolean;
+  availability_freelance_no_approval: boolean;
+  max_consecutive_days: number;
+  min_rest_day_after: number;
+  min_hours_between_shifts: number;
+  max_hours_weekly: number;
+  max_hours_monthly: number;
+  prevent_opening_closing: boolean;
+  ai_priority_full_staffing: number;
+  ai_priority_preferences: number;
+  ai_priority_equal_hours: number;
+  ai_priority_fixed_shifts: number;
+  ai_priority_min_hours: number;
+};
+
+const DEFAULT_SETTINGS: RestaurantSettings = {
+  min_staffing: {},
+  availability_contract_all_available: true,
+  availability_freelance_all_available: false,
+  availability_require_unavailability_reason: true,
+  availability_require_manager_approval: true,
+  availability_freelance_self_report: true,
+  availability_freelance_no_approval: true,
+  max_consecutive_days: 5,
+  min_rest_day_after: 1,
+  min_hours_between_shifts: 11,
+  max_hours_weekly: 48,
+  max_hours_monthly: 200,
+  prevent_opening_closing: true,
+  ai_priority_full_staffing: 80,
+  ai_priority_preferences: 60,
+  ai_priority_equal_hours: 60,
+  ai_priority_fixed_shifts: 40,
+  ai_priority_min_hours: 40,
+};
+
+export async function getRestaurantSettings(restaurantId: string): Promise<RestaurantSettings> {
+  const { data } = await supabase.from('restaurant_settings').select('*').eq('restaurant_id', restaurantId).maybeSingle();
+  if (!data) return { ...DEFAULT_SETTINGS };
+  return { ...DEFAULT_SETTINGS, ...data } as RestaurantSettings;
+}
+
+export async function upsertRestaurantSettings(restaurantId: string, settings: Partial<RestaurantSettings>): Promise<boolean> {
+  const { error } = await supabase.from('restaurant_settings').upsert({ restaurant_id: restaurantId, ...settings, updated_at: new Date().toISOString() }, { onConflict: 'restaurant_id' });
+  return !error;
+}
+
+// ─── Shift Types ──────────────────────────────────────────────────────────────
+
+export type ShiftTypeRow = {
+  id: string;
+  restaurant_id: string;
+  name: string;
+  color: string;
+  start_time: string;
+  end_time: string;
+  hours: number;
+  created_at: string;
+};
+
+export async function getShiftTypes(restaurantId: string): Promise<ShiftTypeRow[]> {
+  const { data } = await supabase.from('shift_types').select('*').eq('restaurant_id', restaurantId).order('created_at');
+  return (data ?? []) as ShiftTypeRow[];
+}
+
+export async function upsertShiftType(restaurantId: string, row: Partial<ShiftTypeRow> & { name: string }): Promise<ShiftTypeRow | null> {
+  const { data, error } = await supabase.from('shift_types')
+    .upsert({ restaurant_id: restaurantId, ...row }, { onConflict: row.id ? 'id' : undefined })
+    .select().single();
+  if (error) { console.error('upsertShiftType', error); return null; }
+  return data as ShiftTypeRow;
+}
+
+export async function deleteShiftType(id: string): Promise<boolean> {
+  const { error } = await supabase.from('shift_types').delete().eq('id', id);
   return !error;
 }
 

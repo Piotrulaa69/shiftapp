@@ -12,8 +12,9 @@ const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> =
   pending_responder: { label: 'Oczekuje na odpowiedź', color: '#F97316', bg: '#FFF4E5' },
   pending_manager: { label: 'Czeka na managera', color: theme.colors.primary, bg: '#E3F2FD' },
   approved: { label: 'Zatwierdzone', color: '#22C55E', bg: '#E8F8ED' },
-  rejected_responder: { label: 'Odrzucone', color: '#EF4444', bg: '#FFF0EF' },
+  rejected_responder: { label: 'Odrzucone przez pracownika', color: '#EF4444', bg: '#FFF0EF' },
   rejected_manager: { label: 'Odrzucone przez managera', color: '#EF4444', bg: '#FFF0EF' },
+  cancelled: { label: 'Anulowane', color: '#6B7280', bg: '#F3F4F6' },
 };
 
 const FILTERS = [
@@ -21,7 +22,7 @@ const FILTERS = [
   { key: 'pending_responder', label: 'Oczekujące' },
   { key: 'pending_manager', label: 'Do zatwierdzenia' },
   { key: 'approved', label: 'Zatwierdzone' },
-  { key: 'rejected_responder', label: 'Odrzucone' },
+  { key: 'rejected', label: 'Odrzucone' },
 ];
 
 export default function ShiftSwapScreen() {
@@ -68,8 +69,10 @@ export default function ShiftSwapScreen() {
     return s ? { date: s.day, time: `${s.start_time}–${s.end_time}`, loc: s.location } : null;
   };
 
-  const myShifts = shifts.filter((s) => s.employee_id === uid);
-  const responderShifts = selResponder ? shifts.filter((s) => s.employee_id === selResponder) : [];
+  const today = new Date().toISOString().split('T')[0];
+  const futureShifts = shifts.filter((s) => s.day >= today);
+  const myShifts = futureShifts.filter((s) => s.employee_id === uid);
+  const responderShifts = selResponder ? futureShifts.filter((s) => s.employee_id === selResponder) : [];
   const otherEmployees = employees.filter((e) => e.id !== uid);
 
   const openCreate = () => {
@@ -125,11 +128,12 @@ export default function ShiftSwapScreen() {
 
   // Cancel (requester)
   const handleCancel = async (sw: DbShiftSwap) => {
-    await updateSwapStatus(sw.id, 'rejected_responder');
+    await updateSwapStatus(sw.id, 'cancelled');
     load();
   };
 
-  const allFiltered = swaps.filter((sw) => filter === 'all' || sw.status === filter || (filter === 'rejected_responder' && sw.status === 'rejected_manager'));
+  const isRejected = (s: string) => s === 'rejected_responder' || s === 'rejected_manager' || s === 'cancelled';
+  const allFiltered = swaps.filter((sw) => filter === 'all' || sw.status === filter || (filter === 'rejected' && isRejected(sw.status)));
   const myFiltered = allFiltered.filter((sw) => sw.requester_id === uid || sw.responder_id === uid);
   const displayList = viewMode === 'my' ? myFiltered : allFiltered;
 
@@ -187,7 +191,7 @@ export default function ShiftSwapScreen() {
           const isResponder = sw.responder_id === uid;
           const canRespond = isResponder && sw.status === 'pending_responder';
           const canManagerAct = canManage && sw.status === 'pending_manager';
-          const canCancel = isRequester && sw.status === 'pending_responder';
+          const canCancel = isRequester && (sw.status === 'pending_responder' || sw.status === 'pending_manager');
 
           return (
             <View key={sw.id} style={styles.card}>
