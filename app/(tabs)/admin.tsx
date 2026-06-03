@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Redirect, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
+    ActivityIndicator,
     Modal,
     Platform,
     RefreshControl,
@@ -18,8 +19,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileHeader from '../../components/MobileHeader';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
-import { createQuizQuestion, createTraining, deleteQuizQuestion, deleteTraining, generateInvitation, getAbsences, getEmployees, getInvitations, getLeaveRequests, getQuizQuestions, getTrainings, removeEmployee, reviewAbsence, updateRestaurant, updateTraining } from '../../lib/db';
-import type { DbAbsence, DbInvitation, DbLeaveRequest, DbProfile, DbTraining } from '../../lib/supabase';
+import { assignEmployeeToGroup, createEmployeeGroup, createQuizQuestion, createTraining, deleteEmployeeGroup, deleteQuizQuestion, deleteTraining, generateInvitation, getAbsences, getEmployeeGroupsWithMembers, getEmployees, getInvitations, getLeaveRequests, getQuizQuestions, getTrainings, removeEmployee, removeEmployeeFromGroup, reviewAbsence, reviewLeaveRequestWithNotes, updateEmployeeGroup, updateRestaurant, updateTraining } from '../../lib/db';
+import type { DbAbsence, DbEmployeeGroup, DbInvitation, DbLeaveRequest, DbProfile, DbTraining } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
 const JOB_OPTIONS = ['Kelner', 'Kucharz', 'Barista', 'Lider zmiany', 'Hostessa', 'Pizzaiolo', 'Sprzątanie'];
@@ -1230,7 +1231,7 @@ export default function AdminScreen() {
               <View>
                 <Text style={s.mTitle}>{reviewAction === 'approve' ? 'Zatwierdź wniosek' : 'Odrzuć wniosek'}</Text>
                 <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 2 }}>
-                  {reviewingRequest ? `${reviewingRequest.employee_name || 'Pracownik'}: ${reviewingRequest.date_from} — ${reviewingRequest.date_to}` : ''}
+                  {reviewingRequest ? `${(reviewingRequest as any).employee_name || 'Pracownik'}: ${reviewingRequest.date_from} — ${reviewingRequest.date_to}` : ''}
                 </Text>
               </View>
               <TouchableOpacity onPress={() => { setReviewingRequest(null); setReviewAction(null); }}>
@@ -1261,7 +1262,7 @@ export default function AdminScreen() {
                   if (!reviewingRequest || !user || !reviewAction) return;
                   setReviewing(true);
                   const status = reviewAction === 'approve' ? 'approved' : 'rejected';
-                  await reviewLeaveRequestWithNotes(reviewingRequest.id, user.id, status, reviewNote.trim() || null);
+                  await reviewLeaveRequestWithNotes(reviewingRequest.id, user.id, status, reviewNote.trim() || undefined);
                   setReviewing(false);
                   setReviewingRequest(null);
                   setReviewAction(null);
@@ -1466,6 +1467,11 @@ const s = StyleSheet.create({
   mInput: {
     borderWidth: 1.5, borderColor: theme.colors.border, borderRadius: theme.borderRadius.md,
     padding: 12, fontSize: 14, color: theme.colors.text, backgroundColor: theme.colors.surface,
+  },
+  mInputMulti: {
+    borderWidth: 1.5, borderColor: theme.colors.border, borderRadius: theme.borderRadius.md,
+    padding: 12, fontSize: 14, color: theme.colors.text, backgroundColor: theme.colors.surface,
+    textAlignVertical: 'top',
   },
   chip: {
     borderRadius: theme.borderRadius.full, borderWidth: 1.5, borderColor: theme.colors.border,
