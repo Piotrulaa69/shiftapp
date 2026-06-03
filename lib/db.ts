@@ -137,6 +137,12 @@ export async function createTask(
     duration_min: number;
     confirmation_type: 'photo' | 'values' | 'description' | null;
     confirmation_config?: any;
+    is_recurring?: boolean;
+    recurrence_pattern?: 'daily' | 'weekly' | 'monthly' | 'custom' | null;
+    recurrence_days?: number[] | null;
+    recurrence_end_date?: string | null;
+    target_group_id?: string | null;
+    points?: number;
   }
 ): Promise<DbTask | null> {
   const { data, error } = await supabase

@@ -227,6 +227,12 @@ export default function TasksScreen() {
   const [cfgCheckItems, setCfgCheckItems] = useState<CfgCheckItem[]>([]);
   const [cfgPrompt, setCfgPrompt] = useState('');
 
+  // Recurrence state
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrencePattern, setRecurrencePattern] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('daily');
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState('');
+  const [selectedDays, setSelectedDays] = useState<number[]>([]);
+
   useFocusEffect(useCallback(() => {
     if (!rid) return;
     setLoading(true);
@@ -299,6 +305,10 @@ export default function TasksScreen() {
     } else if (newConfirm === 'photo') {
       confirmationConfig = { prompt: cfgPrompt.trim() || null };
     }
+    const recurrenceDays = recurrencePattern === 'custom' ? selectedDays :
+                           recurrencePattern === 'weekly' ? [1] : // Monday for weekly
+                           null;
+
     const created = await createTask(rid, {
       title: newTitle.trim(),
       description: newDesc.trim(),
@@ -308,12 +318,17 @@ export default function TasksScreen() {
       duration_min: parseInt(newDuration) || 30,
       confirmation_type: newConfirm,
       confirmation_config: confirmationConfig,
+      is_recurring: isRecurring,
+      recurrence_pattern: isRecurring ? recurrencePattern : null,
+      recurrence_days: isRecurring ? recurrenceDays : null,
+      recurrence_end_date: isRecurring && recurrenceEndDate ? recurrenceEndDate : null,
     });
     if (created) setTasks((prev) => [...prev, created]);
     setSaving(false);
     setShowModal(false);
     setNewTitle(''); setNewDesc(''); setNewTime('08:00'); setNewPriority('normalny'); setNewDuration('30'); setNewConfirm(null); setNewAssignedTo('');
     setCfgValueItems([]); setCfgCheckItems([]); setCfgPrompt('');
+    setIsRecurring(false); setRecurrencePattern('daily'); setRecurrenceEndDate(''); setSelectedDays([]);
   };
 
   if (loading) return (
@@ -748,6 +763,87 @@ export default function TasksScreen() {
                   <TextInput style={[mStyles.input, mStyles.inputMulti]} value={cfgPrompt} onChangeText={setCfgPrompt} placeholder="np. Zrób zdjęcie czystej kuchni po sprzątaniu..." placeholderTextColor={theme.colors.textMuted} multiline numberOfLines={2} />
                 </View>
               )}
+
+              {/* ─── RECURRENCE SECTION ─── */}
+              <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: theme.colors.border }}>
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: isRecurring ? 12 : 0 }}
+                  onPress={() => setIsRecurring(!isRecurring)}
+                  activeOpacity={0.7}
+                >
+                  <View style={{
+                    width: 22, height: 22, borderRadius: 6, borderWidth: 2,
+                    borderColor: isRecurring ? theme.colors.primary : theme.colors.border,
+                    backgroundColor: isRecurring ? theme.colors.primary : 'transparent',
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {isRecurring && <Ionicons name="checkmark" size={16} color="#fff" />}
+                  </View>
+                  <Text style={{ fontSize: 14, fontWeight: '600', color: theme.colors.text }}>Zadanie cykliczne</Text>
+                </TouchableOpacity>
+
+                {isRecurring && (
+                  <View style={{ gap: 12 }}>
+                    <Text style={mStyles.label}>Powtarzaj</Text>
+                    <View style={mStyles.chips}>
+                      {[
+                        { key: 'daily', label: 'Codziennie' },
+                        { key: 'weekly', label: 'Co tydzień' },
+                        { key: 'monthly', label: 'Co miesiąc' },
+                        { key: 'custom', label: 'Niestandardowe' },
+                      ].map((opt) => (
+                        <TouchableOpacity
+                          key={opt.key}
+                          style={[mStyles.chip, recurrencePattern === opt.key && mStyles.chipActive]}
+                          onPress={() => setRecurrencePattern(opt.key as any)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[mStyles.chipText, recurrencePattern === opt.key && mStyles.chipTextActive]}>{opt.label}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    {recurrencePattern === 'custom' && (
+                      <>
+                        <Text style={mStyles.label}>Wybierz dni tygodnia</Text>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                          {['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb', 'Nd'].map((day, idx) => (
+                            <TouchableOpacity
+                              key={idx}
+                              style={{
+                                width: 40, height: 40, borderRadius: 20,
+                                backgroundColor: selectedDays.includes(idx) ? theme.colors.primary : theme.colors.surface,
+                                borderWidth: 1.5, borderColor: selectedDays.includes(idx) ? theme.colors.primary : theme.colors.border,
+                                alignItems: 'center', justifyContent: 'center',
+                              }}
+                              onPress={() => {
+                                setSelectedDays((prev) =>
+                                  prev.includes(idx) ? prev.filter((d) => d !== idx) : [...prev, idx]
+                                );
+                              }}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={{
+                                fontSize: 13, fontWeight: '700',
+                                color: selectedDays.includes(idx) ? '#fff' : theme.colors.text,
+                              }}>{day}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </>
+                    )}
+
+                    <Text style={mStyles.label}>Data zakończenia (opcjonalna)</Text>
+                    <TextInput
+                      style={mStyles.input}
+                      value={recurrenceEndDate}
+                      onChangeText={setRecurrenceEndDate}
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor={theme.colors.textMuted}
+                    />
+                  </View>
+                )}
+              </View>
             </ScrollView>
 
             <View style={mStyles.footer}>
