@@ -89,7 +89,7 @@ export default function WorkHubScreen() {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.7}>
+        <TouchableOpacity onPress={() => router.push('/(tabs)/schedule')} style={s.backBtn} activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={s.headerCenter}>

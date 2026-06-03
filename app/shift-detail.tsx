@@ -144,7 +144,7 @@ export default function ShiftDetailScreen() {
       description: absenceDesc || null,
     });
     setShowAbsenceModal(false);
-    router.back();
+    router.push('/(tabs)/schedule');
   };
 
   if (loading) return (
@@ -156,7 +156,7 @@ export default function ShiftDetailScreen() {
   if (!shift) return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.push('/(tabs)/schedule')} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Szczegóły zmiany</Text>
@@ -189,7 +189,7 @@ export default function ShiftDetailScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/schedule')} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Szczegóły zmiany</Text>
