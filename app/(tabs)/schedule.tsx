@@ -783,6 +783,28 @@ export default function ScheduleScreen() {
         ))}
       </View>
 
+      {/* Quick Actions - Grafikowe funkcje */}
+      <View style={styles.quickActionsRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickActionsContent}>
+          <TouchableOpacity style={styles.quickActionChip} onPress={() => router.push('/(tabs)/availability')} activeOpacity={0.7}>
+            <Ionicons name="calendar-number-outline" size={16} color="#059669" />
+            <Text style={styles.quickActionChipText}>Dyspozycyjność</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickActionChip} onPress={() => router.push('/leave-requests')} activeOpacity={0.7}>
+            <Ionicons name="airplane-outline" size={16} color="#D97706" />
+            <Text style={styles.quickActionChipText}>Urlopy</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickActionChip} onPress={() => router.push('/(tabs)/work-hub')} activeOpacity={0.7}>
+            <Ionicons name="time-outline" size={16} color="#2563EB" />
+            <Text style={styles.quickActionChipText}>Ewidencja</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickActionChip} onPress={() => router.push('/shift-swap')} activeOpacity={0.7}>
+            <Ionicons name="swap-horizontal-outline" size={16} color="#7C3AED" />
+            <Text style={styles.quickActionChipText}>Wymiana zmian</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+
       {/* ── MONTH VIEW ── */}
       {calView === 'month' && (
         <View style={{ flex: 1 }}>
@@ -1578,4 +1600,34 @@ const mStyles = StyleSheet.create({
   },
   saveBtnDisabled: { opacity: 0.45 },
   saveText: { fontSize: 14, fontWeight: '600', color: '#fff' },
+
+  // Quick Actions
+  quickActionsRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.card,
+  },
+  quickActionsContent: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingRight: 16,
+  },
+  quickActionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  quickActionChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.colors.text,
+  },
 });

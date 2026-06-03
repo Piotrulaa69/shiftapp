@@ -28,10 +28,6 @@ import { theme } from '../../styles/theme';
 
 const QUICK_ACTIONS = [
   { icon: 'list-outline', label: 'Zadania', route: '/(tabs)/tasks' as const },
-  { icon: 'calendar-outline', label: 'Grafik', route: '/(tabs)/schedule' as const },
-  { icon: 'school-outline', label: 'Szkolenia', route: '/(tabs)/szkolenia' as const },
-  { icon: 'document-text-outline', label: 'Urlopy', route: '/leave-requests' as const },
-  { icon: 'chatbubble-outline', label: 'Czat', route: '/chat' as const },
 ];
 
 function fmt(d: Date) {
