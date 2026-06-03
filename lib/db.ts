@@ -1072,7 +1072,7 @@ export async function upsertNotifPrefs(userId: string, prefs: Record<string, str
 
 export async function updateProfile(
   userId: string,
-  fields: Partial<{ first_name: string; last_name: string; phone: string; job_title: string; employment_type: string; max_hours_weekly: number | null; max_hours_monthly: number | null; is_active: boolean }>,
+  fields: Partial<{ first_name: string; last_name: string; phone: string; job_title: string; employment_type: string; min_hours_weekly: number | null; max_hours_weekly: number | null; min_hours_monthly: number | null; max_hours_monthly: number | null; is_active: boolean }>,
 ): Promise<boolean> {
   const { error } = await supabase.from('profiles').update(fields).eq('id', userId);
   return !error;

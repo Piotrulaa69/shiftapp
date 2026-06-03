@@ -41,7 +41,9 @@ export default function TeamScreen() {
   const [editJobTitle, setEditJobTitle] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editEmpType, setEditEmpType] = useState<'full_time' | 'part_time' | 'contract'>('full_time');
+  const [editMinWeekly, setEditMinWeekly] = useState('');
   const [editMaxWeekly, setEditMaxWeekly] = useState('');
+  const [editMinMonthly, setEditMinMonthly] = useState('');
   const [editMaxMonthly, setEditMaxMonthly] = useState('');
   const [editActive, setEditActive] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -72,7 +74,9 @@ export default function TeamScreen() {
     setEditJobTitle(emp.job_title ?? '');
     setEditPhone(emp.phone ?? '');
     setEditEmpType((emp.employment_type as any) ?? 'full_time');
+    setEditMinWeekly((emp as any).min_hours_weekly != null ? String((emp as any).min_hours_weekly) : '');
     setEditMaxWeekly(emp.max_hours_weekly != null ? String(emp.max_hours_weekly) : '');
+    setEditMinMonthly((emp as any).min_hours_monthly != null ? String((emp as any).min_hours_monthly) : '');
     setEditMaxMonthly(emp.max_hours_monthly != null ? String(emp.max_hours_monthly) : '');
     setEditActive(emp.is_active);
     setEmpPoints(0);
@@ -86,12 +90,14 @@ export default function TeamScreen() {
       job_title: editJobTitle,
       phone: editPhone || undefined,
       employment_type: editEmpType,
+      min_hours_weekly: editMinWeekly ? parseInt(editMinWeekly) : null,
       max_hours_weekly: editMaxWeekly ? parseInt(editMaxWeekly) : null,
+      min_hours_monthly: editMinMonthly ? parseInt(editMinMonthly) : null,
       max_hours_monthly: editMaxMonthly ? parseInt(editMaxMonthly) : null,
       is_active: editActive,
     });
     if (ok) {
-      setEmployees((prev) => prev.map((e) => e.id === selectedEmp.id ? { ...e, job_title: editJobTitle, phone: editPhone, employment_type: editEmpType, max_hours_weekly: editMaxWeekly ? parseInt(editMaxWeekly) : null, max_hours_monthly: editMaxMonthly ? parseInt(editMaxMonthly) : null, is_active: editActive } : e));
+      setEmployees((prev) => prev.map((e) => e.id === selectedEmp.id ? { ...e, job_title: editJobTitle, phone: editPhone, employment_type: editEmpType, min_hours_weekly: editMinWeekly ? parseInt(editMinWeekly) : null, max_hours_weekly: editMaxWeekly ? parseInt(editMaxWeekly) : null, min_hours_monthly: editMinMonthly ? parseInt(editMinMonthly) : null, max_hours_monthly: editMaxMonthly ? parseInt(editMaxMonthly) : null, is_active: editActive } : e));
       setSelectedEmp((prev) => prev ? { ...prev, job_title: editJobTitle } : prev);
     }
     setSaving(false);
@@ -228,14 +234,26 @@ export default function TeamScreen() {
                         </TouchableOpacity>
                       ))}
                     </View>
-                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                    <Text style={mStyles.fieldLabel}>Limit godzin tygodniowych</Text>
+                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
                       <View style={{ flex: 1 }}>
-                        <Text style={mStyles.fieldLabel}>Max h/tydzień</Text>
-                        <TextInput style={mStyles.input} value={editMaxWeekly} onChangeText={setEditMaxWeekly} keyboardType="numeric" placeholder="np. 40" placeholderTextColor={theme.colors.textMuted} />
+                        <Text style={mStyles.subLabel}>Min</Text>
+                        <TextInput style={mStyles.input} value={editMinWeekly} onChangeText={setEditMinWeekly} keyboardType="numeric" placeholder="np. 180" placeholderTextColor={theme.colors.textMuted} />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={mStyles.fieldLabel}>Max h/miesiąc</Text>
-                        <TextInput style={mStyles.input} value={editMaxMonthly} onChangeText={setEditMaxMonthly} keyboardType="numeric" placeholder="np. 168" placeholderTextColor={theme.colors.textMuted} />
+                        <Text style={mStyles.subLabel}>Max</Text>
+                        <TextInput style={mStyles.input} value={editMaxWeekly} onChangeText={setEditMaxWeekly} keyboardType="numeric" placeholder="np. 220" placeholderTextColor={theme.colors.textMuted} />
+                      </View>
+                    </View>
+                    <Text style={mStyles.fieldLabel}>Limit godzin miesięcznych</Text>
+                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={mStyles.subLabel}>Min</Text>
+                        <TextInput style={mStyles.input} value={editMinMonthly} onChangeText={setEditMinMonthly} keyboardType="numeric" placeholder="np. 720" placeholderTextColor={theme.colors.textMuted} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={mStyles.subLabel}>Max</Text>
+                        <TextInput style={mStyles.input} value={editMaxMonthly} onChangeText={setEditMaxMonthly} keyboardType="numeric" placeholder="np. 880" placeholderTextColor={theme.colors.textMuted} />
                       </View>
                     </View>
                     <TouchableOpacity style={[mStyles.chip, editActive && mStyles.chipActive, { alignSelf: 'flex-start', marginBottom: 16 }]} onPress={() => setEditActive(!editActive)} activeOpacity={0.7}>
@@ -255,8 +273,8 @@ export default function TeamScreen() {
                     <View style={mStyles.infoRow}><Ionicons name="mail-outline" size={16} color={theme.colors.textMuted} /><Text style={mStyles.infoLabel}>ID konta</Text><Text style={mStyles.infoValue}>{selectedEmp?.id?.slice(0, 8)}...</Text></View>
                     <View style={mStyles.infoRow}><Ionicons name="call-outline" size={16} color={theme.colors.textMuted} /><Text style={mStyles.infoLabel}>Telefon</Text><Text style={mStyles.infoValue}>{selectedEmp?.phone ?? '—'}</Text></View>
                     <View style={mStyles.infoRow}><Ionicons name="briefcase-outline" size={16} color={theme.colors.textMuted} /><Text style={mStyles.infoLabel}>Zatrudnienie</Text><Text style={mStyles.infoValue}>{EMP_TYPE_LABELS[(selectedEmp as any)?.employment_type] ?? '—'}</Text></View>
-                    <View style={mStyles.infoRow}><Ionicons name="time-outline" size={16} color={theme.colors.textMuted} /><Text style={mStyles.infoLabel}>Max h/tydzień</Text><Text style={mStyles.infoValue}>{(selectedEmp as any)?.max_hours_weekly ?? '—'}</Text></View>
-                    <View style={mStyles.infoRow}><Ionicons name="calendar-outline" size={16} color={theme.colors.textMuted} /><Text style={mStyles.infoLabel}>Max h/miesiąc</Text><Text style={mStyles.infoValue}>{(selectedEmp as any)?.max_hours_monthly ?? '—'}</Text></View>
+                    <View style={mStyles.infoRow}><Ionicons name="time-outline" size={16} color={theme.colors.textMuted} /><Text style={mStyles.infoLabel}>H/tydzień</Text><Text style={mStyles.infoValue}>{(selectedEmp as any)?.min_hours_weekly ?? '—'} - {(selectedEmp as any)?.max_hours_weekly ?? '—'}</Text></View>
+                    <View style={mStyles.infoRow}><Ionicons name="calendar-outline" size={16} color={theme.colors.textMuted} /><Text style={mStyles.infoLabel}>H/miesiąc</Text><Text style={mStyles.infoValue}>{(selectedEmp as any)?.min_hours_monthly ?? '—'} - {(selectedEmp as any)?.max_hours_monthly ?? '—'}</Text></View>
                     <View style={mStyles.infoRow}><Ionicons name="person-outline" size={16} color={theme.colors.textMuted} /><Text style={mStyles.infoLabel}>Status</Text>
                       <View style={[styles.inactiveBadge, { backgroundColor: selectedEmp?.is_active ? theme.colors.greenLight : theme.colors.errorLight }]}>
                         <Text style={{ fontSize: 11, fontWeight: '700', color: selectedEmp?.is_active ? theme.colors.green : theme.colors.error }}>{selectedEmp?.is_active ? 'Aktywny' : 'Nieaktywny'}</Text>
@@ -334,6 +352,7 @@ const mStyles = StyleSheet.create({
   infoLabel: { flex: 1, fontSize: 13, color: theme.colors.textSecondary },
   infoValue: { fontSize: 13, fontWeight: '600', color: theme.colors.text },
   fieldLabel: { fontSize: 12, fontWeight: '700', color: theme.colors.textSecondary, marginBottom: 6, marginTop: 12 },
+  subLabel: { fontSize: 11, fontWeight: '600', color: theme.colors.textMuted, marginBottom: 4 },
   input: { borderWidth: 1.5, borderColor: theme.colors.border, borderRadius: 10, padding: 11, fontSize: 14, color: theme.colors.text, backgroundColor: theme.colors.surface },
   chip: { borderRadius: theme.borderRadius.full, borderWidth: 1.5, borderColor: theme.colors.border, paddingHorizontal: 12, paddingVertical: 6 },
   chipActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primaryLight },

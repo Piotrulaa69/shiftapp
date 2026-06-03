@@ -58,7 +58,9 @@ export type DbProfile = {
   phone: string | null;
   photo_url: string | null;
   employment_type: 'full_time' | 'part_time' | 'contract';
+  min_hours_weekly: number | null;
   max_hours_weekly: number | null;
+  min_hours_monthly: number | null;
   max_hours_monthly: number | null;
   created_at: string;
 };
