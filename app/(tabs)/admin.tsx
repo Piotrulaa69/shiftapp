@@ -55,6 +55,11 @@ export default function AdminScreen() {
   // Employee edit state
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<DbProfile | null>(null);
+  const [empFirstName, setEmpFirstName] = useState('');
+  const [empLastName, setEmpLastName] = useState('');
+  const [empPhone, setEmpPhone] = useState('');
+  const [empJobTitle, setEmpJobTitle] = useState('Kelner');
+  const [empRole, setEmpRole] = useState<'employee' | 'manager'>('employee');
   const [empLeaveDays, setEmpLeaveDays] = useState<string>('');
   const [empLeaveTypeSettings, setEmpLeaveTypeSettings] = useState<{type: string, enabled: boolean, days: string}[]>([]);
   const [jobTitle, setJobTitle] = useState('Kelner');
@@ -430,6 +435,11 @@ export default function AdminScreen() {
                 staff.map((emp) => (
                   <TouchableOpacity key={emp.id} style={s.empRow} onPress={() => {
                     setEditingEmployee(emp);
+                    setEmpFirstName(emp.first_name || '');
+                    setEmpLastName(emp.last_name || '');
+                    setEmpPhone(emp.phone || '');
+                    setEmpJobTitle(emp.job_title || 'Kelner');
+                    setEmpRole(emp.role === 'manager' ? 'manager' : 'employee');
                     setEmpLeaveDays('20'); // Default, would fetch from API
                     setEmpLeaveTypeSettings([
                       { type: 'annual', enabled: true, days: '20' },
@@ -1130,6 +1140,71 @@ export default function AdminScreen() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={s.mBody}>
+              {/* Employee Data Section */}
+              <View style={tm.section}>
+                <View style={tm.sectionHeader}>
+                  <View style={[tm.sectionDot, { backgroundColor: theme.colors.primary }]} />
+                  <Text style={tm.sectionLabel}>DANE PRACOWNIKA</Text>
+                </View>
+
+                <Text style={s.mLabel}>Imię</Text>
+                <TextInput
+                  style={s.mInput}
+                  value={empFirstName}
+                  onChangeText={setEmpFirstName}
+                  placeholder="Imię"
+                  placeholderTextColor={theme.colors.textMuted}
+                />
+
+                <Text style={[s.mLabel, { marginTop: 12 }]}>Nazwisko</Text>
+                <TextInput
+                  style={s.mInput}
+                  value={empLastName}
+                  onChangeText={setEmpLastName}
+                  placeholder="Nazwisko"
+                  placeholderTextColor={theme.colors.textMuted}
+                />
+
+                <Text style={[s.mLabel, { marginTop: 12 }]}>Stanowisko</Text>
+                <TextInput
+                  style={s.mInput}
+                  value={empJobTitle}
+                  onChangeText={setEmpJobTitle}
+                  placeholder="np. Kelner"
+                  placeholderTextColor={theme.colors.textMuted}
+                />
+
+                <Text style={[s.mLabel, { marginTop: 12 }]}>Telefon</Text>
+                <TextInput
+                  style={s.mInput}
+                  value={empPhone}
+                  onChangeText={setEmpPhone}
+                  placeholder="+48 123 456 789"
+                  placeholderTextColor={theme.colors.textMuted}
+                  keyboardType="phone-pad"
+                />
+
+                <Text style={[s.mLabel, { marginTop: 12 }]}>Rola</Text>
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                  <TouchableOpacity
+                    style={[s.roleBtn, empRole === 'employee' && s.roleBtnActive]}
+                    onPress={() => setEmpRole('employee')}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[s.roleText, empRole === 'employee' && s.roleTextActive]}>Pracownik</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.roleBtn, empRole === 'manager' && s.roleBtnActive]}
+                    onPress={() => setEmpRole('manager')}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[s.roleText, empRole === 'manager' && s.roleTextActive]}>Manager</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={{ height: 16 }} />
+
               {/* Leave Quota Section */}
               <View style={tm.section}>
                 <View style={tm.sectionHeader}>
@@ -1480,6 +1555,16 @@ const s = StyleSheet.create({
   chipActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primaryLight },
   chipText: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary },
   chipTextActive: { color: theme.colors.primary },
+
+  roleBtn: {
+    flex: 1, borderWidth: 1.5, borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.md, paddingVertical: 12,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: theme.colors.surface,
+  },
+  roleBtnActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primaryLight },
+  roleText: { fontSize: 14, fontWeight: '600', color: theme.colors.textSecondary },
+  roleTextActive: { color: theme.colors.primary, fontWeight: '700' },
 
   approvalRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,

@@ -251,13 +251,13 @@ function MobileTabBar({ state, navigation }: BottomTabBarProps) {
   const isAdmin = isOwner || isManager;
   const [fabOpen, setFabOpen] = useState(false);
 
-  // 'admin' is always excluded from regular tabs - it goes to FAB for admins, hidden for employees
-  const MOBILE_HIDDEN = ['admin', 'schedule-ai', 'time-tracking', 'documents-ai'];
+  // Only show Dashboard (Start) and Schedule in bottom nav, rest goes to FAB
+  const MOBILE_VISIBLE = ['dashboard', 'schedule'];
   const visibleRoutes = state.routes.filter((r) =>
-    r.name in TAB_CONFIG && !MOBILE_HIDDEN.includes(r.name)
+    MOBILE_VISIBLE.includes(r.name)
   );
-  const leftRoutes = visibleRoutes.slice(0, 2);
-  const rightRoutes = visibleRoutes.slice(2);
+  const leftRoutes = visibleRoutes.slice(0, 1); // Just Dashboard
+  const rightRoutes = visibleRoutes.slice(1);  // Just Schedule
 
   const { unreadCount } = useNotifications();
 
@@ -285,6 +285,9 @@ function MobileTabBar({ state, navigation }: BottomTabBarProps) {
   const adminFocused = state.routes[state.index]?.name === 'admin';
 
   const adminActions: FabAction[] = [
+    { icon: 'list-outline', label: 'Zadania', onPress: () => router.push('/(tabs)/tasks' as any) },
+    { icon: 'school-outline', label: 'Szkolenia', onPress: () => router.push('/(tabs)/szkolenia' as any) },
+    { icon: 'people-outline', label: 'Zespół', onPress: () => router.push('/(tabs)/team' as any) },
     { icon: 'settings-outline', label: 'Zarządzanie', onPress: () => router.push('/(tabs)/admin' as any) },
     { icon: 'folder-open-outline', label: 'Dokumenty', onPress: () => router.push('/documents' as any) },
     { icon: 'sparkles-outline', label: 'Grafik AI', onPress: () => router.push('/(tabs)/schedule-ai' as any) },
@@ -292,9 +295,11 @@ function MobileTabBar({ state, navigation }: BottomTabBarProps) {
   ];
 
   const employeeActions: FabAction[] = [
+    { icon: 'list-outline', label: 'Zadania', onPress: () => router.push('/(tabs)/tasks' as any) },
+    { icon: 'school-outline', label: 'Szkolenia', onPress: () => router.push('/(tabs)/szkolenia' as any) },
+    { icon: 'people-outline', label: 'Zespół', onPress: () => router.push('/(tabs)/team' as any) },
     { icon: 'time-outline', label: 'Czas pracy', onPress: () => router.push('/work-hub' as any) },
     { icon: 'finger-print-outline', label: 'Moja zmiana', onPress: () => router.push('/shift-detail' as any) },
-    { icon: 'list-outline', label: 'Zadania', onPress: () => router.push('/(tabs)/tasks' as any) },
     { icon: 'chatbubble-outline', label: 'Czat', onPress: () => router.push('/chat' as any) },
   ];
 
