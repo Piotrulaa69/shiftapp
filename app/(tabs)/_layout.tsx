@@ -247,13 +247,15 @@ function MobileTabBar({ state, navigation }: BottomTabBarProps) {
   const isAdmin = isOwner || isManager;
   const [fabOpen, setFabOpen] = useState(false);
 
-  // Only show Dashboard (Start) and Schedule in bottom nav, rest goes to FAB
-  const MOBILE_VISIBLE = ['dashboard', 'schedule'];
+  // Mobile nav tabs - different for admin and employee
+  const ADMIN_TABS = ['dashboard', 'schedule', 'tasks', 'work-hub'];
+  const EMPLOYEE_TABS = ['dashboard', 'schedule', 'tasks', 'szkolenia'];
+  const MOBILE_VISIBLE = isAdmin ? ADMIN_TABS : EMPLOYEE_TABS;
   const visibleRoutes = state.routes.filter((r) =>
     MOBILE_VISIBLE.includes(r.name)
   );
-  const leftRoutes = visibleRoutes.slice(0, 1); // Just Dashboard
-  const rightRoutes = visibleRoutes.slice(1);  // Just Schedule
+  const leftRoutes = visibleRoutes.slice(0, 2); // Dashboard, Schedule
+  const rightRoutes = visibleRoutes.slice(2);  // Tasks, Admin/Szkolenia
 
   const { unreadCount } = useNotifications();
 
@@ -281,18 +283,17 @@ function MobileTabBar({ state, navigation }: BottomTabBarProps) {
   const adminFocused = state.routes[state.index]?.name === 'admin';
 
   const adminActions: FabAction[] = [
-    { icon: 'list-outline', label: 'Zadania', onPress: () => router.push('/(tabs)/tasks' as any) },
-    { icon: 'school-outline', label: 'Szkolenia', onPress: () => router.push('/(tabs)/szkolenia' as any) },
-    { icon: 'settings-outline', label: 'Zarządzanie', onPress: () => router.push('/work-hub' as any) },
+    { icon: 'calendar-outline', label: 'Nowa zmiana', onPress: () => router.push('/schedule-editor' as any) },
+    { icon: 'megaphone-outline', label: 'Nowe ogłoszenie', onPress: () => router.push('/(tabs)/announcements?new=true' as any) },
+    { icon: 'list-outline', label: 'Nowe zadanie', onPress: () => router.push('/(tabs)/tasks?new=true' as any) },
     { icon: 'folder-open-outline', label: 'Dokumenty', onPress: () => router.push('/documents' as any) },
   ];
 
   const employeeActions: FabAction[] = [
-    { icon: 'list-outline', label: 'Zadania', onPress: () => router.push('/(tabs)/tasks' as any) },
-    { icon: 'school-outline', label: 'Szkolenia', onPress: () => router.push('/(tabs)/szkolenia' as any) },
-    { icon: 'people-outline', label: 'Zespół', onPress: () => router.push('/(tabs)/team' as any) },
-    { icon: 'finger-print-outline', label: 'Moja zmiana', onPress: () => router.push('/shift-detail' as any) },
-    { icon: 'chatbubble-outline', label: 'Czat', onPress: () => router.push('/chat' as any) },
+    { icon: 'calendar-outline', label: 'Dostępność', onPress: () => router.push('/(tabs)/schedule' as any) },
+    { icon: 'document-text-outline', label: 'Wniosek', onPress: () => router.push('/(tabs)/leave-requests' as any) },
+    { icon: 'finger-print-outline', label: 'Zgłoszenie', onPress: () => router.push('/absence-request' as any) },
+    { icon: 'folder-open-outline', label: 'Dokumenty', onPress: () => router.push('/documents' as any) },
   ];
 
   const actions = isAdmin ? adminActions : employeeActions;
@@ -475,6 +476,7 @@ export default function TabLayout() {
             <Tabs.Screen name="reports" options={{ href: null }} />
             <Tabs.Screen name="notifications" options={{ href: null }} />
             <Tabs.Screen name="availability" options={{ href: null }} />
+            <Tabs.Screen name="announcements" options={{ href: null }} />
           </Tabs>
           </View>
         </View>
@@ -502,6 +504,7 @@ export default function TabLayout() {
       <Tabs.Screen name="reports" options={{ href: null }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="availability" options={{ href: null }} />
+      <Tabs.Screen name="announcements" options={{ href: null }} />
     </Tabs>
   );
 }

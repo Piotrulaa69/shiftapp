@@ -282,23 +282,6 @@ export default function ShiftDetailScreen() {
             </View>
           </View>
         )}
-
-        {/* Actions */}
-        {isMyShift && isUpcoming && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Akcje</Text>
-            <TouchableOpacity style={styles.actionBtn} onPress={() => setShowAbsenceModal(true)} activeOpacity={0.7}>
-              <Ionicons name="alert-circle-outline" size={18} color={theme.colors.error} />
-              <Text style={styles.actionBtnText}>Zgłoś nieobecność</Text>
-              <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtn} onPress={() => {}} activeOpacity={0.7}>
-              <Ionicons name="swap-horizontal-outline" size={18} color={theme.colors.primary} />
-              <Text style={styles.actionBtnText}>Zaproponuj wymianę</Text>
-              <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
-            </TouchableOpacity>
-          </View>
-        )}
       </ScrollView>
 
       {/* PIN Clock-in Modal */}

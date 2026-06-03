@@ -184,8 +184,9 @@ export default function DashboardScreen() {
           ))}
         </ScrollView>
 
-        <View style={isDesktop ? styles.gridRow : undefined}>
-        <View style={isDesktop ? styles.gridLeft : undefined}>
+        {isDesktop ? (
+          <View style={styles.gridRow}>
+            <View style={styles.gridLeft}>
 
         {/* ── MANAGER: Do zatwierdzenia ── */}
         {isManager && totalPending > 0 && (
@@ -230,7 +231,7 @@ export default function DashboardScreen() {
               </TouchableOpacity>
             )}
             {pendingCounts.absences > 0 && (
-              <TouchableOpacity style={styles.pendingRow} onPress={() => router.push('/(tabs)/admin' as any)} activeOpacity={0.7}>
+              <TouchableOpacity style={styles.pendingRow} onPress={() => router.push('/(tabs)/absences' as any)} activeOpacity={0.7}>
                 <View style={[styles.pendingIcon, { backgroundColor: '#FEF2F2' }]}>
                   <Ionicons name="alert-circle-outline" size={16} color="#EF4444" />
                 </View>
@@ -325,9 +326,8 @@ export default function DashboardScreen() {
           </View>
         )}
 
-        </View>
-        <View style={isDesktop ? styles.gridRight : undefined}>
-
+            </View>
+            <View style={styles.gridRight}>
         {/* Tasks */}
         <View style={[styles.section, isDesktop && styles.cardDesktop]}>
           <View style={styles.sectionHeader}>
@@ -357,9 +357,41 @@ export default function DashboardScreen() {
             </View>
           ))}
         </View>
-
+            </View>
+          </View>
+        ) : (
+          <>
+        {/* Tasks */}
+        <View style={[styles.section, isDesktop && styles.cardDesktop]}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Zadania na dziś</Text>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/tasks')}>
+              <Text style={styles.seeAll}>Zobacz wszystkie</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.progressRow}>
+            <Text style={styles.progressLabel}>Postęp</Text>
+            <Text style={styles.progressCount}>{completedTasks.length}/{tasks.length}</Text>
+          </View>
+          <View style={styles.progressBg}>
+            <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
+          </View>
+          {tasks.slice(0, 4).map((task) => (
+            <View key={task.id} style={styles.taskRow}>
+              <View style={[styles.taskCheck, (task.completed || task.status === 'zatwierdzone') && styles.taskCheckDone]}>
+                {(task.completed || task.status === 'zatwierdzone') && <Ionicons name="checkmark" size={12} color="#FFF" />}
+              </View>
+              <Text style={[styles.taskTitle, (task.completed || task.status === 'zatwierdzone') && styles.taskTitleDone]}>{task.title}</Text>
+              {task.status === 'czeka_na_zatwierdzenie' && (
+                <View style={{ backgroundColor: '#FFFBEB', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                  <Text style={{ fontSize: 10, color: '#F59E0B', fontWeight: '600' }}>Oczekuje</Text>
+                </View>
+              )}
+            </View>
+          ))}
         </View>
-        </View>
+          </>
+        )}
 
         {!isDesktop && (
           <TouchableOpacity style={styles.logoutBtn} onPress={logout}>

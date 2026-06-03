@@ -23,6 +23,12 @@ export default function AbsencesScreen() {
   const rid = user?.restaurantId ?? '';
   const canManage = isOwner || isManager;
 
+  // Redirect non-admin users
+  if (!canManage) {
+    router.replace('/(tabs)/dashboard' as any);
+    return null;
+  }
+
   const [absences, setAbsences] = useState<DbAbsence[]>([]);
   const [employees, setEmployees] = useState<DbProfile[]>([]);
   const [loading, setLoading] = useState(true);

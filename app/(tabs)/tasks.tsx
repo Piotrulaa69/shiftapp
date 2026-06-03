@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,7 +7,7 @@ import MobileHeader from '../../components/MobileHeader';
 import { TasksSkeleton } from '../../components/Skeleton';
 import TimePickerRow from '../../components/TimePickerRow';
 import { useAuth } from '../../context/AuthContext';
-import { createTask, approveTask as dbApproveTask, deleteTask as dbDeleteTask, rejectTask as dbRejectTask, toggleTask as dbToggleTask, getEmployees, getTasks, submitTaskForApproval } from '../../lib/db';
+import { createTask, approveTask as dbApproveTask, deleteTask as dbDeleteTask, rejectTask as dbRejectTask, toggleTask as dbToggleTask, getEmployeeGroupsWithMembers, getEmployees, getTasks, submitTaskForApproval } from '../../lib/db';
 import type { DbProfile, DbTask } from '../../lib/supabase';
 import { supabase } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
@@ -203,6 +203,7 @@ const CONFIRM_TYPES: Array<{ value: 'photo' | 'values' | 'description' | null; l
 
 export default function TasksScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { user, isOwner, isManager } = useAuth();
   const canApprove = isOwner || isManager;
   const TABS = canApprove ? [...TABS_EMPLOYEE, TAB_APPROVAL] : TABS_EMPLOYEE;
@@ -211,6 +212,7 @@ export default function TasksScreen() {
   const isDesktop = Platform.OS === 'web' && width >= 768;
   const [tasks, setTasks] = useState<DbTask[]>([]);
   const [employees, setEmployees] = useState<DbProfile[]>([]);
+  const [groups, setGroups] = useState<(any & { members: string[] })[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<string>('all');
   const [showModal, setShowModal] = useState(false);
@@ -225,6 +227,7 @@ export default function TasksScreen() {
   const [newDuration, setNewDuration] = useState('30');
   const [newConfirm, setNewConfirm] = useState<'photo' | 'values' | 'description' | null>(null);
   const [newAssignedTo, setNewAssignedTo] = useState<string>('ALL');
+  const [newAssignedGroup, setNewAssignedGroup] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [approvalDetailTask, setApprovalDetailTask] = useState<DbTask | null>(null);
   const [approvalConfirmation, setApprovalConfirmation] = useState<any | null>(null);
@@ -250,12 +253,21 @@ export default function TasksScreen() {
     Promise.all([
       getTasks(rid),
       canApprove ? getEmployees(rid) : Promise.resolve([]),
-    ]).then(([taskData, empData]) => {
+      canApprove ? getEmployeeGroupsWithMembers(rid) : Promise.resolve([]),
+    ]).then(([taskData, empData, groupData]) => {
       setTasks(taskData);
       setEmployees(empData);
+      setGroups(groupData);
       setLoading(false);
     });
   }, [rid, canApprove]));
+
+  // Auto-open create modal if ?new=true in URL
+  useFocusEffect(useCallback(() => {
+    if (params.new === 'true' && canApprove) {
+      setShowModal(true);
+    }
+  }, [params.new, canApprove]));
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -334,11 +346,12 @@ export default function TasksScreen() {
       recurrence_days: isRecurring ? recurrenceDays : null,
       recurrence_end_date: isRecurring && recurrenceEndDate ? recurrenceEndDate : null,
       points: canApprove && points ? parseInt(points) || 0 : 0,
+      target_group_id: newAssignedGroup,
     });
     if (created) setTasks((prev) => [...prev, created]);
     setSaving(false);
     setShowModal(false);
-    setNewTitle(''); setNewDesc(''); setNewTime('08:00'); setNewPriority('normalny'); setNewDuration('30'); setNewConfirm(null); setNewAssignedTo('');
+    setNewTitle(''); setNewDesc(''); setNewTime('08:00'); setNewPriority('normalny'); setNewDuration('30'); setNewConfirm(null); setNewAssignedTo(''); setNewAssignedGroup(null);
     setCfgValueItems([]); setCfgCheckItems([]); setCfgPrompt('');
     setIsRecurring(false); setRecurrencePattern('daily'); setRecurrenceEndDate(''); setSelectedDays([]);
     setPoints('');
@@ -683,6 +696,32 @@ export default function TasksScreen() {
                   </ScrollView>
                 </>
               )}
+
+              {canApprove && groups.length > 0 && (
+                <>
+                  <Text style={mStyles.label}>Lub przypisz do grupy</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
+                    <TouchableOpacity key="none" style={[mStyles.empChipModal, newAssignedGroup === null && mStyles.empChipModalActive]} onPress={() => setNewAssignedGroup(null)} activeOpacity={0.75}>
+                      <View style={[mStyles.empAvatarSmall, { backgroundColor: newAssignedGroup === null ? theme.colors.textMuted : theme.colors.border }]}>
+                        <Text style={mStyles.empAvatarSmallText}>--</Text>
+                      </View>
+                      <Text style={[mStyles.empChipModalText, newAssignedGroup === null && mStyles.empChipModalTextActive]}>Brak</Text>
+                    </TouchableOpacity>
+                    {groups.map((g) => {
+                      const active = newAssignedGroup === g.id;
+                      return (
+                        <TouchableOpacity key={g.id} style={[mStyles.empChipModal, active && mStyles.empChipModalActive]} onPress={() => setNewAssignedGroup(g.id)} activeOpacity={0.75}>
+                          <View style={[mStyles.empAvatarSmall, { backgroundColor: active ? g.color : theme.colors.border }]}>
+                            <Text style={mStyles.empAvatarSmallText}>{g.name.substring(0, 2).toUpperCase()}</Text>
+                          </View>
+                          <Text style={[mStyles.empChipModalText, active && mStyles.empChipModalTextActive]} numberOfLines={1}>{g.name}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </>
+              )}
+
               <Text style={mStyles.label}>Tytuł *</Text>
               <TextInput style={mStyles.input} value={newTitle} onChangeText={setNewTitle} placeholder="np. Przygotowanie sali" placeholderTextColor={theme.colors.textMuted} />
 

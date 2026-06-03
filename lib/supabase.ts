@@ -274,6 +274,17 @@ export type DbShiftSwap = {
   created_at: string;
 };
 
+export type DbAnnouncement = {
+  id: string;
+  restaurant_id: string;
+  author_id: string;
+  title: string;
+  content: string;
+  priority: 'low' | 'normal' | 'high';
+  expiry_date: string | null;
+  created_at: string;
+};
+
 export type DbSubscriptionAdjustment = {
   id: string;
   restaurant_id: string;

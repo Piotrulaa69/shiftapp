@@ -5,7 +5,9 @@
  */
 
 import type {
-    DbAbsence, DbAvailability, DbClockIn, DbConversation, DbDocument, DbDocumentTemplate,
+    DbAbsence,
+    DbAnnouncement,
+    DbAvailability, DbClockIn, DbConversation, DbDocument, DbDocumentTemplate,
     DbEmployeeGroup, DbEmployeeGroupAssignment, DbEmployeeLeaveQuota, DbEmployeeLeaveTypeSetting,
     DbInvitation, DbLeaveRequest, DbLeaveType, DbMessage, DbPointsLedger,
     DbProfile, DbPromoCode, DbRestaurant, DbShift, DbShiftSwap, DbTask,
@@ -889,7 +891,8 @@ export async function rejectTask(taskId: string, comment?: string): Promise<bool
 export async function clockInWithPin(
   restaurantId: string, shiftId: string, employeeId: string, pin: string,
 ): Promise<{ success: boolean; clockIn?: DbClockIn; error?: string }> {
-  const { data: shift } = await supabase.from('shifts').select('pin_code').eq('id', shiftId).single();
+  const { data: shift } = await supabase.from('shifts').select('pin_code').eq('id', shiftId).maybeSingle();
+  if (!shift) return { success: false, error: 'Zmiana nie istnieje' };
   if (shift?.pin_code && shift.pin_code !== pin) {
     return { success: false, error: 'Nieprawidłowy PIN' };
   }
@@ -1087,7 +1090,7 @@ export async function updateProfile(
 // ─── Absences for manager ─────────────────────────────────────────────────────
 
 export async function reviewAbsence(id: string, reviewerId: string, status: 'approved' | 'rejected'): Promise<boolean> {
-  const { data: absence } = await supabase.from('absences').select('restaurant_id, employee_id, absence_type').eq('id', id).single();
+  const { data: absence } = await supabase.from('absences').select('restaurant_id, employee_id, absence_type, shift_id').eq('id', id).single();
   const { error } = await supabase.from('absences').update({ status, reviewed_by: reviewerId }).eq('id', id);
   if (!error && absence) {
     const approved = status === 'approved';
@@ -1095,7 +1098,41 @@ export async function reviewAbsence(id: string, reviewerId: string, status: 'app
       approved ? 'Nieobecność zatwierdzona' : 'Nieobecność odrzucona',
       `Twoje zgłoszenie nieobecności (${absence.absence_type}) zostało ${approved ? 'zatwierdzone' : 'odrzucone'}.`,
       id);
+    // If approved, update the shift status to 'urlop'
+    if (approved && absence.shift_id) {
+      await supabase.from('shifts').update({ status: 'urlop' }).eq('id', absence.shift_id);
+    }
   }
+  return !error;
+}
+
+// ─── Announcements ─────────────────────────────────────────────────────────────
+
+export async function getAnnouncements(restaurantId: string): Promise<DbAnnouncement[]> {
+  const { data, error } = await supabase.from('announcements').select('*').eq('restaurant_id', restaurantId).order('created_at', { ascending: false });
+  if (error) { console.error('getAnnouncements', error); return []; }
+  return data as DbAnnouncement[];
+}
+
+export async function createAnnouncement(
+  restaurantId: string,
+  authorId: string,
+  title: string,
+  content: string,
+  priority: 'low' | 'normal' | 'high' = 'normal',
+  expiryDate: string | null = null,
+): Promise<DbAnnouncement | null> {
+  const { data, error } = await supabase
+    .from('announcements')
+    .insert({ restaurant_id: restaurantId, author_id: authorId, title, content, priority, expiry_date: expiryDate })
+    .select()
+    .single();
+  if (error) { console.error('createAnnouncement', error); return null; }
+  return data as DbAnnouncement;
+}
+
+export async function deleteAnnouncement(id: string): Promise<boolean> {
+  const { error } = await supabase.from('announcements').delete().eq('id', id);
   return !error;
 }
 
