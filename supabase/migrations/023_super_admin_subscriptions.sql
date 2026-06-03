@@ -3,17 +3,20 @@
 -- ══════════════════════════════════════════════════════
 
 -- 1. Super-admin can INSERT and UPDATE restaurants
+DROP POLICY IF EXISTS "sa_insert_restaurants" ON public.restaurants;
 CREATE POLICY "sa_insert_restaurants" ON public.restaurants
   FOR INSERT WITH CHECK (
     (SELECT is_super_admin FROM public.profiles WHERE id = auth.uid() LIMIT 1) = true
   );
 
+DROP POLICY IF EXISTS "sa_update_restaurants" ON public.restaurants;
 CREATE POLICY "sa_update_restaurants" ON public.restaurants
   FOR UPDATE USING (
     (SELECT is_super_admin FROM public.profiles WHERE id = auth.uid() LIMIT 1) = true
   );
 
 -- 2. Super-admin can manage all invitations (create owner invites for new restaurants)
+DROP POLICY IF EXISTS "sa_manage_invitations" ON public.invitations;
 CREATE POLICY "sa_manage_invitations" ON public.invitations
   FOR ALL USING (
     (SELECT is_super_admin FROM public.profiles WHERE id = auth.uid() LIMIT 1) = true
@@ -44,12 +47,14 @@ CREATE TABLE IF NOT EXISTS public.subscriptions (
 ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
 
 -- SA has full access
+DROP POLICY IF EXISTS "sa_manage_subscriptions" ON public.subscriptions;
 CREATE POLICY "sa_manage_subscriptions" ON public.subscriptions
   FOR ALL USING (
     (SELECT is_super_admin FROM public.profiles WHERE id = auth.uid() LIMIT 1) = true
   );
 
 -- Owners can view their own subscription
+DROP POLICY IF EXISTS "owners_read_own_subscription" ON public.subscriptions;
 CREATE POLICY "owners_read_own_subscription" ON public.subscriptions
   FOR SELECT USING (
     EXISTS (

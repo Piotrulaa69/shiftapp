@@ -27,6 +27,7 @@ const TAB_CONFIG: Record<string, { label: string; icon: string }> = {
   szkolenia: { label: 'Szkolenia', icon: 'school' },
   admin: { label: 'Zarządzanie', icon: 'settings' },
   documents: { label: 'Dokumenty', icon: 'folder-open' },
+  'work-hub': { label: 'Zarządzanie', icon: 'settings' },
   // hidden tabs — keep for routing compatibility
   'schedule-ai': { label: 'Grafik AI', icon: 'sparkles' },
   'documents-ai': { label: 'Dokumenty AI', icon: 'document-text' },
@@ -43,9 +44,8 @@ const NAV_ITEMS_BASE = [
 
 const NAV_ITEMS_ADMIN_EXTRA: { key: string; route: any }[] = [
   { key: 'documents', route: '/documents' },
+  { key: 'work-hub', route: '/work-hub' },
 ];
-
-const NAV_ITEM_ADMIN = { key: 'admin', route: '/(tabs)/admin' as const };
 
 /* ─────────────── NOTIFICATION BELL ─────────────── */
 function NotificationBell() {
@@ -100,7 +100,7 @@ function Sidebar() {
   const pathname = usePathname();
   const { logout, isOwner, isManager, restaurant, user } = useAuth();
   const NAV_ITEMS = (isOwner || isManager)
-    ? [...NAV_ITEMS_BASE, ...NAV_ITEMS_ADMIN_EXTRA, NAV_ITEM_ADMIN]
+    ? [...NAV_ITEMS_BASE, ...NAV_ITEMS_ADMIN_EXTRA]
     : NAV_ITEMS_BASE;
 
   return (
@@ -152,10 +152,6 @@ function Sidebar() {
           </TouchableOpacity>
           <NotificationBell />
         </View>
-        <TouchableOpacity style={sideStyles.sideActionBtn} onPress={() => router.push('/work-hub' as any)} activeOpacity={0.7}>
-          <Ionicons name="time-outline" size={16} color={theme.colors.primary} />
-          <Text style={sideStyles.sideActionText}>Czas pracy</Text>
-        </TouchableOpacity>
         <TouchableOpacity style={sideStyles.logoutBtn} onPress={logout} activeOpacity={0.7}>
           <Ionicons name="log-out-outline" size={18} color={theme.colors.textMuted} />
           <Text style={sideStyles.logoutText}>Wyloguj</Text>
@@ -287,18 +283,14 @@ function MobileTabBar({ state, navigation }: BottomTabBarProps) {
   const adminActions: FabAction[] = [
     { icon: 'list-outline', label: 'Zadania', onPress: () => router.push('/(tabs)/tasks' as any) },
     { icon: 'school-outline', label: 'Szkolenia', onPress: () => router.push('/(tabs)/szkolenia' as any) },
-    { icon: 'people-outline', label: 'Zespół', onPress: () => router.push('/(tabs)/team' as any) },
-    { icon: 'settings-outline', label: 'Zarządzanie', onPress: () => router.push('/(tabs)/admin' as any) },
+    { icon: 'settings-outline', label: 'Zarządzanie', onPress: () => router.push('/work-hub' as any) },
     { icon: 'folder-open-outline', label: 'Dokumenty', onPress: () => router.push('/documents' as any) },
-    { icon: 'sparkles-outline', label: 'Grafik AI', onPress: () => router.push('/(tabs)/schedule-ai' as any) },
-    { icon: 'time-outline', label: 'Czas pracy', onPress: () => router.push('/work-hub' as any) },
   ];
 
   const employeeActions: FabAction[] = [
     { icon: 'list-outline', label: 'Zadania', onPress: () => router.push('/(tabs)/tasks' as any) },
     { icon: 'school-outline', label: 'Szkolenia', onPress: () => router.push('/(tabs)/szkolenia' as any) },
     { icon: 'people-outline', label: 'Zespół', onPress: () => router.push('/(tabs)/team' as any) },
-    { icon: 'time-outline', label: 'Czas pracy', onPress: () => router.push('/work-hub' as any) },
     { icon: 'finger-print-outline', label: 'Moja zmiana', onPress: () => router.push('/shift-detail' as any) },
     { icon: 'chatbubble-outline', label: 'Czat', onPress: () => router.push('/chat' as any) },
   ];

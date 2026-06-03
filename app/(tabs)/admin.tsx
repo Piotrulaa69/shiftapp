@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Redirect, useFocusEffect, useRouter } from 'expo-router';
+import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -27,11 +27,19 @@ const JOB_OPTIONS = ['Kelner', 'Kucharz', 'Barista', 'Lider zmiany', 'Hostessa',
 
 export default function AdminScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { user, restaurant, refreshRestaurant, isOwner, isManager } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
   const { showAlert, showConfirm } = useAlert();
   const rid = user?.restaurantId ?? '';
+
+  // Handle tab parameter from URL
+  useEffect(() => {
+    if (params.tab && typeof params.tab === 'string') {
+      setTab(params.tab as any);
+    }
+  }, [params.tab]);
 
   const [employees, setEmployees] = useState<DbProfile[]>([]);
   const [invitations, setInvitations] = useState<DbInvitation[]>([]);

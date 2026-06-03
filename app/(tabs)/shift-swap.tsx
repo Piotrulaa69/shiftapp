@@ -3,10 +3,10 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '../context/AuthContext';
-import { createShiftSwap, getEmployees, getShifts, getShiftSwaps, updateSwapStatus } from '../lib/db';
-import type { DbProfile, DbShift, DbShiftSwap } from '../lib/supabase';
-import { theme } from '../styles/theme';
+import { useAuth } from '../../context/AuthContext';
+import { createShiftSwap, getEmployees, getShifts, getShiftSwaps, updateSwapStatus } from '../../lib/db';
+import type { DbProfile, DbShift, DbShiftSwap } from '../../lib/supabase';
+import { theme } from '../../styles/theme';
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
   pending_responder: { label: 'Oczekuje na odpowiedź', color: '#F97316', bg: '#FFF4E5' },

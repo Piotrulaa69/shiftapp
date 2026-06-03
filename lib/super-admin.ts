@@ -149,21 +149,42 @@ export type PromoCode = {
 export async function impersonateRestaurant(
   superAdminId: string,
   restaurantId: string
-): Promise<{ success: boolean; token?: string; error?: string }> {
-  // Log impersonation attempt
-  const { error: logError } = await supabase.from('impersonation_logs').insert({
-    super_admin_id: superAdminId,
-    target_restaurant_id: restaurantId,
-    impersonated_at: new Date().toISOString(),
-  });
-  if (logError) console.error('impersonation log', logError);
-
-  // Get restaurant owner session token (requires 2FA verification first)
-  const { data, error } = await supabase
-    .rpc('generate_impersonation_token', { target_restaurant_id: restaurantId });
+): Promise<{ success: boolean; error?: string }> {
+  console.log('impersonateRestaurant called', { superAdminId, restaurantId });
   
-  if (error) return { success: false, error: error.message };
-  return { success: true, token: data };
+  // Ustaw active_restaurant_id dla super admina
+  const { error } = await supabase
+    .from('profiles')
+    .update({ active_restaurant_id: restaurantId })
+    .eq('id', superAdminId);
+
+  if (error) {
+    console.error('impersonateRestaurant error', error);
+    return { success: false, error: error.message };
+  }
+
+  console.log('impersonateRestaurant success - active_restaurant_id set');
+  return { success: true };
+}
+
+export async function exitRestaurantMode(
+  superAdminId: string
+): Promise<{ success: boolean; error?: string }> {
+  console.log('exitRestaurantMode called', { superAdminId });
+  
+  // Wyczyść active_restaurant_id
+  const { error } = await supabase
+    .from('profiles')
+    .update({ active_restaurant_id: null })
+    .eq('id', superAdminId);
+
+  if (error) {
+    console.error('exitRestaurantMode error', error);
+    return { success: false, error: error.message };
+  }
+
+  console.log('exitRestaurantMode success - active_restaurant_id cleared');
+  return { success: true };
 }
 
 // ── Password Reset ───────────────────────────────────────

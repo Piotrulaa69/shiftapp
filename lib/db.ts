@@ -237,6 +237,7 @@ export async function getEmployees(restaurantId: string): Promise<DbProfile[]> {
     .select('*')
     .eq('restaurant_id', restaurantId)
     .eq('is_active', true)
+    .not('is_super_admin', 'eq', true) // Wyklucz super adminów z listy pracowników
     .order('created_at', { ascending: true });
   if (error) { console.error('getEmployees', error); return []; }
   return data as DbProfile[];
@@ -287,6 +288,11 @@ export async function findInvitationByCode(code: string): Promise<DbInvitation |
     .maybeSingle();
   if (error) { console.error('findInvitation', error); return null; }
   return data as DbInvitation | null;
+}
+
+export async function deleteInvitation(id: string): Promise<boolean> {
+  const { error } = await supabase.from('invitations').delete().eq('id', id);
+  return !error;
 }
 
 // ─── Restaurant ───────────────────────────────────────────────────────────────

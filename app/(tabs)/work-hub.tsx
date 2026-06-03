@@ -13,50 +13,66 @@ type HubTile = {
   iconColor: string;
   iconBg: string;
   route: string;
+  tab?: string;
   badge?: string;
   badgeColor?: string;
 };
 
-const EMPLOYEE_TILES: HubTile[] = [
+const MANAGEMENT_TILES: HubTile[] = [
   {
-    id: 'schedule',
-    title: 'Grafik',
-    subtitle: 'Zobacz swój harmonogram zmian',
-    icon: 'calendar',
+    id: 'team',
+    title: 'Zespół',
+    subtitle: 'Statystyki, zaproszenia, pełne zarządzanie',
+    icon: 'people',
     iconColor: '#2563EB',
     iconBg: '#EFF6FF',
-    route: '/(tabs)/schedule',
+    route: '/(tabs)/team-full',
   },
   {
-    id: 'availability',
-    title: 'Dyspozycyjność',
-    subtitle: 'Ustaw dni i godziny, w których możesz pracować',
-    icon: 'calendar-number',
+    id: 'groups',
+    title: 'Grupy',
+    subtitle: 'Twórz grupy pracowników',
+    icon: 'people-circle',
+    iconColor: '#7C3AED',
+    iconBg: '#F5F3FF',
+    route: '/(tabs)/groups',
+  },
+  {
+    id: 'invites',
+    title: 'Zaproszenia',
+    subtitle: 'Wyślij zaproszenia do zespołu',
+    icon: 'mail',
     iconColor: '#059669',
     iconBg: '#ECFDF5',
-    route: '/availability',
+    route: '/(tabs)/invites',
   },
   {
-    id: 'leave',
-    title: 'Wnioski urlopowe',
-    subtitle: 'Złóż wniosek lub sprawdź status',
+    id: 'leaves',
+    title: 'Urlopy',
+    subtitle: 'Zarządzaj wnioskami urlopowymi',
     icon: 'airplane',
     iconColor: '#D97706',
     iconBg: '#FFFBEB',
-    route: '/leave-requests',
+    route: '/(tabs)/leaves',
   },
   {
-    id: 'time',
-    title: 'Ewidencja czasu',
-    subtitle: 'Sprawdź swoje godziny pracy',
-    icon: 'time',
-    iconColor: '#7C3AED',
-    iconBg: '#F5F3FF',
-    route: '/(tabs)/time-tracking',
+    id: 'absences',
+    title: 'Nieobecności',
+    subtitle: 'Przeglądaj i zatwierdzaj nieobecności',
+    icon: 'calendar-clear',
+    iconColor: '#DC2626',
+    iconBg: '#FEF2F2',
+    route: '/(tabs)/absences',
   },
-];
-
-const MANAGER_EXTRA_TILES: HubTile[] = [
+  {
+    id: 'settings',
+    title: 'Ustawienia',
+    subtitle: 'Konfiguracja restauracji',
+    icon: 'settings',
+    iconColor: '#6B7280',
+    iconBg: '#F3F4F6',
+    route: '/(tabs)/settings',
+  },
   {
     id: 'schedule-editor',
     title: 'Edycja grafiku',
@@ -68,7 +84,7 @@ const MANAGER_EXTRA_TILES: HubTile[] = [
   },
   {
     id: 'reports',
-    title: 'Raporty czasu',
+    title: 'Raporty',
     subtitle: 'Nadgodziny, nieobecności, statystyki',
     icon: 'bar-chart',
     iconColor: '#DC2626',
@@ -82,9 +98,15 @@ export default function WorkHubScreen() {
   const { user, isOwner, isManager } = useAuth();
   const isAdmin = isOwner || isManager;
 
-  const tiles = isAdmin ? [...EMPLOYEE_TILES, ...MANAGER_EXTRA_TILES] : EMPLOYEE_TILES;
+  const tiles = MANAGEMENT_TILES;
 
-  const navigate = (route: string) => router.push(route as any);
+  const navigate = (route: string, tab?: string) => {
+    if (tab) {
+      router.push({ pathname: route as any, params: { tab } } as any);
+    } else {
+      router.push(route as any);
+    }
+  };
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -93,7 +115,7 @@ export default function WorkHubScreen() {
           <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={s.headerCenter}>
-          <Text style={s.headerTitle}>Czas pracy</Text>
+          <Text style={s.headerTitle}>Zarządzanie</Text>
           <Text style={s.headerSub}>{user?.name}</Text>
         </View>
         <View style={{ width: 36 }} />
@@ -102,11 +124,11 @@ export default function WorkHubScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
 
         <View style={s.grid}>
-          {tiles.map((tile) => (
+          {tiles.map((tile: HubTile) => (
             <TouchableOpacity
               key={tile.id}
               style={s.tile}
-              onPress={() => navigate(tile.route)}
+              onPress={() => navigate(tile.route, tile.tab)}
               activeOpacity={0.8}
             >
               <View style={[s.tileIconBox, { backgroundColor: tile.iconBg }]}>
@@ -125,7 +147,7 @@ export default function WorkHubScreen() {
         <View style={s.infoStrip}>
           <Ionicons name="information-circle-outline" size={16} color={theme.colors.textMuted} />
           <Text style={s.infoText}>
-            Dyspozycyjność i wnioski urlopowe są rozpatrywane przez managera w ciągu 2 dni roboczych.
+            Tutaj zarządzasz wszystkim co dotyczy Twojej restauracji - zespół, grafik, urlopy i raporty.
           </Text>
         </View>
 

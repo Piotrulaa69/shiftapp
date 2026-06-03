@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS two_factor_codes (
 CREATE TABLE IF NOT EXISTS impersonation_logs (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   admin_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  target_user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  target_user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
   restaurant_id UUID REFERENCES restaurants(id) ON DELETE SET NULL,
   started_at TIMESTAMPTZ DEFAULT NOW(),
   ended_at TIMESTAMPTZ,
@@ -88,6 +88,10 @@ CREATE POLICY "superadmin_only_insert"
 CREATE POLICY "impersonation_logs_select"
   ON impersonation_logs FOR SELECT
   USING (auth.uid() IN (SELECT id FROM profiles WHERE is_super_admin = TRUE) OR admin_id = auth.uid());
+
+CREATE POLICY "impersonation_logs_insert"
+  ON impersonation_logs FOR INSERT
+  WITH CHECK (auth.uid() IN (SELECT id FROM profiles WHERE is_super_admin = TRUE));
 
 CREATE POLICY "subscription_adjustments_select"
   ON subscription_adjustments FOR SELECT

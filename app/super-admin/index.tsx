@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator, Alert, Modal, Platform, ScrollView,
+    ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView,
     StyleSheet, Text, TextInput, TouchableOpacity,
     useWindowDimensions, View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import {
     createRestaurantWithInvite,
@@ -66,6 +66,64 @@ function daysUntil(dateStr?: string | null): number | null {
   return Math.ceil(diff / 86400000);
 }
 
+// ── Mobile FAB for SuperAdmin ─────────────────────────────
+function MobileFab({ nav, setNav }: { nav: NavItem; setNav: (n: NavItem) => void }) {
+  const [fabOpen, setFabOpen] = useState(false);
+  const insets = useSafeAreaInsets();
+
+  const actions = [
+    { icon: 'storefront-outline', label: 'Restauracje', key: 'restaurants' as NavItem },
+    { icon: 'card-outline', label: 'Subskrypcje', key: 'subscriptions' as NavItem },
+    { icon: 'people-outline', label: 'Użytkownicy', key: 'users' as NavItem },
+    { icon: 'pulse-outline', label: 'Aktywność', key: 'activity' as NavItem },
+    { icon: 'settings-outline', label: 'Ustawienia', key: 'settings' as NavItem },
+  ];
+
+  const handleFabPress = () => setFabOpen(true);
+  const handleAction = (key: NavItem) => {
+    setFabOpen(false);
+    setTimeout(() => setNav(key), 150);
+  };
+
+  return (
+    <>
+      <Modal visible={fabOpen} transparent animationType="fade" onRequestClose={() => setFabOpen(false)}>
+        <Pressable style={s.fabOverlay} onPress={() => setFabOpen(false)}>
+          <View style={s.fabMenu}>
+            {actions.map((a, i) => (
+              <TouchableOpacity key={i} style={s.fabMenuItem} onPress={() => handleAction(a.key)} activeOpacity={0.7}>
+                <View style={s.fabMenuIcon}>
+                  <Ionicons name={a.icon as any} size={20} color={theme.colors.primary} />
+                </View>
+                <Text style={s.fabMenuLabel}>{a.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
+      <View style={[s.mobileTabBar, { paddingBottom: insets.bottom || 8 }]}>
+        <TouchableOpacity
+          key="dashboard"
+          style={[s.mobileTabBarItem, nav === 'dashboard' && s.mobileTabBarItemActive]}
+          onPress={() => setNav('dashboard')}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="grid" size={20} color={nav === 'dashboard' ? theme.colors.primary : theme.colors.textMuted} />
+          <Text style={[s.mobileTabBarText, nav === 'dashboard' && s.mobileTabBarTextActive]}>Panel</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.fab, fabOpen && s.fabActive]}
+          activeOpacity={0.85}
+          onPress={handleFabPress}
+        >
+          <Ionicons name={fabOpen ? 'close' : 'add'} size={26} color="#fff" />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }} />
+      </View>
+    </>
+  );
+}
+
 // ── Root component ─────────────────────────────────────
 export default function SuperAdminDashboard() {
   const { user, logout } = useAuth();
@@ -94,6 +152,9 @@ export default function SuperAdminDashboard() {
   // Create restaurant modal
   const [showCreate, setShowCreate] = useState(false);
   const [createdCode, setCreatedCode] = useState<string | null>(null);
+
+  // Restaurant detail modal
+  const [selectedRestaurant, setSelectedRestaurant] = useState<RestaurantWithStats | null>(null);
 
   const loadAll = async () => {
     setLoading(true);
@@ -166,7 +227,7 @@ export default function SuperAdminDashboard() {
     );
     switch (nav) {
       case 'dashboard':     return <DashboardTab stats={stats} restaurants={restaurants} activity={activity} subOverview={subOverview} setNav={setNav} />;
-      case 'restaurants':   return <RestaurantsTab restaurants={filtered} search={search} setSearch={setSearch} onAdd={() => setShowCreate(true)} />;
+      case 'restaurants':   return <RestaurantsTab restaurants={filtered} search={search} setSearch={setSearch} onAdd={() => setShowCreate(true)} user={user} setImpersonating={setImpersonating} onSelectRestaurant={setSelectedRestaurant} />;
       case 'subscriptions': return <SubscriptionsTab subscriptions={subscriptions} overview={subOverview} restaurants={restaurants} onRefresh={loadAll} />;
       case 'users':         return <UsersTab restaurants={restaurants} />;
       case 'activity':      return <ActivityTab activity={activity} />;
@@ -183,6 +244,13 @@ export default function SuperAdminDashboard() {
         superAdminId={user?.id ?? ''}
         onClose={() => { setShowCreate(false); setCreatedCode(null); }}
         onCreated={(code) => { setCreatedCode(code); loadAll(); }}
+      />
+      {/* Restaurant Detail Modal */}
+      <RestaurantDetailModal
+        visible={!!selectedRestaurant}
+        restaurant={selectedRestaurant}
+        onClose={() => setSelectedRestaurant(null)}
+        onRefresh={loadAll}
       />
       {/* Success: show invite code */}
       {createdCode && (
@@ -245,17 +313,10 @@ export default function SuperAdminDashboard() {
           <TouchableOpacity onPress={logout} activeOpacity={0.7}><Ionicons name="log-out-outline" size={20} color={theme.colors.error} /></TouchableOpacity>
         </View>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.mobileTabs} contentContainerStyle={{ paddingHorizontal: 8 }}>
-        {NAV.map(item => (
-          <TouchableOpacity key={item.key} style={[s.mobileTab, nav === item.key && s.mobileTabActive]} onPress={() => setNav(item.key)} activeOpacity={0.7}>
-            <Ionicons name={item.icon as any} size={15} color={nav === item.key ? theme.colors.primary : theme.colors.textMuted} />
-            <Text style={[s.mobileTabText, nav === item.key && s.mobileTabTextActive]}>{item.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 16 }}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 80 }}>
         {content}
       </ScrollView>
+      <MobileFab nav={nav} setNav={setNav} />
     </SafeAreaView>
   );
 }
@@ -418,7 +479,7 @@ function DashboardTab({ stats, restaurants, activity, subOverview, setNav }: any
 }
 
 // ── TAB: Restaurants ─────────────────────────────────────
-function RestaurantsTab({ restaurants, search, setSearch, onAdd }: any) {
+function RestaurantsTab({ restaurants, search, setSearch, onAdd, user, setImpersonating, onSelectRestaurant }: any) {
   return (
     <View style={{ gap: 14 }}>
       <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
@@ -437,16 +498,32 @@ function RestaurantsTab({ restaurants, search, setSearch, onAdd }: any) {
     key={r.id}
     r={r}
     expanded
+    onPress={() => onSelectRestaurant(r)}
     onImpersonate={async (id) => {
-      if (!user?.id) return;
-      setImpersonating(id);
-      const result = await impersonateRestaurant(user.id, id);
-      if (result.success) {
-        Alert.alert('Sukces', `Zalogowano jako restauracja ID: ${id}\nToken: ${result.token?.slice(0, 20)}...`);
-      } else {
-        Alert.alert('Błąd', result.error || 'Nie udało się zalogować');
+      console.log('List impersonate button clicked', { id, userId: user?.id });
+      if (!user?.id) {
+        console.log('Missing user id in list impersonate');
+        return;
       }
+      setImpersonating(id);
+      console.log('Calling impersonateRestaurant from list');
+      const result = await impersonateRestaurant(user.id, id);
+      console.log('impersonateRestaurant result from list', result);
       setImpersonating(null);
+      
+      if (result.success) {
+        Alert.alert(
+          'Sukces', 
+          'Przełączono w tryb zarządzania restauracją. Przeładowanie aplikacji...',
+          [
+            { text: 'OK', onPress: () => window.location.reload() }
+          ]
+        );
+      } else {
+        console.log('Error - would show alert');
+        Alert.alert('Błąd', result.error || 'Nie udało się przełączyć');
+      }
+      console.log('List impersonate finished');
     }}
   />
 ))}
@@ -454,11 +531,11 @@ function RestaurantsTab({ restaurants, search, setSearch, onAdd }: any) {
   );
 }
 
-function RestaurantRow({ r, expanded = false, onImpersonate }: { r: RestaurantWithStats; expanded?: boolean; onImpersonate?: (id: string) => void }) {
+function RestaurantRow({ r, expanded = false, onPress, onImpersonate }: { r: RestaurantWithStats; expanded?: boolean; onPress?: () => void; onImpersonate?: (id: string) => void }) {
   const plan = PLAN_CFG[r.plan as keyof typeof PLAN_CFG] ?? PLAN_CFG.basic;
   const day = new Date(r.created_at).toLocaleDateString('pl-PL');
   return (
-    <View style={s.restRow}>
+    <TouchableOpacity style={s.restRow} onPress={onPress} activeOpacity={0.7}>
       <View style={[s.restAvatar, { backgroundColor: (r.logo_color ?? '#2563EB') + '22' }]}>
         <Text style={[s.restAvatarText, { color: r.logo_color ?? '#2563EB' }]}>{r.name.slice(0, 2).toUpperCase()}</Text>
       </View>
@@ -476,12 +553,12 @@ function RestaurantRow({ r, expanded = false, onImpersonate }: { r: RestaurantWi
           <View style={s.restStatItem}><Ionicons name="list-outline" size={13} color={theme.colors.textMuted} /><Text style={s.restStatText}>{r.task_count}</Text></View>
         </View>
         {onImpersonate && (
-          <TouchableOpacity style={s.loginAsBtn} onPress={() => onImpersonate(r.id)} activeOpacity={0.7}>
+          <TouchableOpacity style={s.loginAsBtn} onPress={(e) => { e.stopPropagation(); onImpersonate(r.id); }} activeOpacity={0.7}>
             <Ionicons name="enter-outline" size={16} color={theme.colors.primary} />
           </TouchableOpacity>
         )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -693,8 +770,166 @@ function ActivityTab({ activity }: any) {
   );
 }
 
+// ── Restaurant Detail Modal ─────────────────────────────
+function RestaurantDetailModal({ visible, restaurant, onClose, onRefresh }: {
+  visible: boolean;
+  restaurant: RestaurantWithStats | null;
+  onClose: () => void;
+  onRefresh: () => void;
+}) {
+  const { user } = useAuth();
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetting, setResetting] = useState(false);
+  const [impersonating, setImpersonating] = useState(false);
+  const [impersonationMessage, setImpersonationMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleResetPassword = async () => {
+    if (!restaurant || !resetEmail.trim()) return;
+    setResetting(true);
+    // TODO: Implement password reset via Supabase
+    setResetting(false);
+    Alert.alert('Info', 'Funkcja resetowania hasła wymaga implementacji');
+  };
+
+  const handleImpersonate = async () => {
+    console.log('handleImpersonate called', { restaurant, userId: user?.id });
+    if (!restaurant || !user?.id) {
+      console.log('Missing restaurant or user id');
+      return;
+    }
+    console.log('Starting impersonation process');
+    setImpersonating(true);
+    setImpersonationMessage(null);
+    console.log('Calling impersonateRestaurant');
+    const result = await impersonateRestaurant(user.id, restaurant.id);
+    console.log('impersonateRestaurant result', result);
+    setImpersonating(false);
+    console.log('Checking result.success:', result.success);
+    if (result.success) {
+      setImpersonationMessage({
+        type: 'success',
+        text: `Przełączono w tryb zarządzania restauracją: ${restaurant.name}\n\nKliknij OK aby przeładować aplikację.`
+      });
+      
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+    } else {
+      const message = {
+        type: 'error' as const,
+        text: result.error || 'Nie udało się zalogować'
+      };
+      console.log('Setting impersonationMessage to error', message);
+      setImpersonationMessage(message);
+      console.log('State set to error');
+    }
+    console.log('handleImpersonate finished');
+  };
+
+  if (!restaurant) return null;
+
+  const plan = PLAN_CFG[restaurant.plan as keyof typeof PLAN_CFG] ?? PLAN_CFG.basic;
+
+  console.log('Rendering RestaurantDetailModal', { impersonationMessage });
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={s.overlay}>
+        <View style={s.createModal}>
+          <View style={s.createModalHeader}>
+            <Text style={s.createModalTitle}>Szczegóły restauracji</Text>
+            <TouchableOpacity onPress={onClose} activeOpacity={0.7}><Ionicons name="close" size={22} color={theme.colors.textMuted} /></TouchableOpacity>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <View style={{ alignItems: 'center', marginBottom: 16 }}>
+              <View style={[s.restAvatar, { width: 60, height: 60, backgroundColor: (restaurant.logo_color ?? '#2563EB') + '22' }]}>
+                <Text style={[s.restAvatarText, { fontSize: 20, color: restaurant.logo_color ?? '#2563EB' }]}>{restaurant.name.slice(0, 2).toUpperCase()}</Text>
+              </View>
+              <Text style={[s.restName, { fontSize: 18, marginTop: 8 }]}>{restaurant.name}</Text>
+              <View style={[s.planBadge, { marginTop: 6, backgroundColor: plan.bg }]}><Text style={[s.planText, { color: plan.color }]}>{plan.label}</Text></View>
+            </View>
+
+            <View style={s.section}>
+              <Text style={s.formLabel}>Informacje podstawowe</Text>
+              <View style={[s.settingRow, { backgroundColor: theme.colors.surface, padding: 12 }]}>
+                <View style={[s.settingIcon, { backgroundColor: '#2563EB' + '18' }]}><Ionicons name="person" size={16} color="#2563EB" /></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.settingLabel}>Właściciel</Text>
+                  <Text style={s.settingValue}>{restaurant.owner_name ?? 'Brak'}</Text>
+                </View>
+              </View>
+              <View style={[s.settingRow, { backgroundColor: theme.colors.surface, padding: 12 }]}>
+                <View style={[s.settingIcon, { backgroundColor: '#059669' + '18' }]}><Ionicons name="location" size={16} color="#059669" /></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.settingLabel}>Adres</Text>
+                  <Text style={s.settingValue}>{restaurant.address ?? 'Brak'}</Text>
+                </View>
+              </View>
+              <View style={[s.settingRow, { backgroundColor: theme.colors.surface, padding: 12 }]}>
+                <View style={[s.settingIcon, { backgroundColor: '#7C3AED' + '18' }]}><Ionicons name="calendar" size={16} color="#7C3AED" /></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.settingLabel}>Utworzono</Text>
+                  <Text style={s.settingValue}>{new Date(restaurant.created_at).toLocaleDateString('pl-PL')}</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={s.section}>
+              <Text style={s.formLabel}>Statystyki</Text>
+              <View style={s.statsRow}>
+                <View style={[s.statCard, { flex: 1 }]}>
+                  <Text style={[s.statNum, { fontSize: 20, color: '#2563EB' }]}>{restaurant.employee_count}</Text>
+                  <Text style={s.statLabel}>Pracowników</Text>
+                </View>
+                <View style={[s.statCard, { flex: 1 }]}>
+                  <Text style={[s.statNum, { fontSize: 20, color: '#059669' }]}>{restaurant.task_count}</Text>
+                  <Text style={s.statLabel}>Zadań</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={s.section}>
+              <Text style={s.formLabel}>Akcje</Text>
+              <TouchableOpacity style={[s.createBtn, { backgroundColor: '#2563EB' }]} onPress={handleImpersonate} disabled={impersonating} activeOpacity={0.85}>
+                {impersonating ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="enter-outline" size={18} color="#fff" />}
+                <Text style={s.createBtnText}>{impersonating ? 'Logowanie...' : 'Zaloguj jako ta restauracja'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.createBtn, { backgroundColor: '#DC2626' }]} onPress={() => Alert.alert('Info', 'Funkcja resetowania hasła wymaga implementacji')} activeOpacity={0.85}>
+                <Ionicons name="refresh-outline" size={18} color="#fff" />
+                <Text style={s.createBtnText}>Reset hasła właściciela</Text>
+              </TouchableOpacity>
+              {impersonationMessage && (
+                <View style={[{ padding: 12, borderRadius: 8, marginTop: 8 }, impersonationMessage.type === 'success' ? { backgroundColor: '#D1FAE5' } : { backgroundColor: '#FEE2E2' }]}>
+                  <Text style={[{ fontSize: 14, fontWeight: '500' }, impersonationMessage.type === 'success' ? { color: '#065F46' } : { color: '#991B1B' }]}>
+                    {impersonationMessage.text}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 // ── TAB: Settings ───────────────────────────────────────
 function SettingsTab() {
+  const [showPromoModal, setShowPromoModal] = useState(false);
+  const [promoCode, setPromoCode] = useState('');
+  const [promoDiscount, setPromoDiscount] = useState('10');
+  const [promoMaxUses, setPromoMaxUses] = useState('');
+  const [promoType, setPromoType] = useState<'referral' | 'marketing' | 'partner'>('referral');
+  const [loading, setLoading] = useState(false);
+
+  const handleCreatePromo = async () => {
+    if (!promoCode.trim()) return;
+    setLoading(true);
+    // TODO: Implement promo code creation via Supabase
+    setLoading(false);
+    Alert.alert('Info', 'Funkcja tworzenia kodów promocyjnych wymaga implementacji');
+  };
+
   return (
     <View style={{ gap: 14 }}>
       <Text style={s.sectionTitle}>Ustawienia systemu</Text>
@@ -710,6 +945,17 @@ function SettingsTab() {
           <Text style={s.settingValue}>{item.value}</Text>
         </View>
       ))}
+
+      <View style={s.section}>
+        <View style={s.sectionHeader}>
+          <Text style={s.sectionTitle}>Kody promocyjne</Text>
+          <TouchableOpacity onPress={() => setShowPromoModal(true)} activeOpacity={0.7}><Text style={s.sectionLink}>Nowy kod →</Text></TouchableOpacity>
+        </View>
+        <Text style={{ fontSize: 12, color: theme.colors.textMuted, textAlign: 'center', padding: 20 }}>
+          Brak aktywnych kodów promocyjnych
+        </Text>
+      </View>
+
       <View style={{ backgroundColor: '#FEF3C7', borderRadius: 12, padding: 14 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <Ionicons name="information-circle" size={16} color="#D97706" />
@@ -724,6 +970,51 @@ function SettingsTab() {
           {'  '}('&lt;UUID&gt;', true, 'ShiftApp', 'Team', 'owner', 'Super Admin', '#7C3AED');
         </Text>
       </View>
+
+      {/* Promo Code Modal */}
+      <Modal visible={showPromoModal} transparent animationType="slide" onRequestClose={() => setShowPromoModal(false)}>
+        <View style={s.overlay}>
+          <View style={s.createModal}>
+            <View style={s.createModalHeader}>
+              <Text style={s.createModalTitle}>Nowy kod promocyjny</Text>
+              <TouchableOpacity onPress={() => setShowPromoModal(false)} activeOpacity={0.7}><Ionicons name="close" size={22} color={theme.colors.textMuted} /></TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={s.formLabel}>Kod</Text>
+              <View style={[s.inputRow, { marginBottom: 14 }]}>
+                <Ionicons name="pricetag" size={16} color={theme.colors.textMuted} />
+                <TextInput style={s.formInput} value={promoCode} onChangeText={setPromoCode} placeholder="np. SUMMER2024" placeholderTextColor={theme.colors.textMuted} autoCapitalize="characters" />
+              </View>
+
+              <Text style={s.formLabel}>Typ</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+                {(['referral', 'marketing', 'partner'] as const).map(t => (
+                  <TouchableOpacity key={t} style={[s.filterChip, promoType === t && s.filterChipActive]} onPress={() => setPromoType(t)} activeOpacity={0.7}>
+                    <Text style={[s.filterText, promoType === t && s.filterTextActive]}>{t === 'referral' ? 'Polecenie' : t === 'marketing' ? 'Marketing' : 'Partner'}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={s.formLabel}>Rabat (%)</Text>
+              <View style={[s.inputRow, { marginBottom: 14 }]}>
+                <Ionicons name="pricetag" size={16} color={theme.colors.textMuted} />
+                <TextInput style={s.formInput} value={promoDiscount} keyboardType="numeric" onChangeText={setPromoDiscount} placeholder="10" placeholderTextColor={theme.colors.textMuted} />
+              </View>
+
+              <Text style={s.formLabel}>Maksymalne użycia (opcjonalne)</Text>
+              <View style={[s.inputRow, { marginBottom: 14 }]}>
+                <Ionicons name="people" size={16} color={theme.colors.textMuted} />
+                <TextInput style={s.formInput} value={promoMaxUses} keyboardType="numeric" onChangeText={setPromoMaxUses} placeholder="np. 100" placeholderTextColor={theme.colors.textMuted} />
+              </View>
+
+              <TouchableOpacity style={[s.createBtn, loading && { opacity: 0.6 }]} onPress={handleCreatePromo} disabled={loading} activeOpacity={0.85}>
+                {loading ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="checkmark-circle" size={18} color="#fff" />}
+                <Text style={s.createBtnText}>{loading ? 'Tworzenie...' : 'Utwórz kod'}</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -767,6 +1058,18 @@ const s = StyleSheet.create({
   mobileTabActive: { borderBottomColor: theme.colors.primary },
   mobileTabText: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary },
   mobileTabTextActive: { color: theme.colors.primary },
+  mobileTabBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.card, borderTopWidth: 1, borderTopColor: theme.colors.border, paddingTop: 8, paddingHorizontal: 4, shadowColor: '#1A1D23', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 8 },
+  mobileTabBarItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 4, gap: 3 },
+  mobileTabBarItemActive: {},
+  mobileTabBarText: { fontSize: 10, fontWeight: '600' },
+  mobileTabBarTextActive: { color: theme.colors.primary },
+  fabOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end', alignItems: 'center' },
+  fabMenu: { position: 'absolute', backgroundColor: theme.colors.card, borderRadius: 16, padding: 8, minWidth: 200, ...theme.shadows.medium },
+  fabMenuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12 },
+  fabMenuIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: theme.colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
+  fabMenuLabel: { fontSize: 15, fontWeight: '600', color: theme.colors.text },
+  fab: { width: 56, height: 56, borderRadius: 28, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center', marginBottom: 12, ...theme.shadows.fab },
+  fabActive: { backgroundColor: '#1a56db' },
   loader: { alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 16 },
   loaderText: { fontSize: 14, color: theme.colors.textMuted },
   statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
@@ -787,6 +1090,7 @@ const s = StyleSheet.create({
   restStats: { flexDirection: 'row', gap: 8 },
   restStatItem: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   restStatText: { fontSize: 12, fontWeight: '700', color: theme.colors.textSecondary },
+  loginAsBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: theme.colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
   planBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 20 },
   planText: { fontSize: 10, fontWeight: '700' },
   activityRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: theme.colors.card, borderRadius: 10, padding: 12, ...theme.shadows.card },

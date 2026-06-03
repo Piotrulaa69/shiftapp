@@ -24,6 +24,7 @@ import {
     getTodayShift,
 } from '../../lib/db';
 import type { DbClockIn, DbShift, DbTask } from '../../lib/supabase';
+import { exitRestaurantMode } from '../../lib/super-admin';
 import { theme } from '../../styles/theme';
 
 
@@ -138,6 +139,19 @@ export default function DashboardScreen() {
           <View style={styles.headerLeft}>
             <Text style={styles.greeting}>Cześć, {user?.firstName}! 👋</Text>
             <Text style={styles.greetingSub}>{restaurant?.name}</Text>
+            {user?.isSuperAdmin && (
+              <TouchableOpacity 
+                onPress={async () => {
+                  const result = await exitRestaurantMode(user.id);
+                  if (result.success) {
+                    window.location.reload();
+                  }
+                }}
+                style={{ marginTop: 4 }}
+              >
+                <Text style={{ fontSize: 12, color: '#DC2626', fontWeight: '500' }}>Wyjdź z trybu zarządzania</Text>
+              </TouchableOpacity>
+            )}
           </View>
           <View style={styles.headerRight}>
             <TouchableOpacity onPress={() => router.push('/chat' as any)} style={styles.headerIconBtn}>

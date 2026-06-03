@@ -92,19 +92,42 @@ function toRestaurant(r: DbRestaurant): Restaurant {
 }
 
 async function loadUserData(userId: string, email: string): Promise<{ user: AuthUser; restaurant: Restaurant | null } | null> {
+  // Pobierz profil bez JOIN
   const { data: profile, error: pErr } = await supabase
     .from('profiles')
-    .select('*, restaurants(*)')
+    .select('*')
     .eq('id', userId)
     .single();
 
   if (pErr || !profile) return null;
 
-  const restaurant = (profile as any).restaurants;
+  const isSuperAdmin = (profile as DbProfile).is_super_admin === true;
+  const restaurantId = (profile as DbProfile).restaurant_id;
+
+  // Jeśli super admin nie ma restauracji, to jest OK
+  if (isSuperAdmin && !restaurantId) {
+    return {
+      user: toAuthUser(profile as DbProfile, email),
+      restaurant: null,
+    };
+  }
+
+  // Pobierz restaurację osobnym zapytaniem
+  let restaurant = null;
+  if (restaurantId) {
+    const { data: restData } = await supabase
+      .from('restaurants')
+      .select('*')
+      .eq('id', restaurantId)
+      .single();
+    if (restData) {
+      restaurant = toRestaurant(restData as DbRestaurant);
+    }
+  }
 
   return {
     user: toAuthUser(profile as DbProfile, email),
-    restaurant: restaurant ? toRestaurant(restaurant as DbRestaurant) : null,
+    restaurant,
   };
 }
 

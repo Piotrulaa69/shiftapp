@@ -784,25 +784,25 @@ export default function ScheduleScreen() {
       </View>
 
       {/* Quick Actions - Grafikowe funkcje */}
-      <View style={styles.quickActionsRow}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickActionsContent}>
-          <TouchableOpacity style={styles.quickActionChip} onPress={() => router.push('/(tabs)/availability')} activeOpacity={0.7}>
-            <Ionicons name="calendar-number-outline" size={16} color="#059669" />
-            <Text style={styles.quickActionChipText}>Dyspozycyjność</Text>
+      <View style={{ paddingHorizontal: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border, backgroundColor: theme.colors.card }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 6 }}>
+          <TouchableOpacity style={{ flex: 1, flexDirection: 'column', alignItems: 'center', gap: 4, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 10, backgroundColor: theme.colors.white, borderWidth: 1.5, borderColor: theme.colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 }} onPress={() => router.push('/(tabs)/availability')} activeOpacity={0.7}>
+            <Ionicons name="calendar-number-outline" size={20} color="#059669" />
+            <Text style={{ fontSize: 9, fontWeight: '600', color: theme.colors.text, textAlign: 'center' }} numberOfLines={2}>Dyspozycyjność</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickActionChip} onPress={() => router.push('/leave-requests')} activeOpacity={0.7}>
-            <Ionicons name="airplane-outline" size={16} color="#D97706" />
-            <Text style={styles.quickActionChipText}>Urlopy</Text>
+          <TouchableOpacity style={{ flex: 1, flexDirection: 'column', alignItems: 'center', gap: 4, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 10, backgroundColor: theme.colors.white, borderWidth: 1.5, borderColor: theme.colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 }} onPress={() => router.push('/leave-requests')} activeOpacity={0.7}>
+            <Ionicons name="airplane-outline" size={20} color="#D97706" />
+            <Text style={{ fontSize: 9, fontWeight: '600', color: theme.colors.text }}>Urlopy</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickActionChip} onPress={() => router.push('/(tabs)/work-hub')} activeOpacity={0.7}>
-            <Ionicons name="time-outline" size={16} color="#2563EB" />
-            <Text style={styles.quickActionChipText}>Ewidencja</Text>
+          <TouchableOpacity style={{ flex: 1, flexDirection: 'column', alignItems: 'center', gap: 4, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 10, backgroundColor: theme.colors.white, borderWidth: 1.5, borderColor: theme.colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 }} onPress={() => router.push('/(tabs)/work-hub')} activeOpacity={0.7}>
+            <Ionicons name="time-outline" size={20} color="#2563EB" />
+            <Text style={{ fontSize: 9, fontWeight: '600', color: theme.colors.text }}>Ewidencja</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickActionChip} onPress={() => router.push('/shift-swap')} activeOpacity={0.7}>
-            <Ionicons name="swap-horizontal-outline" size={16} color="#7C3AED" />
-            <Text style={styles.quickActionChipText}>Wymiana zmian</Text>
+          <TouchableOpacity style={{ flex: 1, flexDirection: 'column', alignItems: 'center', gap: 4, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 10, backgroundColor: theme.colors.white, borderWidth: 1.5, borderColor: theme.colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 }} onPress={() => router.push('/shift-swap')} activeOpacity={0.7}>
+            <Ionicons name="swap-horizontal-outline" size={20} color="#7C3AED" />
+            <Text style={{ fontSize: 9, fontWeight: '600', color: theme.colors.text }}>Wymiana</Text>
           </TouchableOpacity>
-        </ScrollView>
+        </View>
       </View>
 
       {/* ── MONTH VIEW ── */}
@@ -1604,14 +1604,14 @@ const mStyles = StyleSheet.create({
   // Quick Actions
   quickActionsRow: {
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
     backgroundColor: theme.colors.card,
   },
   quickActionsContent: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 30,
     paddingRight: 16,
     alignItems: 'center',
   },
@@ -1619,17 +1619,23 @@ const mStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: theme.borderRadius.md,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: theme.colors.white,
+    borderWidth: 1.5,
     borderColor: theme.colors.border,
-    ...theme.shadows.card,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+    marginRight: 1,
   },
   quickActionChipText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     color: theme.colors.text,
+    letterSpacing: -0.3,
   },
 });
