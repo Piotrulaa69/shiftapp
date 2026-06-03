@@ -6,8 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileHeader from '../../components/MobileHeader';
 import TimePickerRow from '../../components/TimePickerRow';
 import { useAuth } from '../../context/AuthContext';
-import { createShift, deleteShift as dbDeleteShift, updateShift as dbUpdateShift, getEmployees, getShifts } from '../../lib/db';
-import type { DbShift } from '../../lib/supabase';
+import { createShift, deleteShift as dbDeleteShift, updateShift as dbUpdateShift, getClockIns, getEmployees, getShifts } from '../../lib/db';
+import type { DbClockIn, DbShift } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
 type ShiftStatus = 'zaplanowana' | 'do_potwierdzenia' | 'potwierdzona' | 'urlop';
@@ -533,6 +533,12 @@ export default function ScheduleScreen() {
   const [dragShiftId, setDragShiftId] = useState<string | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
 
+  /* Stats modal state */
+  const [showStatsModal, setShowStatsModal] = useState(false);
+  const [employeeShifts, setEmployeeShifts] = useState<DbShift[]>([]);
+  const [employeeClockIns, setEmployeeClockIns] = useState<DbClockIn[]>([]);
+  const [loadingStats, setLoadingStats] = useState(false);
+
   const dayScrollRef = useRef<import('react-native').ScrollView>(null);
 
   const selDateObj = useMemo(() => new Date(selectedDate + 'T12:00:00'), [selectedDate]);
@@ -621,6 +627,27 @@ export default function ScheduleScreen() {
     if (!shift || shift.day === dateStr) return;
     const updated = await dbUpdateShift(dragShiftId, { day: dateStr });
     if (updated) setAllShifts(prev => prev.map(s => s.id === dragShiftId ? updated : s));
+  };
+
+  const handleOpenStats = async () => {
+    if (!user?.id || !rid) return;
+    setLoadingStats(true);
+    setShowStatsModal(true);
+    try {
+      const [shifts, clockIns] = await Promise.all([
+        getShifts(rid),
+        getClockIns(rid),
+      ]);
+      // Filter shifts and clock-ins for current employee
+      const employeeShifts = shifts.filter((s: DbShift) => s.employee_id === user.id);
+      const employeeClockIns = clockIns.filter((ci: DbClockIn) => ci.employee_id === user.id);
+      setEmployeeShifts(employeeShifts);
+      setEmployeeClockIns(employeeClockIns);
+    } catch (error) {
+      console.error('Error loading stats:', error);
+    } finally {
+      setLoadingStats(false);
+    }
   };
 
   if (loading) return (
@@ -794,7 +821,7 @@ export default function ScheduleScreen() {
             <Ionicons name="airplane-outline" size={20} color="#D97706" />
             <Text style={{ fontSize: 9, fontWeight: '600', color: theme.colors.text }}>Urlopy</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={{ flex: 1, flexDirection: 'column', alignItems: 'center', gap: 4, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 10, backgroundColor: theme.colors.white, borderWidth: 1.5, borderColor: theme.colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 }} onPress={() => router.push('/(tabs)/work-hub')} activeOpacity={0.7}>
+          <TouchableOpacity style={{ flex: 1, flexDirection: 'column', alignItems: 'center', gap: 4, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 10, backgroundColor: theme.colors.white, borderWidth: 1.5, borderColor: theme.colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 }} onPress={handleOpenStats} activeOpacity={0.7}>
             <Ionicons name="time-outline" size={20} color="#2563EB" />
             <Text style={{ fontSize: 9, fontWeight: '600', color: theme.colors.text }}>Ewidencja</Text>
           </TouchableOpacity>
@@ -1098,6 +1125,114 @@ export default function ScheduleScreen() {
               </View>
             ))}
           </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ── Stats Modal ── */}
+      <Modal visible={showStatsModal} animationType="slide" transparent onRequestClose={() => setShowStatsModal(false)}>
+        <TouchableOpacity style={mStyles.overlay} activeOpacity={1} onPress={() => setShowStatsModal(false)}>
+          <View style={isDesktop ? styles.statsModal : styles.statsModalMobile}>
+            <View style={isDesktop ? styles.statsHeader : styles.statsHeaderMobile}>
+              <Text style={isDesktop ? styles.statsTitle : styles.statsTitleMobile}>Ewidencja godzin</Text>
+              <TouchableOpacity onPress={() => setShowStatsModal(false)}>
+                <Ionicons name="close" size={isDesktop ? 24 : 22} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={isDesktop ? styles.statsBody : styles.statsBodyMobile}>
+              {loadingStats ? (
+                <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                  <ActivityIndicator size="large" color={theme.colors.primary} />
+                </View>
+              ) : (
+                <>
+                  {/* Summary Cards */}
+                  <View style={isDesktop ? styles.statsGrid : styles.statsGridMobile}>
+                    <View style={[styles.statCard, { backgroundColor: '#EFF6FF' }]}>
+                      <View style={styles.statIcon}>
+                        <Ionicons name="time-outline" size={24} color="#2563EB" />
+                      </View>
+                      <View style={styles.statInfo}>
+                        <Text style={styles.statLabel}>Przypisane</Text>
+                        <Text style={styles.statValue}>
+                          {employeeShifts.reduce((acc, s) => {
+                            const [h1, m1] = s.start_time.split(':').map(Number);
+                            const [h2, m2] = s.end_time.split(':').map(Number);
+                            return acc + (h2 * 60 + m2 - (h1 * 60 + m1));
+                          }, 0) / 60}h
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={[styles.statCard, { backgroundColor: '#F0FDF4' }]}>
+                      <View style={styles.statIcon}>
+                        <Ionicons name="checkmark-circle-outline" size={24} color="#16A34A" />
+                      </View>
+                      <View style={styles.statInfo}>
+                        <Text style={styles.statLabel}>Przepracowane</Text>
+                        <Text style={styles.statValue}>
+                          {employeeClockIns.reduce((acc, ci) => {
+                            if (!ci.clock_in_at || !ci.clock_out_at) return acc;
+                            const start = new Date(ci.clock_in_at);
+                            const end = new Date(ci.clock_out_at);
+                            return acc + (end.getTime() - start.getTime()) / 3600000;
+                          }, 0).toFixed(1)}h
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={[styles.statCard, { backgroundColor: '#FFFBEB' }]}>
+                      <View style={styles.statIcon}>
+                        <Ionicons name="calendar-outline" size={24} color="#CA8A04" />
+                      </View>
+                      <View style={styles.statInfo}>
+                        <Text style={styles.statLabel}>Zmiany</Text>
+                        <Text style={styles.statValue}>{employeeShifts.length}</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Recent Clock-ins */}
+                  <View style={styles.statsSection}>
+                    <Text style={styles.statsSectionTitle}>Ostatnie wejścia</Text>
+                    {employeeClockIns.slice(0, 10).map((ci) => (
+                      <View key={ci.id} style={styles.statRow}>
+                        <View style={styles.statRowLeft}>
+                          <View style={[styles.statRowIcon, { backgroundColor: ci.status === 'active' ? '#EFF6FF' : '#F0FDF4' }]}>
+                            <Ionicons 
+                              name={ci.status === 'active' ? 'play-circle' : 'checkmark-circle'} 
+                              size={16} 
+                              color={ci.status === 'active' ? '#2563EB' : '#16A34A'} 
+                            />
+                          </View>
+                          <View>
+                            <Text style={styles.statRowDate}>
+                              {ci.clock_in_at ? new Date(ci.clock_in_at).toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric', month: 'short' }) : '--'}
+                            </Text>
+                            <Text style={styles.statRowTime}>
+                              {ci.clock_in_at ? new Date(ci.clock_in_at).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                              {' → '}
+                              {ci.clock_out_at ? new Date(ci.clock_out_at).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' }) : 'aktywny'}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={[styles.statRowBadge, { backgroundColor: ci.status === 'active' ? '#EFF6FF' : '#F0FDF4' }]}>
+                          <Text style={[styles.statRowBadgeText, { color: ci.status === 'active' ? '#2563EB' : '#16A34A' }]}>
+                            {ci.status === 'active' ? 'Aktywny' : 'Zakończony'}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                    {employeeClockIns.length === 0 && (
+                      <View style={styles.emptyState}>
+                        <Ionicons name="time-outline" size={40} color={theme.colors.textMuted} />
+                        <Text style={styles.emptyText}>Brak zarejestrowanych wejść</Text>
+                      </View>
+                    )}
+                  </View>
+                </>
+              )}
+            </ScrollView>
+          </View>
         </TouchableOpacity>
       </Modal>
 
@@ -1506,6 +1641,129 @@ const styles = StyleSheet.create({
   legendDot: { width: 10, height: 10, borderRadius: 5 },
   legendLabel: { fontSize: 14, fontWeight: '500', color: theme.colors.text },
   legendDesc: { fontSize: 12, color: theme.colors.textMuted, marginTop: 1 },
+
+  // Stats Modal
+  statsModal: {
+    backgroundColor: theme.colors.card,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '85%',
+  },
+  statsModalMobile: {
+    backgroundColor: theme.colors.card,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '90%',
+  },
+  statsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  statsHeaderMobile: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  statsTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
+  statsTitleMobile: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
+  statsBody: { padding: 20, gap: 16 },
+  statsBodyMobile: { padding: 16, gap: 12 },
+  statCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: theme.borderRadius.lg,
+    padding: 16,
+    ...theme.shadows.card,
+  },
+  statIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statInfo: { flex: 1 },
+  statLabel: { fontSize: 12, color: theme.colors.textSecondary, marginBottom: 4 },
+  statValue: { fontSize: 20, fontWeight: '700', color: theme.colors.text },
+  statRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  statRowLabel: { fontSize: 14, color: theme.colors.text },
+  statRowValue: { fontSize: 14, fontWeight: '600', color: theme.colors.text },
+  statsGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  statsGridMobile: {
+    flexDirection: 'column',
+    gap: 12,
+    marginBottom: 20,
+  },
+  statsSection: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.lg,
+    padding: 16,
+  },
+  statsSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.text,
+    marginBottom: 12,
+  },
+  statRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  statRowIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statRowDate: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: theme.colors.text,
+    marginBottom: 2,
+  },
+  statRowTime: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+  },
+  statRowBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statRowBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    gap: 8,
+  },
 });
 
 const mStyles = StyleSheet.create({
