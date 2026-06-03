@@ -37,11 +37,17 @@ export default function AdminScreen() {
   const [trainings, setTrainings] = useState<DbTraining[]>([]);
   const [leaveRequests, setLeaveRequests] = useState<DbLeaveRequest[]>([]);
   const [absences, setAbsences] = useState<DbAbsence[]>([]);
+  const [groups, setGroups] = useState<(DbEmployeeGroup & { members: string[] })[]>([]);
   const [showInvite, setShowInvite] = useState(false);
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<(DbEmployeeGroup & { members: string[] }) | null>(null);
+  const [groupName, setGroupName] = useState('');
+  const [groupColor, setGroupColor] = useState('#2563EB');
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [jobTitle, setJobTitle] = useState('Kelner');
   const [lastCode, setLastCode] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
-  const [tab, setTab] = useState<'team' | 'invites' | 'urlopy' | 'nieobecnosci' | 'settings'>('team');
+  const [tab, setTab] = useState<'team' | 'groups' | 'invites' | 'urlopy' | 'nieobecnosci' | 'settings'>('team');
 
   // Restaurant edit state
   const [rName, setRName] = useState('');
@@ -79,6 +85,7 @@ export default function AdminScreen() {
     getTrainings(rid).then(setTrainings);
     getLeaveRequests(rid).then(setLeaveRequests);
     getAbsences(rid).then(setAbsences);
+    getEmployeeGroupsWithMembers(rid).then(setGroups);
   };
 
   useFocusEffect(useCallback(() => { refresh(); }, [rid]));
@@ -266,6 +273,7 @@ export default function AdminScreen() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabsScroll} contentContainerStyle={s.tabs}>
         {([
           { key: 'team', label: 'Zespół', icon: 'people' },
+          { key: 'groups', label: 'Zespoły', icon: 'layers' },
           { key: 'invites', label: 'Zaproszenia', icon: 'mail' },
           { key: 'urlopy', label: 'Urlopy', icon: 'umbrella' },
           { key: 'nieobecnosci', label: 'Nieobecności', icon: 'alert-circle' },
@@ -424,6 +432,84 @@ export default function AdminScreen() {
                         <Ionicons name="person-remove-outline" size={16} color={theme.colors.error} />
                       </TouchableOpacity>
                     )}
+                  </View>
+                ))
+              )}
+            </View>
+          </>
+        )}
+
+        {/* ─── GROUPS TAB ─── */}
+        {tab === 'groups' && (
+          <>
+            <TouchableOpacity
+              style={[s.inviteBtn, { backgroundColor: '#2563EB' }]}
+              onPress={() => {
+                setEditingGroup(null);
+                setGroupName('');
+                setGroupColor('#2563EB');
+                setSelectedMembers([]);
+                setShowGroupModal(true);
+              }}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="add-circle" size={20} color={theme.colors.white} />
+              <Text style={s.inviteBtnText}>Nowy zespół</Text>
+            </TouchableOpacity>
+
+            <View style={s.section}>
+              <Text style={s.sectionTitle}>Zespoły ({groups.length})</Text>
+              {groups.length === 0 ? (
+                <Text style={s.emptySub}>Brak zespołów. Utwórz pierwszy zespół używając przycisku powyżej.</Text>
+              ) : (
+                groups.map((g) => (
+                  <View key={g.id} style={[s.groupRow, { borderLeftWidth: 4, borderLeftColor: g.color }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.groupName}>{g.name}</Text>
+                      <Text style={s.groupMembers}>
+                        {g.members.length} {g.members.length === 1 ? 'osoba' : g.members.length < 5 ? 'osoby' : 'osób'}
+                      </Text>
+                      <View style={s.memberChips}>
+                        {g.members.slice(0, 5).map((mid) => {
+                          const emp = employees.find((e) => e.id === mid);
+                          return emp ? (
+                            <View key={mid} style={[s.memberChip, { backgroundColor: g.color + '20' }]}>
+                              <Text style={[s.memberChipText, { color: g.color }]}>
+                                {emp.first_name} {emp.last_name}
+                              </Text>
+                            </View>
+                          ) : null;
+                        })}
+                        {g.members.length > 5 && (
+                          <Text style={s.moreMembers}>+{g.members.length - 5}</Text>
+                        )}
+                      </View>
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <TouchableOpacity
+                        style={s.actionBtn}
+                        onPress={() => {
+                          setEditingGroup(g);
+                          setGroupName(g.name);
+                          setGroupColor(g.color);
+                          setSelectedMembers(g.members);
+                          setShowGroupModal(true);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="create-outline" size={18} color={theme.colors.primary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={s.actionBtn}
+                        onPress={() => showConfirm('Usuń zespół', `Czy na pewno chcesz usunąć zespół "${g.name}"?`, async () => {
+                          await deleteEmployeeGroup(g.id);
+                          refresh();
+                        }, 'Usuń', 'Anuluj')}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="trash-outline" size={18} color={theme.colors.error} />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 ))
               )}
@@ -895,6 +981,123 @@ export default function AdminScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ─── GROUP MODAL ─── */}
+      <Modal visible={showGroupModal} animationType="fade" transparent onRequestClose={() => setShowGroupModal(false)}>
+        <View style={s.mOverlay}>
+          <View style={[s.mSheet, isDesktop && s.mSheetDesktop, { maxHeight: '85%' }]}>
+            <View style={s.mHeader}>
+              <View>
+                <Text style={s.mTitle}>{editingGroup ? 'Edytuj zespół' : 'Nowy zespół'}</Text>
+                <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 2 }}>
+                  {editingGroup ? 'Zmiany zostaną od razu zapisane' : 'Utwórz nowy zespół pracowniczy'}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowGroupModal(false)}>
+                <Ionicons name="close" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={s.mBody}>
+              <Text style={s.mLabel}>Nazwa zespołu</Text>
+              <TextInput
+                style={s.mInput}
+                value={groupName}
+                onChangeText={setGroupName}
+                placeholder="np. Kuchnia, Kelnerzy, Bar"
+                placeholderTextColor={theme.colors.textMuted}
+              />
+
+              <Text style={s.mLabel}>Kolor</Text>
+              <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+                {['#2563EB', '#16A34A', '#DC2626', '#F59E0B', '#7C3AED', '#0891B2', '#EC4899'].map((c) => (
+                  <TouchableOpacity
+                    key={c}
+                    onPress={() => setGroupColor(c)}
+                    style={{
+                      width: 36, height: 36, borderRadius: 18, backgroundColor: c,
+                      borderWidth: groupColor === c ? 3 : 0, borderColor: '#fff',
+                      shadowColor: c, shadowOpacity: groupColor === c ? 0.4 : 0, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
+                    }}
+                  />
+                ))}
+              </View>
+
+              <Text style={s.mLabel}>Członkowie zespołu</Text>
+              <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginBottom: 10 }}>
+                Zaznacz pracowników, którzy należą do tego zespołu
+              </Text>
+              <View style={{ gap: 8 }}>
+                {employees.map((emp) => (
+                  <TouchableOpacity
+                    key={emp.id}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12,
+                      borderRadius: 12, backgroundColor: selectedMembers.includes(emp.id) ? groupColor + '15' : theme.colors.surface,
+                      borderWidth: 1.5, borderColor: selectedMembers.includes(emp.id) ? groupColor : theme.colors.border,
+                    }}
+                    onPress={() => {
+                      setSelectedMembers((prev) =>
+                        prev.includes(emp.id) ? prev.filter((id) => id !== emp.id) : [...prev, emp.id]
+                      );
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{
+                      width: 24, height: 24, borderRadius: 6, borderWidth: 2,
+                      borderColor: selectedMembers.includes(emp.id) ? groupColor : theme.colors.border,
+                      backgroundColor: selectedMembers.includes(emp.id) ? groupColor : 'transparent',
+                      alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {selectedMembers.includes(emp.id) && <Ionicons name="checkmark" size={16} color="#fff" />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '600', color: theme.colors.text }}>
+                        {emp.first_name} {emp.last_name}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: theme.colors.textMuted }}>{emp.job_title}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={{ height: 20 }} />
+            </ScrollView>
+
+            <View style={s.footer}>
+              <TouchableOpacity style={s.cancelBtn} onPress={() => setShowGroupModal(false)} activeOpacity={0.7}>
+                <Text style={s.cancelText}>Anuluj</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.saveBtn, (!groupName.trim() || selectedMembers.length === 0) && s.saveBtnDisabled]}
+                onPress={async () => {
+                  if (!groupName.trim() || selectedMembers.length === 0) return;
+                  if (editingGroup) {
+                    await updateEmployeeGroup(editingGroup.id, { name: groupName, color: groupColor });
+                    // Update members - remove old, add new
+                    const oldMembers = editingGroup.members;
+                    const toRemove = oldMembers.filter((m) => !selectedMembers.includes(m));
+                    const toAdd = selectedMembers.filter((m) => !oldMembers.includes(m));
+                    for (const m of toRemove) await removeEmployeeFromGroup(m, editingGroup.id);
+                    for (const m of toAdd) await assignEmployeeToGroup(m, editingGroup.id);
+                  } else {
+                    const newGroup = await createEmployeeGroup(rid, groupName, groupColor);
+                    if (newGroup) {
+                      for (const m of selectedMembers) await assignEmployeeToGroup(m, newGroup.id);
+                    }
+                  }
+                  setShowGroupModal(false);
+                  refresh();
+                }}
+                disabled={!groupName.trim() || selectedMembers.length === 0}
+                activeOpacity={0.8}
+              >
+                <Text style={s.saveText}>{editingGroup ? 'Zapisz zmiany' : 'Utwórz zespół'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1105,6 +1308,41 @@ const s = StyleSheet.create({
     width: 32, height: 32, borderRadius: 8, backgroundColor: theme.colors.error,
     alignItems: 'center', justifyContent: 'center',
   },
+
+  // Groups
+  groupRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    padding: 14, borderTopWidth: 1, borderTopColor: theme.colors.border,
+    backgroundColor: theme.colors.card,
+  },
+  groupName: { fontSize: 15, fontWeight: '700', color: theme.colors.text },
+  groupMembers: { fontSize: 12, color: theme.colors.textMuted, marginTop: 2 },
+  memberChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  memberChip: { borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 },
+  memberChipText: { fontSize: 11, fontWeight: '600' },
+  moreMembers: { fontSize: 11, color: theme.colors.textMuted, marginLeft: 4 },
+  actionBtn: {
+    width: 36, height: 36, borderRadius: 10, backgroundColor: theme.colors.surface,
+    alignItems: 'center', justifyContent: 'center',
+  },
+
+  // Modal footer
+  footer: {
+    flexDirection: 'row', gap: 10, padding: 16,
+    borderTopWidth: 1, borderTopColor: theme.colors.border,
+  },
+  cancelBtn: {
+    flex: 1, height: 44, borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: theme.colors.border,
+  },
+  cancelText: { fontSize: 14, fontWeight: '500', color: theme.colors.textSecondary },
+  saveBtn: {
+    flex: 2, height: 44, borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center',
+  },
+  saveBtnDisabled: { opacity: 0.45 },
+  saveText: { fontSize: 14, fontWeight: '600', color: '#fff' },
 });
 
 const tm = StyleSheet.create({
