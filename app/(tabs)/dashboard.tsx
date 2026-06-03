@@ -26,9 +26,6 @@ import {
 import type { DbClockIn, DbShift, DbTask } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
-const QUICK_ACTIONS = [
-  { icon: 'list-outline', label: 'Zadania', route: '/(tabs)/tasks' as const },
-];
 
 function fmt(d: Date) {
   const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
@@ -314,21 +311,6 @@ export default function DashboardScreen() {
           </View>
         )}
 
-        {/* Quick Actions */}
-        <View style={[styles.quickActionsWrap, isDesktop && styles.cardDesktop]}>
-          <Text style={styles.quickActionsTitle}>Szybki dostęp</Text>
-          <View style={styles.quickActions}>
-            {QUICK_ACTIONS.map((a) => (
-              <TouchableOpacity key={a.label} style={styles.quickAction} onPress={() => router.push(a.route as any)} activeOpacity={0.7}>
-                <View style={styles.quickActionIcon}>
-                  <Ionicons name={a.icon as any} size={20} color={theme.colors.accent} />
-                </View>
-                <Text style={styles.quickActionLabel}>{a.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
         </View>
         <View style={isDesktop ? styles.gridRight : undefined}>
 
@@ -444,12 +426,6 @@ const styles = StyleSheet.create({
   checkinBtn: { flexDirection: 'row', backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.md, height: 46, alignItems: 'center', justifyContent: 'center', gap: 8, ...theme.shadows.fab },
   checkinBtnText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
 
-  quickActionsWrap: { marginHorizontal: 16, marginTop: 20, marginBottom: 16 },
-  quickActionsTitle: { fontSize: 15, fontWeight: '700', color: theme.colors.text, marginBottom: 12 },
-  quickActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  quickAction: { alignItems: 'center', gap: 6, flexBasis: '30.5%', flexGrow: 1, maxWidth: '32%', paddingVertical: 14, backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.md, ...theme.shadows.card },
-  quickActionIcon: { width: 38, height: 38, borderRadius: 10, backgroundColor: theme.colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
-  quickActionLabel: { fontSize: 11, fontWeight: '600', color: theme.colors.textSecondary },
 
   progressRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   progressLabel: { fontSize: 13, color: theme.colors.textSecondary },
