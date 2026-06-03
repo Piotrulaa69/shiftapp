@@ -93,6 +93,7 @@ export type DbTask = {
   id: string;
   restaurant_id: string;
   assigned_to: string | null;
+  target_group_id: string | null;
   title: string;
   description: string;
   assigned_time: string;
@@ -106,7 +107,40 @@ export type DbTask = {
   proof_photo_url: string | null;
   proof_comment: string | null;
   rejection_comment: string | null;
-  is_cyclic: boolean;
+  is_recurring: boolean;
+  recurrence_pattern: 'daily' | 'weekly' | 'monthly' | 'custom' | null;
+  recurrence_days: number[] | null;
+  recurrence_week_day: number | null;
+  recurrence_month_day: number | null;
+  parent_task_id: string | null;
+  created_at: string;
+};
+
+export type DbTaskInstance = {
+  id: string;
+  task_id: string;
+  employee_id: string | null;
+  group_id: string | null;
+  scheduled_date: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  completed_at: string | null;
+  completed_by: string | null;
+  created_at: string;
+};
+
+export type DbEmployeeGroup = {
+  id: string;
+  restaurant_id: string;
+  name: string;
+  color: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DbEmployeeGroupAssignment = {
+  id: string;
+  employee_id: string;
+  group_id: string;
   created_at: string;
 };
 
@@ -172,6 +206,26 @@ export type DbLeaveType = {
   created_at: string;
 };
 
+export type DbEmployeeLeaveQuota = {
+  id: string;
+  employee_id: string;
+  year: number;
+  total_days: number;
+  used_days: number;
+  carried_over_days: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DbEmployeeLeaveTypeSetting = {
+  id: string;
+  employee_id: string;
+  leave_type_id: string;
+  is_enabled: boolean;
+  custom_days_per_year: number | null;
+  created_at: string;
+};
+
 export type DbLeaveRequest = {
   id: string;
   restaurant_id: string;
@@ -186,7 +240,9 @@ export type DbLeaveRequest = {
   attachment_url: string | null;
   reviewed_by: string | null;
   review_comment: string | null;
+  admin_notes: string | null;
   reviewed_at: string | null;
+  responded_at: string | null;
   created_at: string;
 };
 
@@ -213,6 +269,35 @@ export type DbShiftSwap = {
   swap_type: 'swap' | 'give';
   status: 'pending_responder' | 'pending_manager' | 'approved' | 'rejected_responder' | 'rejected_manager';
   manager_id: string | null;
+  created_at: string;
+};
+
+export type DbSubscriptionAdjustment = {
+  id: string;
+  restaurant_id: string;
+  admin_id: string;
+  type: 'discount' | 'pause' | 'extension' | 'custom_price';
+  value: number | null;
+  duration_months: number | null;
+  reason: string | null;
+  valid_from: string;
+  valid_until: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type DbPromoCode = {
+  id: string;
+  code: string;
+  type: 'referral' | 'marketing' | 'partner';
+  discount_percent: number;
+  discount_amount: number;
+  max_uses: number | null;
+  used_count: number;
+  valid_from: string;
+  valid_until: string | null;
+  is_active: boolean;
+  created_by: string | null;
   created_at: string;
 };
 

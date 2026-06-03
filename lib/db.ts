@@ -6,8 +6,10 @@
 
 import type {
     DbAbsence, DbAvailability, DbClockIn, DbConversation, DbDocument, DbDocumentTemplate,
+    DbEmployeeGroup, DbEmployeeGroupAssignment, DbEmployeeLeaveQuota, DbEmployeeLeaveTypeSetting,
     DbInvitation, DbLeaveRequest, DbLeaveType, DbMessage, DbPointsLedger,
-    DbProfile, DbRestaurant, DbShift, DbShiftSwap, DbTask, DbTraining,
+    DbProfile, DbPromoCode, DbRestaurant, DbShift, DbShiftSwap, DbTask,
+    DbTraining
 } from './supabase';
 import { supabase } from './supabase';
 
@@ -1080,6 +1082,174 @@ export async function reviewAbsence(id: string, reviewerId: string, status: 'app
     notify(absence.restaurant_id, absence.employee_id, 'absence',
       approved ? 'Nieobecność zatwierdzona' : 'Nieobecność odrzucona',
       `Twoje zgłoszenie nieobecności (${absence.absence_type}) zostało ${approved ? 'zatwierdzone' : 'odrzucone'}.`,
+      id);
+  }
+  return !error;
+}
+
+// ─── Employee Groups ─────────────────────────────────────────────────────────
+
+export async function getEmployeeGroups(restaurantId: string): Promise<DbEmployeeGroup[]> {
+  const { data, error } = await supabase.from('employee_groups').select('*').eq('restaurant_id', restaurantId).order('name');
+  if (error) { console.error('getEmployeeGroups', error); return []; }
+  return data as DbEmployeeGroup[];
+}
+
+export async function createEmployeeGroup(restaurantId: string, name: string, color?: string): Promise<DbEmployeeGroup | null> {
+  const { data, error } = await supabase.from('employee_groups')
+    .insert({ restaurant_id: restaurantId, name, color: color || '#2563EB' })
+    .select().single();
+  if (error) { console.error('createEmployeeGroup', error); return null; }
+  return data as DbEmployeeGroup;
+}
+
+export async function updateEmployeeGroup(id: string, fields: { name?: string; color?: string }): Promise<boolean> {
+  const { error } = await supabase.from('employee_groups').update(fields).eq('id', id);
+  return !error;
+}
+
+export async function deleteEmployeeGroup(id: string): Promise<boolean> {
+  const { error } = await supabase.from('employee_groups').delete().eq('id', id);
+  return !error;
+}
+
+export async function getEmployeeGroupAssignments(groupId: string): Promise<DbEmployeeGroupAssignment[]> {
+  const { data, error } = await supabase.from('employee_group_assignments').select('*').eq('group_id', groupId);
+  if (error) { console.error('getEmployeeGroupAssignments', error); return []; }
+  return data as DbEmployeeGroupAssignment[];
+}
+
+export async function assignEmployeeToGroup(employeeId: string, groupId: string): Promise<boolean> {
+  const { error } = await supabase.from('employee_group_assignments')
+    .insert({ employee_id: employeeId, group_id: groupId });
+  return !error;
+}
+
+export async function removeEmployeeFromGroup(employeeId: string, groupId: string): Promise<boolean> {
+  const { error } = await supabase.from('employee_group_assignments')
+    .delete().eq('employee_id', employeeId).eq('group_id', groupId);
+  return !error;
+}
+
+export async function getEmployeeGroupsWithMembers(restaurantId: string): Promise<(DbEmployeeGroup & { members: string[] })[]> {
+  const groups = await getEmployeeGroups(restaurantId);
+  const result = await Promise.all(groups.map(async (g) => {
+    const assignments = await getEmployeeGroupAssignments(g.id);
+    return { ...g, members: assignments.map(a => a.employee_id) };
+  }));
+  return result;
+}
+
+// ─── Leave Quotas ────────────────────────────────────────────────────────────
+
+export async function getEmployeeLeaveQuota(employeeId: string, year: number): Promise<DbEmployeeLeaveQuota | null> {
+  const { data, error } = await supabase.from('employee_leave_quotas')
+    .select('*').eq('employee_id', employeeId).eq('year', year).maybeSingle();
+  if (error) { console.error('getEmployeeLeaveQuota', error); return null; }
+  return data as DbEmployeeLeaveQuota | null;
+}
+
+export async function setEmployeeLeaveQuota(
+  employeeId: string,
+  year: number,
+  fields: { total_days?: number; used_days?: number; carried_over_days?: number }
+): Promise<boolean> {
+  const { error } = await supabase.from('employee_leave_quotas')
+    .upsert({ employee_id: employeeId, year, ...fields, updated_at: new Date().toISOString() },
+      { onConflict: 'employee_id,year' });
+  return !error;
+}
+
+export async function getEmployeeLeaveTypeSettings(employeeId: string): Promise<DbEmployeeLeaveTypeSetting[]> {
+  const { data, error } = await supabase.from('employee_leave_type_settings')
+    .select('*').eq('employee_id', employeeId);
+  if (error) { console.error('getEmployeeLeaveTypeSettings', error); return []; }
+  return data as DbEmployeeLeaveTypeSetting[];
+}
+
+export async function setEmployeeLeaveTypeSetting(
+  employeeId: string,
+  leaveTypeId: string,
+  fields: { is_enabled?: boolean; custom_days_per_year?: number | null }
+): Promise<boolean> {
+  const { error } = await supabase.from('employee_leave_type_settings')
+    .upsert({ employee_id: employeeId, leave_type_id: leaveTypeId, ...fields },
+      { onConflict: 'employee_id,leave_type_id' });
+  return !error;
+}
+
+// ─── SuperAdmin Functions ─────────────────────────────────────────────────────
+
+export async function impersonateUser(targetUserId: string): Promise<{ restaurantId: string; role: string } | null> {
+  const { data, error } = await supabase.from('profiles')
+    .select('restaurant_id, role').eq('id', targetUserId).single();
+  if (error || !data) { console.error('impersonateUser', error); return null; }
+  return { restaurantId: data.restaurant_id as string, role: data.role as string };
+}
+
+export async function resetUserPassword(userId: string, newPassword: string): Promise<boolean> {
+  const { error } = await supabase.auth.admin.updateUserById(userId, { password: newPassword });
+  return !error;
+}
+
+export async function getAllRestaurants(): Promise<DbRestaurant[]> {
+  const { data, error } = await supabase.from('restaurants').select('*').order('created_at', { ascending: false });
+  if (error) { console.error('getAllRestaurants', error); return []; }
+  return data as DbRestaurant[];
+}
+
+export async function createPromoCode(
+  code: string,
+  type: 'referral' | 'marketing' | 'partner',
+  discountPercent: number,
+  adminId: string,
+  maxUses?: number,
+  validUntil?: string
+): Promise<DbPromoCode | null> {
+  const { data, error } = await supabase.from('promo_codes')
+    .insert({ code, type, discount_percent: discountPercent, created_by: adminId, max_uses: maxUses || null, valid_until: validUntil || null })
+    .select().single();
+  if (error) { console.error('createPromoCode', error); return null; }
+  return data as DbPromoCode;
+}
+
+export async function createSubscriptionAdjustment(
+  restaurantId: string,
+  adminId: string,
+  type: 'discount' | 'pause' | 'extension' | 'custom_price',
+  value: number,
+  durationMonths: number,
+  reason?: string
+): Promise<boolean> {
+  const { error } = await supabase.from('subscription_adjustments')
+    .insert({ restaurant_id: restaurantId, admin_id: adminId, type, value, duration_months: durationMonths, reason: reason || null });
+  return !error;
+}
+
+// ─── Review Leave Request with Notes ─────────────────────────────────────────
+
+export async function reviewLeaveRequestWithNotes(
+  id: string,
+  reviewerId: string,
+  status: 'approved' | 'rejected',
+  reviewComment?: string,
+  adminNotes?: string
+): Promise<boolean> {
+  const { data: req } = await supabase.from('leave_requests')
+    .select('restaurant_id, employee_id, leave_type_id, date_from, date_to, days_count').eq('id', id).single();
+  const now = new Date().toISOString();
+  const { error } = await supabase.from('leave_requests').update({
+    status,
+    reviewed_by: reviewerId,
+    review_comment: reviewComment || null,
+    admin_notes: adminNotes || null,
+    reviewed_at: now,
+    responded_at: now
+  }).eq('id', id);
+  if (!error && req) {
+    notify(req.restaurant_id, req.employee_id, 'leave',
+      status === 'approved' ? 'Wniosek urlopowy zatwierdzony' : 'Wniosek urlopowy odrzucony',
+      `Twój wniosek urlopowy (${req.date_from} - ${req.date_to}) został ${status === 'approved' ? 'zatwierdzony' : 'odrzucony'}.${reviewComment ? ' Komentarz: ' + reviewComment : ''}`,
       id);
   }
   return !error;
