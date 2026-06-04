@@ -436,8 +436,44 @@ const topbarStyles = StyleSheet.create({
 });
 
 /* ─────────────── ROOT ─────────────── */
+function SupportBanner() {
+  const { impersonatedRestaurant, exitRestaurantMode } = useAuth();
+  const router = useRouter();
+  if (!impersonatedRestaurant) return null;
+  const handleExit = async () => {
+    await exitRestaurantMode();
+    router.replace('/super-admin' as any);
+  };
+  return (
+    <View style={supportBannerStyles.bar}>
+      <Ionicons name="shield-checkmark" size={15} color="#fff" />
+      <Text style={supportBannerStyles.text} numberOfLines={1}>
+        Tryb wsparcia: <Text style={{ fontWeight: '800' }}>{impersonatedRestaurant.name}</Text>
+      </Text>
+      <TouchableOpacity style={supportBannerStyles.exitBtn} onPress={handleExit} activeOpacity={0.8}>
+        <Ionicons name="close-circle" size={15} color="#fff" />
+        <Text style={supportBannerStyles.exitText}>Wyjdź</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const supportBannerStyles = StyleSheet.create({
+  bar: {
+    backgroundColor: '#D97706',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    gap: 8,
+  },
+  text: { flex: 1, fontSize: 12, fontWeight: '500', color: '#fff' },
+  exitBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.18)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
+  exitText: { fontSize: 12, fontWeight: '700', color: '#fff' },
+});
+
 export default function TabLayout() {
-  const { isAuthenticated, isOwner, isManager, isSuperAdmin, isLoading } = useAuth();
+  const { isAuthenticated, isOwner, isManager, isSuperAdmin, isImpersonating, isLoading } = useAuth();
   const showAdmin = isOwner || isManager;
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
@@ -450,13 +486,14 @@ export default function TabLayout() {
     );
   }
   if (!isAuthenticated) return <Redirect href="/login" />;
-  if (isSuperAdmin) return <Redirect href={'/super-admin' as any} />;
+  if (isSuperAdmin && !isImpersonating) return <Redirect href={'/super-admin' as any} />;
 
   if (isDesktop) {
     return (
       <View style={{ flex: 1, flexDirection: 'row', backgroundColor: theme.colors.background }}>
         <Sidebar />
         <View style={{ flex: 1, flexDirection: 'column' }}>
+          <SupportBanner />
           <TrialBanner />
           <View style={{ flex: 1 }}>
           <Tabs
@@ -489,6 +526,7 @@ export default function TabLayout() {
 
   return (
     <>
+      <SupportBanner />
       <TrialBanner />
     <Tabs
       tabBar={(props) => <MobileTabBar {...props} />}

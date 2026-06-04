@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
     ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView,
@@ -547,16 +548,9 @@ function RestaurantRow({ r, expanded = false, onPress, onImpersonate }: { r: Res
         <Text style={s.restMeta}>{r.owner_name ?? 'brak właściciela'} · {day}</Text>
         {expanded && r.address ? <Text style={s.restAddress} numberOfLines={1}>{r.address}</Text> : null}
       </View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <View style={s.restStats}>
-          <View style={s.restStatItem}><Ionicons name="people-outline" size={13} color={theme.colors.textMuted} /><Text style={s.restStatText}>{r.employee_count}</Text></View>
-          <View style={s.restStatItem}><Ionicons name="list-outline" size={13} color={theme.colors.textMuted} /><Text style={s.restStatText}>{r.task_count}</Text></View>
-        </View>
-        {onImpersonate && (
-          <TouchableOpacity style={s.loginAsBtn} onPress={(e) => { e.stopPropagation(); onImpersonate(r.id); }} activeOpacity={0.7}>
-            <Ionicons name="enter-outline" size={16} color={theme.colors.primary} />
-          </TouchableOpacity>
-        )}
+      <View style={s.restStats}>
+        <View style={s.restStatItem}><Ionicons name="people-outline" size={13} color={theme.colors.textMuted} /><Text style={s.restStatText}>{r.employee_count}</Text></View>
+        <View style={s.restStatItem}><Ionicons name="list-outline" size={13} color={theme.colors.textMuted} /><Text style={s.restStatText}>{r.task_count}</Text></View>
       </View>
     </TouchableOpacity>
   );
@@ -777,60 +771,26 @@ function RestaurantDetailModal({ visible, restaurant, onClose, onRefresh }: {
   onClose: () => void;
   onRefresh: () => void;
 }) {
-  const { user } = useAuth();
-  const [resetEmail, setResetEmail] = useState('');
-  const [resetting, setResetting] = useState(false);
-  const [impersonating, setImpersonating] = useState(false);
-  const [impersonationMessage, setImpersonationMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const { enterRestaurantMode } = useAuth();
+  const router = useRouter();
+  const [entering, setEntering] = useState(false);
 
-  const handleResetPassword = async () => {
-    if (!restaurant || !resetEmail.trim()) return;
-    setResetting(true);
-    // TODO: Implement password reset via Supabase
-    setResetting(false);
-    Alert.alert('Info', 'Funkcja resetowania hasła wymaga implementacji');
-  };
-
-  const handleImpersonate = async () => {
-    console.log('handleImpersonate called', { restaurant, userId: user?.id });
-    if (!restaurant || !user?.id) {
-      console.log('Missing restaurant or user id');
-      return;
-    }
-    console.log('Starting impersonation process');
-    setImpersonating(true);
-    setImpersonationMessage(null);
-    console.log('Calling impersonateRestaurant');
-    const result = await impersonateRestaurant(user.id, restaurant.id);
-    console.log('impersonateRestaurant result', result);
-    setImpersonating(false);
-    console.log('Checking result.success:', result.success);
-    if (result.success) {
-      setImpersonationMessage({
-        type: 'success',
-        text: `Przełączono w tryb zarządzania restauracją: ${restaurant.name}\n\nKliknij OK aby przeładować aplikację.`
-      });
-      
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
+  const handleEnter = async () => {
+    if (!restaurant) return;
+    setEntering(true);
+    const ok = await enterRestaurantMode(restaurant.id);
+    setEntering(false);
+    if (ok) {
+      onClose();
+      router.replace('/(tabs)/dashboard' as any);
     } else {
-      const message = {
-        type: 'error' as const,
-        text: result.error || 'Nie udało się zalogować'
-      };
-      console.log('Setting impersonationMessage to error', message);
-      setImpersonationMessage(message);
-      console.log('State set to error');
+      Alert.alert('Błąd', 'Nie udało się wejść w tryb wsparcia dla tej restauracji.');
     }
-    console.log('handleImpersonate finished');
   };
 
   if (!restaurant) return null;
 
   const plan = PLAN_CFG[restaurant.plan as keyof typeof PLAN_CFG] ?? PLAN_CFG.basic;
-
-  console.log('Rendering RestaurantDetailModal', { impersonationMessage });
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -852,21 +812,28 @@ function RestaurantDetailModal({ visible, restaurant, onClose, onRefresh }: {
             <View style={s.section}>
               <Text style={s.formLabel}>Informacje podstawowe</Text>
               <View style={[s.settingRow, { backgroundColor: theme.colors.surface, padding: 12 }]}>
-                <View style={[s.settingIcon, { backgroundColor: '#2563EB' + '18' }]}><Ionicons name="person" size={16} color="#2563EB" /></View>
+                <View style={[s.settingIcon, { backgroundColor: '#2563EB18' }]}><Ionicons name="person" size={16} color="#2563EB" /></View>
                 <View style={{ flex: 1 }}>
                   <Text style={s.settingLabel}>Właściciel</Text>
                   <Text style={s.settingValue}>{restaurant.owner_name ?? 'Brak'}</Text>
                 </View>
               </View>
               <View style={[s.settingRow, { backgroundColor: theme.colors.surface, padding: 12 }]}>
-                <View style={[s.settingIcon, { backgroundColor: '#059669' + '18' }]}><Ionicons name="location" size={16} color="#059669" /></View>
+                <View style={[s.settingIcon, { backgroundColor: '#05966918' }]}><Ionicons name="location" size={16} color="#059669" /></View>
                 <View style={{ flex: 1 }}>
                   <Text style={s.settingLabel}>Adres</Text>
                   <Text style={s.settingValue}>{restaurant.address ?? 'Brak'}</Text>
                 </View>
               </View>
               <View style={[s.settingRow, { backgroundColor: theme.colors.surface, padding: 12 }]}>
-                <View style={[s.settingIcon, { backgroundColor: '#7C3AED' + '18' }]}><Ionicons name="calendar" size={16} color="#7C3AED" /></View>
+                <View style={[s.settingIcon, { backgroundColor: '#7C3AED18' }]}><Ionicons name="call" size={16} color="#7C3AED" /></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.settingLabel}>Telefon</Text>
+                  <Text style={s.settingValue}>{restaurant.phone ?? 'Brak'}</Text>
+                </View>
+              </View>
+              <View style={[s.settingRow, { backgroundColor: theme.colors.surface, padding: 12 }]}>
+                <View style={[s.settingIcon, { backgroundColor: '#D9770618' }]}><Ionicons name="calendar" size={16} color="#D97706" /></View>
                 <View style={{ flex: 1 }}>
                   <Text style={s.settingLabel}>Utworzono</Text>
                   <Text style={s.settingValue}>{new Date(restaurant.created_at).toLocaleDateString('pl-PL')}</Text>
@@ -878,33 +845,32 @@ function RestaurantDetailModal({ visible, restaurant, onClose, onRefresh }: {
               <Text style={s.formLabel}>Statystyki</Text>
               <View style={s.statsRow}>
                 <View style={[s.statCard, { flex: 1 }]}>
-                  <Text style={[s.statNum, { fontSize: 20, color: '#2563EB' }]}>{restaurant.employee_count}</Text>
+                  <Text style={[s.statNum, { fontSize: 22, color: '#2563EB' }]}>{restaurant.employee_count}</Text>
                   <Text style={s.statLabel}>Pracowników</Text>
                 </View>
                 <View style={[s.statCard, { flex: 1 }]}>
-                  <Text style={[s.statNum, { fontSize: 20, color: '#059669' }]}>{restaurant.task_count}</Text>
+                  <Text style={[s.statNum, { fontSize: 22, color: '#059669' }]}>{restaurant.task_count}</Text>
                   <Text style={s.statLabel}>Zadań</Text>
                 </View>
               </View>
             </View>
 
             <View style={s.section}>
-              <Text style={s.formLabel}>Akcje</Text>
-              <TouchableOpacity style={[s.createBtn, { backgroundColor: '#2563EB' }]} onPress={handleImpersonate} disabled={impersonating} activeOpacity={0.85}>
-                {impersonating ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="enter-outline" size={18} color="#fff" />}
-                <Text style={s.createBtnText}>{impersonating ? 'Logowanie...' : 'Zaloguj jako ta restauracja'}</Text>
+              <Text style={s.formLabel}>Akcje supportu</Text>
+              <TouchableOpacity
+                style={[s.createBtn, { backgroundColor: '#2563EB', gap: 10 }]}
+                onPress={handleEnter}
+                disabled={entering}
+                activeOpacity={0.85}
+              >
+                {entering
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Ionicons name="shield-checkmark-outline" size={18} color="#fff" />}
+                <Text style={s.createBtnText}>{entering ? 'Wczytywanie...' : `Wejdź jako wsparcie → ${restaurant.name}`}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[s.createBtn, { backgroundColor: '#DC2626' }]} onPress={() => Alert.alert('Info', 'Funkcja resetowania hasła wymaga implementacji')} activeOpacity={0.85}>
-                <Ionicons name="refresh-outline" size={18} color="#fff" />
-                <Text style={s.createBtnText}>Reset hasła właściciela</Text>
-              </TouchableOpacity>
-              {impersonationMessage && (
-                <View style={[{ padding: 12, borderRadius: 8, marginTop: 8 }, impersonationMessage.type === 'success' ? { backgroundColor: '#D1FAE5' } : { backgroundColor: '#FEE2E2' }]}>
-                  <Text style={[{ fontSize: 14, fontWeight: '500' }, impersonationMessage.type === 'success' ? { color: '#065F46' } : { color: '#991B1B' }]}>
-                    {impersonationMessage.text}
-                  </Text>
-                </View>
-              )}
+              <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 6, textAlign: 'center' }}>
+                Przejdziesz do dashboardu tej restauracji. Widoczny będzie pomarańczowy pasek wsparcia.
+              </Text>
             </View>
           </ScrollView>
         </View>

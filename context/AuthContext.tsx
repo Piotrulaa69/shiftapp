@@ -38,6 +38,8 @@ type AuthContextType = {
   isOwner: boolean;
   isManager: boolean;
   isSuperAdmin: boolean;
+  isImpersonating: boolean;
+  impersonatedRestaurant: Restaurant | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   joinWithCode: (
@@ -55,6 +57,8 @@ type AuthContextType = {
   }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   refreshRestaurant: () => Promise<void>;
+  enterRestaurantMode: (restaurantId: string) => Promise<boolean>;
+  exitRestaurantMode: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -140,6 +144,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasSession, setHasSession] = useState(false);
+  const [impersonatedRestaurant, setImpersonatedRestaurant] = useState<Restaurant | null>(null);
   // Restore session on mount
   useEffect(() => {
     // Fallback: force loading=false after 4s so app never stays stuck
@@ -320,6 +325,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await supabase.auth.signOut();
     setUser(null);
     setRestaurant(null);
+    setImpersonatedRestaurant(null);
+  };
+
+  const enterRestaurantMode = async (restaurantId: string): Promise<boolean> => {
+    const { data, error } = await supabase.from('restaurants').select('*').eq('id', restaurantId).single();
+    if (error || !data) return false;
+    await supabase.from('profiles').update({ active_restaurant_id: restaurantId }).eq('id', user!.id);
+    setImpersonatedRestaurant(toRestaurant(data as any));
+    return true;
+  };
+
+  const exitRestaurantMode = async (): Promise<void> => {
+    await supabase.from('profiles').update({ active_restaurant_id: null }).eq('id', user!.id);
+    setImpersonatedRestaurant(null);
   };
 
   const refreshRestaurant = async () => {
@@ -331,10 +350,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isOwner = user?.role === 'owner' && !user?.isSuperAdmin;
   const isManager = user?.role === 'manager';
   const isSuperAdmin = user?.isSuperAdmin ?? false;
+  const isImpersonating = isSuperAdmin && impersonatedRestaurant !== null;
+
+  // When impersonating, expose the target restaurant as active restaurant
+  // and patch user.restaurantId so all tabs work transparently without changes
+  const activeRestaurant = isImpersonating ? impersonatedRestaurant : restaurant;
+  const activeUser = (isImpersonating && user && impersonatedRestaurant)
+    ? { ...user, restaurantId: impersonatedRestaurant.id, role: 'owner' as const }
+    : user;
 
   return (
     <AuthContext.Provider
-      value={{ user, restaurant, isAuthenticated: hasSession, isOwner, isManager, isSuperAdmin, isLoading, login, joinWithCode, registerRestaurant, logout, refreshRestaurant }}
+      value={{ user: activeUser, restaurant: activeRestaurant, isAuthenticated: hasSession, isOwner: isImpersonating ? true : isOwner, isManager: isImpersonating ? false : isManager, isSuperAdmin, isImpersonating, impersonatedRestaurant, isLoading, login, joinWithCode, registerRestaurant, logout, refreshRestaurant, enterRestaurantMode, exitRestaurantMode }}
     >
       {children}
     </AuthContext.Provider>
