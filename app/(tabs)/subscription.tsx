@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
@@ -21,32 +21,51 @@ export default function SubscriptionScreen() {
 
   const extraEmployees = Math.max(0, employeeCount - 5);
   const totalPrice = BASE_PRICE + (extraEmployees * EXTRA_PRICE);
+  const loadedRestaurantId = useRef<string | null>(null);
 
+  const loadSubscription = useCallback(async () => {
+    console.log('loadSubscription called, restaurant:', restaurant?.id);
+    if (!restaurant?.id) {
+      console.log('No restaurant id, returning');
+      return;
+    }
+    setLoading(true);
+    console.log('Querying subscriptions_api for restaurant:', restaurant.id);
+    const { data, error } = await supabase
+      .from('subscriptions_api')
+      .select('*')
+      .eq('restaurant_id', restaurant.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    console.log('Query result:', { data, error });
+    if (error) {
+      console.error('Error loading subscription:', error);
+    } else if (data) {
+      setSubscription(data);
+    }
+    setLoading(false);
+    console.log('Loading set to false');
+  }, [restaurant?.id]);
+
+  // Load subscription when restaurant.id changes
   useEffect(() => {
-    loadSubscription();
-    
-    // Sprawdź czy wrócił z sukcesem Stripe Checkout
+    if (restaurant?.id && restaurant.id !== loadedRestaurantId.current) {
+      console.log('Restaurant ID changed, loading subscription');
+      loadedRestaurantId.current = restaurant.id;
+      loadSubscription();
+    }
+  }, [restaurant?.id, loadSubscription]);
+
+  // Handle Stripe Checkout params
+  useEffect(() => {
     if (params.success === 'true') {
       Alert.alert('Sukces', 'Płatność zakończona pomyślnie!');
       loadSubscription();
     } else if (params.canceled === 'true') {
       Alert.alert('Anulowano', 'Płatność została anulowana.');
     }
-  }, [params]);
-
-  const loadSubscription = async () => {
-    if (!restaurant?.id) return;
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('subscriptions')
-      .select('*')
-      .eq('restaurant_id', restaurant.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
-    if (data) setSubscription(data);
-    setLoading(false);
-  };
+  }, [params, loadSubscription]);
 
   const handlePayment = async () => {
     if (!restaurant?.id) return;

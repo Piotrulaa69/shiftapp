@@ -54,7 +54,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
     setLoading(true);
     const { data, error } = await supabase
-      .from('subscriptions')
+      .from('subscriptions_api')
       .select('*')
       .eq('restaurant_id', user.restaurantId)
       .maybeSingle();
