@@ -8,6 +8,7 @@ import {
     Platform,
     ScrollView,
     StyleSheet,
+    Switch,
     Text,
     TextInput,
     TouchableOpacity,
@@ -25,6 +26,23 @@ export default function ProfileScreen() {
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showNotifModal, setShowNotifModal] = useState(false);
+  const [showPersonalModal, setShowPersonalModal] = useState(false);
+
+  // personal/payroll fields
+  const [pPhone, setPPhone] = useState('');
+  const [pBirth, setPBirth] = useState('');
+  const [pAddr, setPAddr] = useState('');
+  const [pPesel, setPPesel] = useState('');
+  const [pCitizen, setPCitizen] = useState('');
+  const [pIdNum, setPIdNum] = useState('');
+  const [pIdCard, setPIdCard] = useState('');
+  const [pIban, setPIban] = useState('');
+  const [pBank, setPBank] = useState('');
+  const [pNfz, setPNfz] = useState('');
+  const [pTax, setPTax] = useState('');
+  const [pPit, setPPit] = useState(false);
+  const [pSaving, setPSaving] = useState(false);
+  const [pSaved, setPSaved] = useState(false);
   const [notifPrefs, setNotifPrefs] = useState<Record<string, boolean>>({
     shift_reminder: true,
     task_assigned: true,
@@ -42,6 +60,27 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     if (user?.id) {
+      supabase.from('profiles').select('phone,birth_date,address,pesel,citizenship,id_series_number,id_card_number,bank_account_number,bank_name,nfz_branch,tax_office,pit_electronic').eq('id', user.id).single().then(({ data }) => {
+        if (data) {
+          setPPhone(data.phone ?? '');
+          setPBirth(data.birth_date ?? '');
+          setPAddr(data.address ?? '');
+          setPPesel(data.pesel ?? '');
+          setPCitizen(data.citizenship ?? '');
+          setPIdNum(data.id_series_number ?? '');
+          setPIdCard(data.id_card_number ?? '');
+          setPIban(data.bank_account_number ?? '');
+          setPBank(data.bank_name ?? '');
+          setPNfz(data.nfz_branch ?? '');
+          setPTax(data.tax_office ?? '');
+          setPPit(data.pit_electronic ?? false);
+        }
+      });
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (user?.id) {
       getNotifPrefs(user.id).then((prefs) => {
         if (prefs) {
           setNotifPrefs({
@@ -55,6 +94,36 @@ export default function ProfileScreen() {
       });
     }
   }, [user?.id]);
+
+  const savePersonalData = async () => {
+    if (!user?.id) return;
+    if (!pPhone.trim() || !pBirth.trim() || !pAddr.trim() || !pPesel.trim() || !pCitizen.trim() || !pIdNum.trim() || !pIban.trim() || !pBank.trim() || !pNfz.trim() || !pTax.trim()) {
+      Alert.alert('Brakujące dane', 'Uzupełnij wszystkie wymagane pola (oznaczone *).');
+      return;
+    }
+    if (pPesel.trim().length !== 11) {
+      Alert.alert('Nieprawidłowy PESEL', 'PESEL musi mieć dokładnie 11 cyfr.');
+      return;
+    }
+    setPSaving(true);
+    await supabase.from('profiles').update({
+      phone: pPhone || null,
+      birth_date: pBirth || null,
+      address: pAddr || null,
+      pesel: pPesel || null,
+      citizenship: pCitizen || null,
+      id_series_number: pIdNum || null,
+      id_card_number: pIdCard || null,
+      bank_account_number: pIban.replace(/\s/g, '') || null,
+      bank_name: pBank || null,
+      nfz_branch: pNfz || null,
+      tax_office: pTax || null,
+      pit_electronic: pPit,
+    }).eq('id', user.id);
+    setPSaving(false);
+    setPSaved(true);
+    setTimeout(() => { setPSaved(false); setShowPersonalModal(false); }, 1200);
+  };
 
   const saveNotifPrefs = async () => {
     if (!user?.id) return;
@@ -125,6 +194,12 @@ export default function ProfileScreen() {
           <InfoRow icon="business-outline" label="Firma" value={restaurant?.name ?? '—'} />
         </View>
 
+        {/* Personal data Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Dane kadrowe</Text>
+          <ActionRow icon="id-card-outline" label="Uzupełnij / edytuj dane osobowe" onPress={() => setShowPersonalModal(true)} />
+        </View>
+
         {/* Documents Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Dokumenty</Text>
@@ -148,6 +223,64 @@ export default function ProfileScreen() {
 
         <Text style={styles.version}>ShiftApp v1.0 · © 2025</Text>
       </ScrollView>
+
+      {/* Personal Data Modal */}
+      <Modal visible={showPersonalModal} animationType="slide" transparent onRequestClose={() => setShowPersonalModal(false)}>
+        <View style={mStyles.overlay}>
+          <View style={[mStyles.sheet, { maxHeight: '92%' }]}>
+            <View style={mStyles.mHeader}>
+              <Text style={mStyles.mTitle}>Dane kadrowe</Text>
+              <TouchableOpacity onPress={() => setShowPersonalModal(false)}>
+                <Ionicons name="close" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={[mStyles.body, { paddingBottom: 32 }]} keyboardShouldPersistTaps="handled">
+              <Text style={pStyles.sect}>Dane kontaktowe</Text>
+              <Text style={mStyles.label}>Telefon *</Text>
+              <TextInput style={mStyles.input} value={pPhone} onChangeText={setPPhone} placeholder="+48 500 000 000" placeholderTextColor={theme.colors.textMuted} keyboardType="phone-pad" />
+              <Text style={mStyles.label}>Data urodzenia * (RRRR-MM-DD)</Text>
+              <TextInput style={mStyles.input} value={pBirth} onChangeText={setPBirth} placeholder="1990-01-15" placeholderTextColor={theme.colors.textMuted} />
+              <Text style={mStyles.label}>Adres zamieszkania *</Text>
+              <TextInput style={mStyles.input} value={pAddr} onChangeText={setPAddr} placeholder="ul. Kwiatowa 1, 00-001 Warszawa" placeholderTextColor={theme.colors.textMuted} />
+
+              <Text style={pStyles.sect}>Dokumenty tożsamości</Text>
+              <Text style={mStyles.label}>PESEL *</Text>
+              <TextInput style={mStyles.input} value={pPesel} onChangeText={setPPesel} placeholder="00000000000" placeholderTextColor={theme.colors.textMuted} keyboardType="number-pad" maxLength={11} />
+              <Text style={mStyles.label}>Obywatelstwo *</Text>
+              <TextInput style={mStyles.input} value={pCitizen} onChangeText={setPCitizen} placeholder="polskie" placeholderTextColor={theme.colors.textMuted} />
+              <Text style={mStyles.label}>Seria i numer dowodu osobistego *</Text>
+              <TextInput style={mStyles.input} value={pIdNum} onChangeText={setPIdNum} placeholder="ABC 123456" placeholderTextColor={theme.colors.textMuted} autoCapitalize="characters" />
+              <Text style={mStyles.label}>Numer legitymacji (opcjonalnie)</Text>
+              <TextInput style={mStyles.input} value={pIdCard} onChangeText={setPIdCard} placeholder="np. 1234567" placeholderTextColor={theme.colors.textMuted} />
+
+              <Text style={pStyles.sect}>Dane bankowe</Text>
+              <Text style={mStyles.label}>Numer rachunku bankowego *</Text>
+              <TextInput style={mStyles.input} value={pIban} onChangeText={setPIban} placeholder="PL00 0000 0000 0000 0000 0000 0000" placeholderTextColor={theme.colors.textMuted} />
+              <Text style={mStyles.label}>Nazwa banku *</Text>
+              <TextInput style={mStyles.input} value={pBank} onChangeText={setPBank} placeholder="np. PKO BP" placeholderTextColor={theme.colors.textMuted} />
+
+              <Text style={pStyles.sect}>Dane kadrowe</Text>
+              <Text style={mStyles.label}>Oddział NFZ *</Text>
+              <TextInput style={mStyles.input} value={pNfz} onChangeText={setPNfz} placeholder="np. Mazowiecki" placeholderTextColor={theme.colors.textMuted} />
+              <Text style={mStyles.label}>Urząd skarbowy *</Text>
+              <TextInput style={mStyles.input} value={pTax} onChangeText={setPTax} placeholder="np. US Warszawa-Śródmieście" placeholderTextColor={theme.colors.textMuted} />
+              <View style={pStyles.switchRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={pStyles.switchLabel}>Zgoda na e-PIT</Text>
+                  <Text style={pStyles.switchSub}>Przesyłanie PIT elektronicznie</Text>
+                </View>
+                <Switch value={pPit} onValueChange={setPPit} trackColor={{ false: theme.colors.border, true: theme.colors.primary }} thumbColor={theme.colors.white} />
+              </View>
+
+              <TouchableOpacity style={[mStyles.saveBtn, { marginTop: 24 }, pSaving && { opacity: 0.6 }]} onPress={savePersonalData} disabled={pSaving} activeOpacity={0.85}>
+                {pSaving ? <ActivityIndicator color={theme.colors.white} /> : pSaved
+                  ? <><Ionicons name="checkmark" size={18} color={theme.colors.white} /><Text style={mStyles.saveBtnText}>Zapisano!</Text></>
+                  : <Text style={mStyles.saveBtnText}>Zapisz dane</Text>}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Notification Preferences Modal */}
       <Modal visible={showNotifModal} animationType="fade" transparent onRequestClose={() => setShowNotifModal(false)}>
@@ -273,6 +406,13 @@ const styles = StyleSheet.create({
   logoutBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12 },
   logoutText: { fontSize: 14, fontWeight: '600', color: theme.colors.error },
   version: { textAlign: 'center', fontSize: 12, color: theme.colors.textMuted, paddingVertical: 24 },
+});
+
+const pStyles = StyleSheet.create({
+  sect: { fontSize: 11, fontWeight: '700', color: theme.colors.textMuted, letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 20, marginBottom: 2 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: theme.colors.border, marginTop: 12 },
+  switchLabel: { fontSize: 14, fontWeight: '600', color: theme.colors.text },
+  switchSub: { fontSize: 12, color: theme.colors.textMuted, marginTop: 2 },
 });
 
 const mStyles = StyleSheet.create({

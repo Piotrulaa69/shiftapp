@@ -92,11 +92,14 @@ export default function AvailabilityScreen() {
   const isAlwaysAvailable = (empId?: string): boolean => {
     if (!rs) return false;
     const targetId = empId ?? selEmpId;
+    // For managers looking at an employee — search loaded employees list
+    // For a regular employee viewing own calendar — employees list is empty, use user context directly
     const emp = employees.find(e => e.id === targetId);
-    if (!emp) return false;
-    const et = (emp as any).employment_type ?? '';
-    const isContract = et === 'umowa_o_prace' || et === 'contract';
-    const isFreelance = et === 'zlecenie' || et === 'freelance' || et === 'b2b';
+    const et: string = emp
+      ? ((emp as any).employment_type ?? '')
+      : (targetId === uid ? (user?.employmentType ?? '') : '');
+    const isContract = et === 'full_time' || et === 'part_time';
+    const isFreelance = et === 'contract' || et === 'freelance' || et === 'b2b' || et === 'zlecenie';
     if (isContract && rs.availability_contract_all_available) return true;
     if (isFreelance && rs.availability_freelance_all_available) return true;
     return false;

@@ -17,6 +17,7 @@ export type AuthUser = {
   onboardingDone: boolean;
   isSuperAdmin: boolean;
   hasChildren: boolean;
+  employmentType: string;
 };
 
 export type Restaurant = {
@@ -42,7 +43,7 @@ type AuthContextType = {
   joinWithCode: (
     code: string,
     data: { firstName: string; lastName: string; email: string; password: string }
-  ) => Promise<boolean>;
+  ) => Promise<string | false>;
   registerRestaurant: (data: {
     restaurantName: string;
     address: string;
@@ -75,6 +76,7 @@ function toAuthUser(profile: DbProfile, email: string): AuthUser {
     onboardingDone: profile.onboarding_done ?? true,
     isSuperAdmin: profile.is_super_admin ?? false,
     hasChildren: (profile as any).has_children ?? false,
+    employmentType: profile.employment_type ?? 'full_time',
   };
 }
 
@@ -181,7 +183,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const joinWithCode = async (
     code: string,
     data: { firstName: string; lastName: string; email: string; password: string }
-  ): Promise<boolean> => {
+  ): Promise<string | false> => {
     setIsLoading(true);
 
     // 1. Validate invitation code via RPC
@@ -232,7 +234,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!result) return false;
     setUser(result.user);
     setRestaurant(result.restaurant);
-    return true;
+    return userId;
   };
 
   const registerRestaurant = async (data: {

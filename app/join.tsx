@@ -18,7 +18,7 @@ import { supabase } from '../lib/supabase';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-type Step = 'code' | 'register';
+type Step = 'code' | 'register' | 'personal';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    WEB PORTAL — dark two-column auth design (same CSS as login)
@@ -45,8 +45,15 @@ const JOIN_CSS = `
 .aj-steps{display:flex;flex-direction:column;gap:8px;}
 .aj-step{display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:12px;font-size:14px;font-weight:500;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.7);transition:all .2s;}
 .aj-step.act{background:white;color:#1E3A5F;border-color:white;font-weight:600;}
+.aj-step.done{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.25);color:rgba(255,255,255,.9);}
 .aj-sn{width:26px;height:26px;border-radius:9999px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.5);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .aj-step.act .aj-sn{background:#2563EB;color:white;}
+.aj-step.done .aj-sn{background:rgba(255,255,255,.3);color:#1E3A5F;}
+.aj-sect{font-size:12px;font-weight:700;color:#6B7280;letter-spacing:.06em;text-transform:uppercase;margin:18px 0 8px;}
+.aj-opt{font-size:11px;font-weight:500;color:#9CA3AF;margin-left:4px;font-style:normal;}
+.aj-check-row{display:flex;align-items:flex-start;gap:10px;margin-bottom:14px;cursor:pointer;}
+.aj-check-row input[type=checkbox]{width:18px;height:18px;border-radius:5px;accent-color:#2563EB;flex-shrink:0;margin-top:2px;cursor:pointer;}
+.aj-check-lbl{font-size:13px;color:#374151;line-height:1.5;}
 
 /* ─── RIGHT: white form ─── */
 .aj-right{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px;overflow-y:auto;}
@@ -89,9 +96,9 @@ const CHECK_ICO = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" s
 function buildJoinPortal(step: Step, loading: boolean, err: string, restaurantName: string, jobTitle: string) {
   const leftSteps = `
     <div class="aj-steps">
-      <div class="aj-step ${step === 'code' ? 'act' : ''}"><div class="aj-sn">1</div><span>Kod aktywacyjny</span></div>
-      <div class="aj-step ${step === 'register' ? 'act' : ''}"><div class="aj-sn">2</div><span>Utwórz konto</span></div>
-      <div class="aj-step"><div class="aj-sn">3</div><span>Dołącz do zespołu</span></div>
+      <div class="aj-step ${step === 'code' ? 'act' : (step === 'register' || step === 'personal' ? 'done' : '')}"><div class="aj-sn">${step === 'register' || step === 'personal' ? '✓' : '1'}</div><span>Kod aktywacyjny</span></div>
+      <div class="aj-step ${step === 'register' ? 'act' : (step === 'personal' ? 'done' : '')}"><div class="aj-sn">${step === 'personal' ? '✓' : '2'}</div><span>Utwórz konto</span></div>
+      <div class="aj-step ${step === 'personal' ? 'act' : ''}"><div class="aj-sn">3</div><span>Dane osobowe</span></div>
     </div>`;
 
   const codeForm = `
@@ -113,7 +120,7 @@ function buildJoinPortal(step: Step, loading: boolean, err: string, restaurantNa
       <button class="aj-back" data-action="backToCode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="15 18 9 12 15 6"/></svg>Zmień kod</button>
       <div class="aj-ok"><div class="aj-ok-ico">${CHECK_ICO}</div><div><div class="aj-ok-name">${restaurantName}</div><div class="aj-ok-role">Stanowisko: ${jobTitle}</div></div></div>
       <div class="aj-fh">Utwórz konto</div>
-      <div class="aj-fs">Uzupełnij dane, aby dołączyć do zespołu.</div>
+      <div class="aj-fs">Uzupełnij dane logowania, aby dołączyć do zespołu.</div>
       ${err ? `<div class="aj-err">${ERR_ICO}${err}</div>` : ''}
       <div class="aj-row">
         <div class="aj-field"><label class="aj-lbl">Imię</label><input class="aj-in" id="aj-fn" type="text" placeholder="Anna" autocapitalize="words"/></div>
@@ -121,8 +128,52 @@ function buildJoinPortal(step: Step, loading: boolean, err: string, restaurantNa
       </div>
       <div class="aj-field"><label class="aj-lbl">E-mail</label><input class="aj-in" id="aj-em" type="email" placeholder="anna@email.pl" autocomplete="email"/></div>
       <div class="aj-field"><label class="aj-lbl">Hasło</label><input class="aj-in" id="aj-pw" type="password" placeholder="Minimum 6 znaków" autocomplete="new-password"/></div>
-      <button class="aj-sub" data-action="register" ${loading ? 'disabled' : ''}>${loading ? 'Dołączanie…' : `Dołącz do ${restaurantName}`}</button>
+      <button class="aj-sub" data-action="register" ${loading ? 'disabled' : ''}>${loading ? 'Tworzenie konta…' : 'Dalej: dane osobowe →'}</button>
     </div>`;
+
+  const personalForm = `
+    <div class="aj-form">
+      <div class="aj-fh">Dane osobowe</div>
+      <div class="aj-fs">Uzupełnij wszystkie dane kadrowe. Są one wymagane do zatrudnienia.</div>
+      ${err ? `<div class="aj-err">${ERR_ICO}${err}</div>` : ''}
+
+      <div class="aj-sect">Dane kontaktowe</div>
+      <div class="aj-row">
+        <div class="aj-field"><label class="aj-lbl">Telefon *</label><input class="aj-in" id="aj-phone" type="tel" placeholder="+48 500 000 000"/></div>
+        <div class="aj-field"><label class="aj-lbl">Data urodzenia *</label><input class="aj-in" id="aj-birth" type="date"/></div>
+      </div>
+      <div class="aj-field"><label class="aj-lbl">Adres zamieszkania *</label><input class="aj-in" id="aj-addr" type="text" placeholder="ul. Kwiatowa 1, 00-001 Warszawa"/></div>
+
+      <div class="aj-sect">Dokumenty tożsamości</div>
+      <div class="aj-row">
+        <div class="aj-field"><label class="aj-lbl">PESEL *</label><input class="aj-in" id="aj-pesel" type="text" placeholder="00000000000" maxlength="11"/></div>
+        <div class="aj-field"><label class="aj-lbl">Obywatelstwo *</label><input class="aj-in" id="aj-citizen" type="text" placeholder="polskie"/></div>
+      </div>
+      <div class="aj-row">
+        <div class="aj-field"><label class="aj-lbl">Seria i nr dowodu *</label><input class="aj-in" id="aj-idnum" type="text" placeholder="ABC 123456"/></div>
+        <div class="aj-field"><label class="aj-lbl">Nr legitymacji <em class="aj-opt">(opcjonalnie)</em></label><input class="aj-in" id="aj-idcard" type="text" placeholder="np. 1234567"/></div>
+      </div>
+
+      <div class="aj-sect">Dane bankowe</div>
+      <div class="aj-field"><label class="aj-lbl">Numer rachunku bankowego *</label><input class="aj-in" id="aj-iban" type="text" placeholder="PL 00 0000 0000 0000 0000 0000 0000"/></div>
+      <div class="aj-field"><label class="aj-lbl">Nazwa banku *</label><input class="aj-in" id="aj-bank" type="text" placeholder="np. PKO BP"/></div>
+
+      <div class="aj-sect">Dane kadrowe</div>
+      <div class="aj-row">
+        <div class="aj-field"><label class="aj-lbl">Oddział NFZ *</label><input class="aj-in" id="aj-nfz" type="text" placeholder="np. Mazowiecki"/></div>
+        <div class="aj-field"><label class="aj-lbl">Urząd skarbowy *</label><input class="aj-in" id="aj-tax" type="text" placeholder="np. US Warszawa-Śródmieście"/></div>
+      </div>
+      <label class="aj-check-row">
+        <input type="checkbox" id="aj-pit" />
+        <span class="aj-check-lbl">Wyrażam zgodę na przesyłanie PIT elektronicznie (e-PIT)</span>
+      </label>
+
+      <button class="aj-sub" data-action="savePersonal" ${loading ? 'disabled' : ''}>${loading ? 'Zapisywanie…' : `Dołącz do ${restaurantName} →`}</button>
+    </div>`;
+
+  const headingMap: Record<Step, string> = { code: 'Dołącz do zespołu', register: 'Prawie gotowe', personal: 'Ostatni krok' };
+  const subMap: Record<Step, string> = { code: 'Wpisz kod aktywacyjny i dołącz do restauracji w kilka sekund.', register: 'Uzupełnij dane logowania i przejdź do danych osobowych.', personal: 'Wszystkie dane są wymagane do zatrudnienia.' };
+  const formMap: Record<Step, string> = { code: codeForm, register: registerForm, personal: personalForm };
 
   return `
   <div class="aj-left">
@@ -130,14 +181,14 @@ function buildJoinPortal(step: Step, loading: boolean, err: string, restaurantNa
     <div class="aj-lc">
       <div class="aj-brand"><div class="aj-mark">S</div><span>ShiftApp</span></div>
       <div class="aj-heading">
-        <h1>${step === 'code' ? 'Dołącz do zespołu' : 'Prawie gotowe'}</h1>
-        <p>${step === 'code' ? 'Wpisz kod aktywacyjny i dołącz do restauracji w kilka sekund.' : 'Uzupełnij dane i zacznij pracować ze swoim zespołem.'}</p>
+        <h1>${headingMap[step]}</h1>
+        <p>${subMap[step]}</p>
       </div>
       ${leftSteps}
     </div>
   </div>
   <div class="aj-right">
-    ${step === 'code' ? codeForm : registerForm}
+    ${formMap[step]}
   </div>`;
 }
 
@@ -150,6 +201,7 @@ export default function JoinScreen() {
   const [code, setCode] = useState('');
   const [restaurantName, setRestaurantName] = useState('');
   const [jobTitle, setJobTitle] = useState('');
+  const [pendingUserId, setPendingUserId] = useState('');
 
   /* ── WEB: portal ── */
   useEffect(() => {
@@ -185,6 +237,7 @@ export default function JoinScreen() {
     let currentCode = '';
     let currentRestaurant = '';
     let currentJob = '';
+    let pendingUID = '';
 
     const render = (s: Step, loading: boolean, err: string, rn: string, jt: string) => {
       portal.innerHTML = buildJoinPortal(s, loading, err, rn, jt);
@@ -261,9 +314,11 @@ export default function JoinScreen() {
           return;
         }
         render(currentStep, true, '', currentRestaurant, currentJob);
-        const success = await joinWithCode(currentCode, { firstName: fn, lastName: ln, email: em, password: pw });
-        if (success) {
-          router.replace('/(tabs)/dashboard');
+        const uid = await joinWithCode(currentCode, { firstName: fn, lastName: ln, email: em, password: pw });
+        if (uid) {
+          pendingUID = typeof uid === 'string' ? uid : '';
+          currentStep = 'personal';
+          render(currentStep, false, '', currentRestaurant, currentJob);
         } else {
           render(currentStep, false, 'Nie udało się dołączyć. Sprawdź dane i spróbuj ponownie.', currentRestaurant, currentJob);
           setTimeout(() => {
@@ -273,6 +328,41 @@ export default function JoinScreen() {
             if (f) f.value = fn; if (l) l.value = ln; if (eEl) eEl.value = em;
           }, 0);
         }
+        return;
+      }
+
+      if (action === 'savePersonal') {
+        const phone = (portal.querySelector('#aj-phone') as HTMLInputElement)?.value?.trim() || '';
+        const birth = (portal.querySelector('#aj-birth') as HTMLInputElement)?.value?.trim() || '';
+        const addr = (portal.querySelector('#aj-addr') as HTMLInputElement)?.value?.trim() || '';
+        const pesel = (portal.querySelector('#aj-pesel') as HTMLInputElement)?.value?.trim() || '';
+        const citizen = (portal.querySelector('#aj-citizen') as HTMLInputElement)?.value?.trim() || '';
+        const idnum = (portal.querySelector('#aj-idnum') as HTMLInputElement)?.value?.trim() || '';
+        const idcard = (portal.querySelector('#aj-idcard') as HTMLInputElement)?.value?.trim() || null;
+        const iban = (portal.querySelector('#aj-iban') as HTMLInputElement)?.value?.trim().replace(/\s/g,'') || '';
+        const bank = (portal.querySelector('#aj-bank') as HTMLInputElement)?.value?.trim() || '';
+        const nfz = (portal.querySelector('#aj-nfz') as HTMLInputElement)?.value?.trim() || '';
+        const tax = (portal.querySelector('#aj-tax') as HTMLInputElement)?.value?.trim() || '';
+        const pit = (portal.querySelector('#aj-pit') as HTMLInputElement)?.checked ?? false;
+        if (!phone || !birth || !addr || !pesel || !citizen || !idnum || !iban || !bank || !nfz || !tax) {
+          render(currentStep, false, 'Uzupełnij wszystkie wymagane pola (oznaczone *).', currentRestaurant, currentJob);
+          return;
+        }
+        if (pesel.length !== 11) {
+          render(currentStep, false, 'PESEL musi mieć dokładnie 11 cyfr.', currentRestaurant, currentJob);
+          return;
+        }
+        render(currentStep, true, '', currentRestaurant, currentJob);
+        if (pendingUID) {
+          await supabase.from('profiles').update({
+            phone, birth_date: birth || null, address: addr, pesel, citizenship: citizen,
+            id_series_number: idnum, id_card_number: idcard,
+            bank_account_number: iban, bank_name: bank,
+            nfz_branch: nfz, tax_office: tax, pit_electronic: pit,
+          }).eq('id', pendingUID);
+        }
+        router.replace('/(tabs)/dashboard');
+        return;
       }
     };
 
@@ -309,6 +399,20 @@ export default function JoinScreen() {
     const [mLn, setMLn] = useState('');
     const [mEmail, setMEmail] = useState('');
     const [mPw, setMPw] = useState('');
+    const [mUID, setMUID] = useState('');
+    // personal fields
+    const [mPhone, setMPhone] = useState('');
+    const [mBirth, setMBirth] = useState('');
+    const [mAddr, setMAddr] = useState('');
+    const [mPesel, setMPesel] = useState('');
+    const [mCitizen, setMCitizen] = useState('');
+    const [mIdNum, setMIdNum] = useState('');
+    const [mIdCard, setMIdCard] = useState('');
+    const [mIban, setMIban] = useState('');
+    const [mBank, setMBank] = useState('');
+    const [mNfz, setMNfz] = useState('');
+    const [mTax, setMTax] = useState('');
+    const [mPit, setMPit] = useState(false);
 
     const verifyCode = async () => {
       const cleaned = mCode.trim().toUpperCase();
@@ -324,16 +428,44 @@ export default function JoinScreen() {
       if (!mFn.trim() || !mLn.trim() || !mEmail.trim() || !mPw.trim()) { showAlert('Błąd', 'Uzupełnij wszystkie pola.'); return; }
       if (!EMAIL_REGEX.test(mEmail.trim())) { showAlert('Nieprawidłowy e-mail', 'Podaj poprawny adres e-mail.'); return; }
       if (mPw.trim().length < 6) { showAlert('Za krótkie hasło', 'Hasło musi mieć minimum 6 znaków.'); return; }
-      const success = await joinWithCode(mCode.trim().toUpperCase(), { firstName: mFn.trim(), lastName: mLn.trim(), email: mEmail.trim(), password: mPw.trim() });
-      if (success) { router.replace('/(tabs)/dashboard'); }
+      const uid = await joinWithCode(mCode.trim().toUpperCase(), { firstName: mFn.trim(), lastName: mLn.trim(), email: mEmail.trim(), password: mPw.trim() });
+      if (uid) { setMUID(uid); setMStep('personal'); }
       else { showAlert('Błąd', 'Nie udało się dołączyć. Spróbuj ponownie.'); }
+    };
+
+    const savePersonal = async () => {
+      if (!mPhone.trim() || !mBirth.trim() || !mAddr.trim() || !mPesel.trim() || !mCitizen.trim() || !mIdNum.trim() || !mIban.trim() || !mBank.trim() || !mNfz.trim() || !mTax.trim()) {
+        showAlert('Brakujące dane', 'Uzupełnij wszystkie wymagane pola.');
+        return;
+      }
+      if (mPesel.trim().length !== 11) {
+        showAlert('Nieprawidłowy PESEL', 'PESEL musi mieć dokładnie 11 cyfr.');
+        return;
+      }
+      if (mUID) {
+        await supabase.from('profiles').update({
+          phone: mPhone.trim(),
+          birth_date: mBirth.trim(),
+          address: mAddr.trim(),
+          pesel: mPesel.trim(),
+          citizenship: mCitizen.trim(),
+          id_series_number: mIdNum.trim(),
+          id_card_number: mIdCard.trim() || null,
+          bank_account_number: mIban.replace(/\s/g, ''),
+          bank_name: mBank.trim(),
+          nfz_branch: mNfz.trim(),
+          tax_office: mTax.trim(),
+          pit_electronic: mPit,
+        }).eq('id', mUID);
+      }
+      router.replace('/(tabs)/dashboard');
     };
 
     return (
       <SafeAreaView style={mob.safe} edges={['top']}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView contentContainerStyle={mob.form} keyboardShouldPersistTaps="handled">
-            {mStep === 'code' ? (
+            {mStep === 'code' && (
               <>
                 <Text style={mob.title}>Dołącz do restauracji</Text>
                 <Text style={mob.sub}>Wpisz kod aktywacyjny od pracodawcy.</Text>
@@ -343,7 +475,8 @@ export default function JoinScreen() {
                   {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={mob.btnTxt}>Sprawdź kod →</Text>}
                 </TouchableOpacity>
               </>
-            ) : (
+            )}
+            {mStep === 'register' && (
               <>
                 <Text style={mob.title}>Utwórz konto</Text>
                 <Text style={mob.sub}>{mRestaurant} · {mJob}</Text>
@@ -362,7 +495,48 @@ export default function JoinScreen() {
                 <Text style={mob.lbl}>Hasło</Text>
                 <TextInput style={mob.input} placeholder="Minimum 6 znaków" placeholderTextColor="#94a3b8" value={mPw} onChangeText={setMPw} secureTextEntry />
                 <TouchableOpacity style={mob.btn} onPress={register} disabled={isLoading} activeOpacity={0.88}>
-                  {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={mob.btnTxt}>Dołącz do {mRestaurant}</Text>}
+                  {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={mob.btnTxt}>Dalej: dane osobowe →</Text>}
+                </TouchableOpacity>
+              </>
+            )}
+            {mStep === 'personal' && (
+              <>
+                <Text style={mob.title}>Dane osobowe</Text>
+                <Text style={mob.sub}>Wszystkie pola są wymagane do zatrudnienia.</Text>
+                <Text style={mob.sect}>Dane kontaktowe</Text>
+                <Text style={mob.lbl}>Telefon *</Text>
+                <TextInput style={mob.input} placeholder="+48 500 000 000" placeholderTextColor="#94a3b8" value={mPhone} onChangeText={setMPhone} keyboardType="phone-pad" />
+                <Text style={mob.lbl}>Data urodzenia * (RRRR-MM-DD)</Text>
+                <TextInput style={mob.input} placeholder="1990-01-15" placeholderTextColor="#94a3b8" value={mBirth} onChangeText={setMBirth} />
+                <Text style={mob.lbl}>Adres zamieszkania *</Text>
+                <TextInput style={mob.input} placeholder="ul. Kwiatowa 1, 00-001 Warszawa" placeholderTextColor="#94a3b8" value={mAddr} onChangeText={setMAddr} />
+                <Text style={mob.sect}>Dokumenty tożsamości</Text>
+                <Text style={mob.lbl}>PESEL *</Text>
+                <TextInput style={mob.input} placeholder="00000000000" placeholderTextColor="#94a3b8" value={mPesel} onChangeText={setMPesel} keyboardType="number-pad" maxLength={11} />
+                <Text style={mob.lbl}>Obywatelstwo *</Text>
+                <TextInput style={mob.input} placeholder="polskie" placeholderTextColor="#94a3b8" value={mCitizen} onChangeText={setMCitizen} />
+                <Text style={mob.lbl}>Seria i nr dowodu *</Text>
+                <TextInput style={mob.input} placeholder="ABC 123456" placeholderTextColor="#94a3b8" value={mIdNum} onChangeText={setMIdNum} autoCapitalize="characters" />
+                <Text style={mob.lbl}>Nr legitymacji (opcjonalnie)</Text>
+                <TextInput style={mob.input} placeholder="np. 1234567" placeholderTextColor="#94a3b8" value={mIdCard} onChangeText={setMIdCard} />
+                <Text style={mob.sect}>Dane bankowe</Text>
+                <Text style={mob.lbl}>Numer rachunku bankowego *</Text>
+                <TextInput style={mob.input} placeholder="PL00 0000 0000 0000 0000 0000 0000" placeholderTextColor="#94a3b8" value={mIban} onChangeText={setMIban} />
+                <Text style={mob.lbl}>Nazwa banku *</Text>
+                <TextInput style={mob.input} placeholder="np. PKO BP" placeholderTextColor="#94a3b8" value={mBank} onChangeText={setMBank} />
+                <Text style={mob.sect}>Dane kadrowe</Text>
+                <Text style={mob.lbl}>Oddział NFZ *</Text>
+                <TextInput style={mob.input} placeholder="np. Mazowiecki" placeholderTextColor="#94a3b8" value={mNfz} onChangeText={setMNfz} />
+                <Text style={mob.lbl}>Urząd skarbowy *</Text>
+                <TextInput style={mob.input} placeholder="np. US Warszawa-Śródmieście" placeholderTextColor="#94a3b8" value={mTax} onChangeText={setMTax} />
+                <TouchableOpacity style={mob.checkRow} onPress={() => setMPit(!mPit)} activeOpacity={0.7}>
+                  <View style={[mob.checkbox, mPit && mob.checkboxChecked]}>
+                    {mPit && <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>✓</Text>}
+                  </View>
+                  <Text style={mob.checkLbl}>Zgoda na przesyłanie PIT elektronicznie (e-PIT)</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={mob.btn} onPress={savePersonal} disabled={isLoading} activeOpacity={0.88}>
+                  {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={mob.btnTxt}>Dołącz do {mRestaurant} →</Text>}
                 </TouchableOpacity>
               </>
             )}
@@ -380,8 +554,13 @@ const mob = StyleSheet.create({
   form: { paddingHorizontal: 28, paddingTop: 60, paddingBottom: 40, flexGrow: 1, justifyContent: 'center', gap: 4 },
   title: { fontSize: 26, fontWeight: '700', color: '#0f172a', marginBottom: 6 },
   sub: { fontSize: 14, color: '#64748b', marginBottom: 24 },
+  sect: { fontSize: 11, fontWeight: '700', color: '#6B7280', letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 20, marginBottom: 4 },
   lbl: { fontSize: 13, fontWeight: '500', color: '#374151', marginBottom: 6, marginTop: 12 },
   input: { backgroundColor: '#f8fafc', borderRadius: 12, height: 44, paddingHorizontal: 14, fontSize: 14, color: '#0f172a', borderWidth: 1, borderColor: 'rgba(0,0,0,0.08)' },
   btn: { marginTop: 24, height: 52, backgroundColor: '#0084FF', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   btnTxt: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  checkRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 16, marginBottom: 4 },
+  checkbox: { width: 20, height: 20, borderRadius: 5, borderWidth: 2, borderColor: '#D1D5DB', backgroundColor: '#F9FAFB', alignItems: 'center', justifyContent: 'center', marginTop: 1, flexShrink: 0 },
+  checkboxChecked: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
+  checkLbl: { flex: 1, fontSize: 13, color: '#374151', lineHeight: 18 },
 });

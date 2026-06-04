@@ -63,6 +63,17 @@ export type DbProfile = {
   min_hours_monthly: number | null;
   max_hours_monthly: number | null;
   hourly_rate: number | null;
+  birth_date: string | null;
+  address: string | null;
+  pesel: string | null;
+  id_series_number: string | null;
+  citizenship: string | null;
+  nfz_branch: string | null;
+  tax_office: string | null;
+  pit_electronic: boolean;
+  bank_account_number: string | null;
+  bank_name: string | null;
+  id_card_number: string | null;
   created_at: string;
 };
 
