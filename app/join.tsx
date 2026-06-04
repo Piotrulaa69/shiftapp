@@ -76,6 +76,9 @@ const JOIN_CSS = `
 .aj-sub:hover{background:#1d4ed8;box-shadow:0 6px 20px rgba(37,99,235,.4);transform:translateY(-1px);}
 .aj-sub:active{transform:scale(0.98);}
 .aj-sub:disabled{opacity:.5;cursor:not-allowed;transform:none;}
+.aj-skip{width:100%;height:44px;background:none;color:#6B7280;border:1.5px solid #E5E7EB;border-radius:12px;font-size:14px;font-weight:500;margin-top:10px;cursor:pointer;transition:all .15s;font-family:inherit;}
+.aj-skip:hover{border-color:#D1D5DB;color:#374151;background:#F9FAFB;}
+.aj-skip:disabled{opacity:.5;cursor:not-allowed;}
 .aj-back{display:inline-flex;align-items:center;gap:6px;background:none;border:none;color:#9CA3AF;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;margin-bottom:28px;padding:0;transition:color .2s;}
 .aj-back:hover{color:#111827;}
 .aj-back svg{width:16px;height:16px;}
@@ -134,45 +137,46 @@ function buildJoinPortal(step: Step, loading: boolean, err: string, restaurantNa
   const personalForm = `
     <div class="aj-form">
       <div class="aj-fh">Dane osobowe</div>
-      <div class="aj-fs">Uzupełnij wszystkie dane kadrowe. Są one wymagane do zatrudnienia.</div>
+      <div class="aj-fs">Opcjonalnie — możesz uzupełnić te dane później w ustawieniach profilu.</div>
       ${err ? `<div class="aj-err">${ERR_ICO}${err}</div>` : ''}
 
       <div class="aj-sect">Dane kontaktowe</div>
       <div class="aj-row">
-        <div class="aj-field"><label class="aj-lbl">Telefon *</label><input class="aj-in" id="aj-phone" type="tel" placeholder="+48 500 000 000"/></div>
-        <div class="aj-field"><label class="aj-lbl">Data urodzenia *</label><input class="aj-in" id="aj-birth" type="date"/></div>
+        <div class="aj-field"><label class="aj-lbl">Telefon</label><input class="aj-in" id="aj-phone" type="tel" placeholder="+48 500 000 000"/></div>
+        <div class="aj-field"><label class="aj-lbl">Data urodzenia</label><input class="aj-in" id="aj-birth" type="date"/></div>
       </div>
-      <div class="aj-field"><label class="aj-lbl">Adres zamieszkania *</label><input class="aj-in" id="aj-addr" type="text" placeholder="ul. Kwiatowa 1, 00-001 Warszawa"/></div>
+      <div class="aj-field"><label class="aj-lbl">Adres zamieszkania</label><input class="aj-in" id="aj-addr" type="text" placeholder="ul. Kwiatowa 1, 00-001 Warszawa"/></div>
 
       <div class="aj-sect">Dokumenty tożsamości</div>
       <div class="aj-row">
-        <div class="aj-field"><label class="aj-lbl">PESEL *</label><input class="aj-in" id="aj-pesel" type="text" placeholder="00000000000" maxlength="11"/></div>
-        <div class="aj-field"><label class="aj-lbl">Obywatelstwo *</label><input class="aj-in" id="aj-citizen" type="text" placeholder="polskie"/></div>
+        <div class="aj-field"><label class="aj-lbl">PESEL</label><input class="aj-in" id="aj-pesel" type="text" placeholder="00000000000" maxlength="11"/></div>
+        <div class="aj-field"><label class="aj-lbl">Obywatelstwo</label><input class="aj-in" id="aj-citizen" type="text" placeholder="polskie"/></div>
       </div>
       <div class="aj-row">
-        <div class="aj-field"><label class="aj-lbl">Seria i nr dowodu *</label><input class="aj-in" id="aj-idnum" type="text" placeholder="ABC 123456"/></div>
+        <div class="aj-field"><label class="aj-lbl">Seria i nr dowodu</label><input class="aj-in" id="aj-idnum" type="text" placeholder="ABC 123456"/></div>
         <div class="aj-field"><label class="aj-lbl">Nr legitymacji <em class="aj-opt">(opcjonalnie)</em></label><input class="aj-in" id="aj-idcard" type="text" placeholder="np. 1234567"/></div>
       </div>
 
       <div class="aj-sect">Dane bankowe</div>
-      <div class="aj-field"><label class="aj-lbl">Numer rachunku bankowego *</label><input class="aj-in" id="aj-iban" type="text" placeholder="PL 00 0000 0000 0000 0000 0000 0000"/></div>
-      <div class="aj-field"><label class="aj-lbl">Nazwa banku *</label><input class="aj-in" id="aj-bank" type="text" placeholder="np. PKO BP"/></div>
+      <div class="aj-field"><label class="aj-lbl">Numer rachunku bankowego</label><input class="aj-in" id="aj-iban" type="text" placeholder="PL 00 0000 0000 0000 0000 0000 0000"/></div>
+      <div class="aj-field"><label class="aj-lbl">Nazwa banku</label><input class="aj-in" id="aj-bank" type="text" placeholder="np. PKO BP"/></div>
 
       <div class="aj-sect">Dane kadrowe</div>
       <div class="aj-row">
-        <div class="aj-field"><label class="aj-lbl">Oddział NFZ *</label><input class="aj-in" id="aj-nfz" type="text" placeholder="np. Mazowiecki"/></div>
-        <div class="aj-field"><label class="aj-lbl">Urząd skarbowy *</label><input class="aj-in" id="aj-tax" type="text" placeholder="np. US Warszawa-Śródmieście"/></div>
+        <div class="aj-field"><label class="aj-lbl">Oddział NFZ</label><input class="aj-in" id="aj-nfz" type="text" placeholder="np. Mazowiecki"/></div>
+        <div class="aj-field"><label class="aj-lbl">Urząd skarbowy</label><input class="aj-in" id="aj-tax" type="text" placeholder="np. US Warszawa-Śródmieście"/></div>
       </div>
       <label class="aj-check-row">
         <input type="checkbox" id="aj-pit" />
         <span class="aj-check-lbl">Wyrażam zgodę na przesyłanie PIT elektronicznie (e-PIT)</span>
       </label>
 
-      <button class="aj-sub" data-action="savePersonal" ${loading ? 'disabled' : ''}>${loading ? 'Zapisywanie…' : `Dołącz do ${restaurantName} →`}</button>
+      <button class="aj-sub" data-action="savePersonal" ${loading ? 'disabled' : ''}>${loading ? 'Zapisywanie…' : `Zapisz i dołącz do ${restaurantName} →`}</button>
+      <button class="aj-skip" data-action="skipPersonal" ${loading ? 'disabled' : ''}>Pomiń — uzupełnię później</button>
     </div>`;
 
   const headingMap: Record<Step, string> = { code: 'Dołącz do zespołu', register: 'Prawie gotowe', personal: 'Ostatni krok' };
-  const subMap: Record<Step, string> = { code: 'Wpisz kod aktywacyjny i dołącz do restauracji w kilka sekund.', register: 'Uzupełnij dane logowania i przejdź do danych osobowych.', personal: 'Wszystkie dane są wymagane do zatrudnienia.' };
+  const subMap: Record<Step, string> = { code: 'Wpisz kod aktywacyjny i dołącz do restauracji w kilka sekund.', register: 'Uzupełnij dane logowania i przejdź do danych osobowych.', personal: 'Dane osobowe możesz uzupełnić teraz lub później w profilu.' };
   const formMap: Record<Step, string> = { code: codeForm, register: registerForm, personal: personalForm };
 
   return `
@@ -331,6 +335,12 @@ export default function JoinScreen() {
         return;
       }
 
+      if (action === 'skipPersonal') {
+        await refreshUser();
+        router.replace('/(tabs)/dashboard');
+        return;
+      }
+
       if (action === 'savePersonal') {
         const phone = (portal.querySelector('#aj-phone') as HTMLInputElement)?.value?.trim() || '';
         const birth = (portal.querySelector('#aj-birth') as HTMLInputElement)?.value?.trim() || '';
@@ -344,11 +354,7 @@ export default function JoinScreen() {
         const nfz = (portal.querySelector('#aj-nfz') as HTMLInputElement)?.value?.trim() || '';
         const tax = (portal.querySelector('#aj-tax') as HTMLInputElement)?.value?.trim() || '';
         const pit = (portal.querySelector('#aj-pit') as HTMLInputElement)?.checked ?? false;
-        if (!phone || !birth || !addr || !pesel || !citizen || !idnum || !iban || !bank || !nfz || !tax) {
-          render(currentStep, false, 'Uzupełnij wszystkie wymagane pola (oznaczone *).', currentRestaurant, currentJob);
-          return;
-        }
-        if (pesel.length !== 11) {
+        if (pesel && pesel.length !== 11) {
           render(currentStep, false, 'PESEL musi mieć dokładnie 11 cyfr.', currentRestaurant, currentJob);
           return;
         }
@@ -435,11 +441,7 @@ export default function JoinScreen() {
     };
 
     const savePersonal = async () => {
-      if (!mPhone.trim() || !mBirth.trim() || !mAddr.trim() || !mPesel.trim() || !mCitizen.trim() || !mIdNum.trim() || !mIban.trim() || !mBank.trim() || !mNfz.trim() || !mTax.trim()) {
-        showAlert('Brakujące dane', 'Uzupełnij wszystkie wymagane pola.');
-        return;
-      }
-      if (mPesel.trim().length !== 11) {
+      if (mPesel.trim() && mPesel.trim().length !== 11) {
         showAlert('Nieprawidłowy PESEL', 'PESEL musi mieć dokładnie 11 cyfr.');
         return;
       }
@@ -504,32 +506,32 @@ export default function JoinScreen() {
             {mStep === 'personal' && (
               <>
                 <Text style={mob.title}>Dane osobowe</Text>
-                <Text style={mob.sub}>Wszystkie pola są wymagane do zatrudnienia.</Text>
+                <Text style={mob.sub}>Opcjonalnie — możesz uzupełnić te dane później w profilu.</Text>
                 <Text style={mob.sect}>Dane kontaktowe</Text>
-                <Text style={mob.lbl}>Telefon *</Text>
+                <Text style={mob.lbl}>Telefon</Text>
                 <TextInput style={mob.input} placeholder="+48 500 000 000" placeholderTextColor="#94a3b8" value={mPhone} onChangeText={setMPhone} keyboardType="phone-pad" />
-                <Text style={mob.lbl}>Data urodzenia * (RRRR-MM-DD)</Text>
+                <Text style={mob.lbl}>Data urodzenia (RRRR-MM-DD)</Text>
                 <TextInput style={mob.input} placeholder="1990-01-15" placeholderTextColor="#94a3b8" value={mBirth} onChangeText={setMBirth} />
-                <Text style={mob.lbl}>Adres zamieszkania *</Text>
+                <Text style={mob.lbl}>Adres zamieszkania</Text>
                 <TextInput style={mob.input} placeholder="ul. Kwiatowa 1, 00-001 Warszawa" placeholderTextColor="#94a3b8" value={mAddr} onChangeText={setMAddr} />
                 <Text style={mob.sect}>Dokumenty tożsamości</Text>
-                <Text style={mob.lbl}>PESEL *</Text>
+                <Text style={mob.lbl}>PESEL</Text>
                 <TextInput style={mob.input} placeholder="00000000000" placeholderTextColor="#94a3b8" value={mPesel} onChangeText={setMPesel} keyboardType="number-pad" maxLength={11} />
-                <Text style={mob.lbl}>Obywatelstwo *</Text>
+                <Text style={mob.lbl}>Obywatelstwo</Text>
                 <TextInput style={mob.input} placeholder="polskie" placeholderTextColor="#94a3b8" value={mCitizen} onChangeText={setMCitizen} />
-                <Text style={mob.lbl}>Seria i nr dowodu *</Text>
+                <Text style={mob.lbl}>Seria i nr dowodu</Text>
                 <TextInput style={mob.input} placeholder="ABC 123456" placeholderTextColor="#94a3b8" value={mIdNum} onChangeText={setMIdNum} autoCapitalize="characters" />
                 <Text style={mob.lbl}>Nr legitymacji (opcjonalnie)</Text>
                 <TextInput style={mob.input} placeholder="np. 1234567" placeholderTextColor="#94a3b8" value={mIdCard} onChangeText={setMIdCard} />
                 <Text style={mob.sect}>Dane bankowe</Text>
-                <Text style={mob.lbl}>Numer rachunku bankowego *</Text>
+                <Text style={mob.lbl}>Numer rachunku bankowego</Text>
                 <TextInput style={mob.input} placeholder="PL00 0000 0000 0000 0000 0000 0000" placeholderTextColor="#94a3b8" value={mIban} onChangeText={setMIban} />
-                <Text style={mob.lbl}>Nazwa banku *</Text>
+                <Text style={mob.lbl}>Nazwa banku</Text>
                 <TextInput style={mob.input} placeholder="np. PKO BP" placeholderTextColor="#94a3b8" value={mBank} onChangeText={setMBank} />
                 <Text style={mob.sect}>Dane kadrowe</Text>
-                <Text style={mob.lbl}>Oddział NFZ *</Text>
+                <Text style={mob.lbl}>Oddział NFZ</Text>
                 <TextInput style={mob.input} placeholder="np. Mazowiecki" placeholderTextColor="#94a3b8" value={mNfz} onChangeText={setMNfz} />
-                <Text style={mob.lbl}>Urząd skarbowy *</Text>
+                <Text style={mob.lbl}>Urząd skarbowy</Text>
                 <TextInput style={mob.input} placeholder="np. US Warszawa-Śródmieście" placeholderTextColor="#94a3b8" value={mTax} onChangeText={setMTax} />
                 <TouchableOpacity style={mob.checkRow} onPress={() => setMPit(!mPit)} activeOpacity={0.7}>
                   <View style={[mob.checkbox, mPit && mob.checkboxChecked]}>
@@ -538,7 +540,10 @@ export default function JoinScreen() {
                   <Text style={mob.checkLbl}>Zgoda na przesyłanie PIT elektronicznie (e-PIT)</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={mob.btn} onPress={savePersonal} disabled={isLoading} activeOpacity={0.88}>
-                  {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={mob.btnTxt}>Dołącz do {mRestaurant} →</Text>}
+                  {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={mob.btnTxt}>Zapisz i dołącz →</Text>}
+                </TouchableOpacity>
+                <TouchableOpacity style={mob.skipBtn} onPress={async () => { await refreshUser(); router.replace('/(tabs)/dashboard'); }} disabled={isLoading} activeOpacity={0.7}>
+                  <Text style={mob.skipTxt}>Pomiń — uzupełnię później</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -565,4 +570,6 @@ const mob = StyleSheet.create({
   checkbox: { width: 20, height: 20, borderRadius: 5, borderWidth: 2, borderColor: '#D1D5DB', backgroundColor: '#F9FAFB', alignItems: 'center', justifyContent: 'center', marginTop: 1, flexShrink: 0 },
   checkboxChecked: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
   checkLbl: { flex: 1, fontSize: 13, color: '#374151', lineHeight: 18 },
+  skipBtn: { marginTop: 12, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#E5E7EB' },
+  skipTxt: { fontSize: 14, fontWeight: '500', color: '#6B7280' },
 });
