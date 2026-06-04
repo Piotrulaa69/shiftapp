@@ -74,21 +74,34 @@ function NumericRow({ label, sub, value, onChange, unit, min, max }: { label: st
   );
 }
 
-function SliderRow({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
-  const steps = [0, 20, 40, 60, 80, 100];
+const PRIORITY_STEPS = [
+  { value: 0,   label: 'Wył.' },
+  { value: 25,  label: 'Niski' },
+  { value: 50,  label: 'Średni' },
+  { value: 75,  label: 'Wysoki' },
+  { value: 100, label: 'Max' },
+];
+
+function SliderRow({ label, sub, icon, value, onChange }: { label: string; sub?: string; icon?: string; value: number; onChange: (v: number) => void }) {
+  const cur = PRIORITY_STEPS.reduce((best, s) => Math.abs(s.value - value) < Math.abs(best.value - value) ? s : best, PRIORITY_STEPS[0]);
+  const labelColor = value >= 75 ? theme.colors.green : value >= 50 ? theme.colors.primary : value >= 25 ? theme.colors.orange : theme.colors.textMuted;
+  const labelBg = value >= 75 ? theme.colors.greenLight : value >= 50 ? theme.colors.primaryLight : value >= 25 ? theme.colors.orangeLight : theme.colors.surface;
   return (
     <View style={s.sliderRow}>
       <View style={s.sliderTop}>
-        <Text style={s.toggleLabel}>{label}</Text>
-        <View style={[s.sliderBadge, { backgroundColor: value >= 70 ? theme.colors.greenLight : value >= 40 ? theme.colors.primaryLight : theme.colors.surface }]}>
-          <Text style={[s.sliderBadgeText, { color: value >= 70 ? theme.colors.green : value >= 40 ? theme.colors.primary : theme.colors.textMuted }]}>{value}</Text>
+        <View style={{ flex: 1, gap: 1 }}>
+          <Text style={s.toggleLabel}>{label}</Text>
+          {sub ? <Text style={s.toggleSub}>{sub}</Text> : null}
+        </View>
+        <View style={[s.sliderBadge, { backgroundColor: labelBg }]}>
+          <Text style={[s.sliderBadgeText, { color: labelColor }]}>{cur.label}</Text>
         </View>
       </View>
       <View style={s.sliderSteps}>
-        {steps.map((step) => (
-          <TouchableOpacity key={step} onPress={() => onChange(step)} activeOpacity={0.7}
-            style={[s.sliderStep, value >= step && s.sliderStepActive, value === step && s.sliderStepCurrent]}>
-            <Text style={[s.sliderStepText, value === step && s.sliderStepTextActive]}>{step}</Text>
+        {PRIORITY_STEPS.map((step) => (
+          <TouchableOpacity key={step.value} onPress={() => onChange(step.value)} activeOpacity={0.7}
+            style={[s.sliderStep, value >= step.value && step.value > 0 && s.sliderStepActive, value === step.value && s.sliderStepCurrent]}>
+            <Text style={[s.sliderStepText, value === step.value && s.sliderStepTextActive]}>{step.label}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -362,13 +375,131 @@ export default function SettingsScreen() {
             </SectionCard>
 
             {/* ── 6. AI Grafik ── */}
-            <SectionCard {...SECTION_ICONS.ai} title="AI Grafik — Priorytety">
-              <Text style={[s.infoValue, { marginBottom: 12 }]}>Ustaw wagę każdego kryterium przy automatycznym generowaniu grafiku (0 = ignoruj, 100 = najważniejsze).</Text>
-              <SliderRow label="Pełna obsada" value={rs.ai_priority_full_staffing} onChange={(v) => update('ai_priority_full_staffing', v)} />
-              <SliderRow label="Preferencje pracowników" value={rs.ai_priority_preferences} onChange={(v) => update('ai_priority_preferences', v)} />
-              <SliderRow label="Równa liczba godzin" value={rs.ai_priority_equal_hours} onChange={(v) => update('ai_priority_equal_hours', v)} />
-              <SliderRow label="Stałe zmiany" value={rs.ai_priority_fixed_shifts} onChange={(v) => update('ai_priority_fixed_shifts', v)} />
-              <SliderRow label="Min. godziny umowy" value={rs.ai_priority_min_hours} onChange={(v) => update('ai_priority_min_hours', v)} />
+            <SectionCard {...SECTION_ICONS.ai} title="AI Grafik">
+              <Text style={[s.infoValue, { marginBottom: 4 }]}>Ustaw priorytety dla automatycznego generowania grafików.</Text>
+
+              {/* ── Priorytety ── */}
+              <Text style={s.aiSubHeader}>Priorytety planowania</Text>
+              <SliderRow
+                label="Priorytet pełnej obsady"
+                sub="Ważność zapewnienia minimalnej obsady na każdą zmianę"
+                icon="people-outline"
+                value={rs.ai_priority_full_staffing}
+                onChange={(v) => update('ai_priority_full_staffing', v)}
+              />
+              <SliderRow
+                label="Priorytet preferencji pracowników"
+                sub="Uwzględnianie deklarowanej dyspozycyjności i prefer. dni"
+                icon="person-outline"
+                value={rs.ai_priority_preferences}
+                onChange={(v) => update('ai_priority_preferences', v)}
+              />
+              <SliderRow
+                label="Priorytet równomiernego rozłożenia godzin"
+                sub="Sprawiedliwy podział godzin między pracowników"
+                icon="bar-chart-outline"
+                value={rs.ai_priority_equal_hours}
+                onChange={(v) => update('ai_priority_equal_hours', v)}
+              />
+              <SliderRow
+                label="Preferowanie stałych zmian"
+                sub="Przydzielanie tych samych zmian co poprzednie tygodnie"
+                icon="repeat-outline"
+                value={rs.ai_priority_fixed_shifts}
+                onChange={(v) => update('ai_priority_fixed_shifts', v)}
+              />
+              <SliderRow
+                label="Minimalna liczba godzin dla pracownika"
+                sub="Gwarantowanie min. godzin z umowy każdemu pracownikowi"
+                icon="time-outline"
+                value={rs.ai_priority_min_hours}
+                onChange={(v) => update('ai_priority_min_hours', v)}
+              />
+
+              {/* ── Zachowania AI ── */}
+              <Text style={[s.aiSubHeader, { marginTop: 8 }]}>Zachowania AI</Text>
+              <ToggleRow
+                label="Preferuj te same zmiany co tydzień"
+                sub="AI stara się przydzielić te same dni/godziny co poprzednio"
+                value={rs.ai_prefer_same_shifts}
+                onChange={(v) => update('ai_prefer_same_shifts', v)}
+              />
+              <ToggleRow
+                label="Respektuj prośby o dni wolne"
+                sub="Nie planuj zmian w dniach oznaczonych jako niedostępne"
+                value={rs.ai_respect_day_off_requests}
+                onChange={(v) => update('ai_respect_day_off_requests', v)}
+              />
+              <ToggleRow
+                label="Równomiernie rozłoż weekendy"
+                sub="Naprzemienne weekendy wolne wśród pracowników"
+                value={rs.ai_balance_weekends}
+                onChange={(v) => update('ai_balance_weekends', v)}
+              />
+              <ToggleRow
+                label="Unikaj pojedynczych dni pracy"
+                sub="Nie planuj jednego dnia pracy między dniami wolnymi"
+                value={rs.ai_avoid_single_day_gaps}
+                onChange={(v) => update('ai_avoid_single_day_gaps', v)}
+              />
+              <ToggleRow
+                label="Używaj typów zmian"
+                sub="AI dobiera typy zmian (Poranna/Popołudniowa/etc.) z konfiguracji"
+                value={rs.ai_use_shift_types}
+                onChange={(v) => update('ai_use_shift_types', v)}
+              />
+
+              {/* ── Parametry godzinowe ── */}
+              <Text style={[s.aiSubHeader, { marginTop: 8 }]}>Parametry domyślne</Text>
+              <NumericRow
+                label="Min. godzin dla pracownika/tydzień"
+                sub="Minimalna tygodniowa liczba godzin przy generowaniu"
+                value={rs.ai_min_hours_per_employee}
+                onChange={(v) => update('ai_min_hours_per_employee', v)}
+                unit="h" min={0} max={60}
+              />
+              <NumericRow
+                label="Maks. dni z rzędu (AI)"
+                sub="AI nie planuje dłuższych bloków pracy niż ta wartość"
+                value={rs.ai_max_consecutive_days}
+                onChange={(v) => update('ai_max_consecutive_days', v)}
+                unit="dni" min={1} max={10}
+              />
+              <View style={s.aiTimeRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.label}>Domyślna godzina startu</Text>
+                  <TextInput
+                    style={s.input}
+                    value={rs.ai_default_shift_start}
+                    onChangeText={(v) => update('ai_default_shift_start', v)}
+                    placeholder="08:00"
+                    placeholderTextColor={theme.colors.textMuted}
+                    keyboardType="numbers-and-punctuation"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.label}>Domyślna godzina końca</Text>
+                  <TextInput
+                    style={s.input}
+                    value={rs.ai_default_shift_end}
+                    onChangeText={(v) => update('ai_default_shift_end', v)}
+                    placeholder="16:00"
+                    placeholderTextColor={theme.colors.textMuted}
+                    keyboardType="numbers-and-punctuation"
+                  />
+                </View>
+              </View>
+
+              {/* ── Notatki dla AI ── */}
+              <Text style={[s.label, { marginTop: 12 }]}>Notatki dla AI (opcjonalnie)</Text>
+              <TextInput
+                style={[s.input, { height: 80, textAlignVertical: 'top', paddingTop: 10 }]}
+                value={rs.ai_notes}
+                onChangeText={(v) => update('ai_notes', v)}
+                placeholder="np. Marta nie może pracować w poniedziałek rano, zawsze planuj min. 2 kelnerów na weekendy..."
+                placeholderTextColor={theme.colors.textMuted}
+                multiline
+              />
             </SectionCard>
 
             {/* Global save button */}
@@ -376,6 +507,16 @@ export default function SettingsScreen() {
               {rsSaving ? <ActivityIndicator color={theme.colors.white} /> : rsSaved
                 ? <><Ionicons name="checkmark" size={18} color={theme.colors.white} /><Text style={s.saveBtnText}>Zapisano konfigurację</Text></>
                 : <><Ionicons name="save-outline" size={18} color={theme.colors.white} /><Text style={s.saveBtnText}>Zapisz konfigurację</Text></>}
+            </TouchableOpacity>
+
+            {/* Generate AI schedule shortcut */}
+            <TouchableOpacity
+              style={s.generateBtn}
+              onPress={async () => { await saveSettings(); router.push('/(tabs)/schedule-ai'); }}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="sparkles" size={18} color={theme.colors.white} />
+              <Text style={s.saveBtnText}>Wygeneruj grafik automatycznie</Text>
             </TouchableOpacity>
           </>
         )}
@@ -469,6 +610,10 @@ const s = StyleSheet.create({
   // Save
   saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.md, paddingVertical: 14, marginTop: 16 },
   saveBtnText: { fontSize: 15, fontWeight: '700', color: theme.colors.white },
+  generateBtn: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 8, backgroundColor: '#DB2777', borderRadius: theme.borderRadius.md, paddingVertical: 16, marginTop: 4 },
+  // AI section
+  aiSubHeader: { fontSize: 11, fontWeight: '700', color: theme.colors.textMuted, textTransform: 'uppercase' as const, letterSpacing: 0.8, marginTop: 16, marginBottom: 4, paddingTop: 8, borderTopWidth: 1, borderTopColor: theme.colors.border },
+  aiTimeRow: { flexDirection: 'row' as const, gap: 12 },
   // legacy
   sectionTitle2: { fontSize: 15, fontWeight: '700', color: theme.colors.text, marginBottom: 16 },
   settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border },

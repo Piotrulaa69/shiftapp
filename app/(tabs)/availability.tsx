@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { getAvailability, getAvailabilityAll, getEmployees, getShifts, setAvailability } from '../../lib/db';
+import type { RestaurantSettings } from '../../lib/db';
+import { getAvailability, getAvailabilityAll, getEmployees, getRestaurantSettings, getShifts, setAvailability } from '../../lib/db';
 import type { DbAvailability, DbProfile, DbShift } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
@@ -48,6 +49,7 @@ export default function AvailabilityScreen() {
   const [shifts, setShifts] = useState<DbShift[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [rs, setRs] = useState<RestaurantSettings | null>(null);
 
   // Pending changes: day -> status
   const [changes, setChanges] = useState<Record<string, AvailStatus>>({});
@@ -64,14 +66,16 @@ export default function AvailabilityScreen() {
     if (!rid || !user) return;
     setLoading(true);
     const empId = canManage ? selEmpId : uid;
-    const [avail, emps, allAvail, allShifts] = await Promise.all([
+    const [avail, emps, allAvail, allShifts, settings] = await Promise.all([
       getAvailability(rid, empId, currentMonth),
       canManage ? getEmployees(rid) : Promise.resolve([]),
       canManage ? getAvailabilityAll(rid, currentMonth) : Promise.resolve([]),
       getShifts(rid),
+      getRestaurantSettings(rid),
     ]);
     setData(avail);
     setShifts(allShifts);
+    setRs(settings);
     if (canManage) { setEmployees(emps); setAllData(allAvail); }
     setChanges({});
     setLoading(false);
@@ -85,7 +89,21 @@ export default function AvailabilityScreen() {
   const getShiftsOnDay = (day: string, empId?: string): DbShift[] =>
     shifts.filter((s) => s.day === day && (!empId || s.employee_id === empId));
 
+  const isAlwaysAvailable = (empId?: string): boolean => {
+    if (!rs) return false;
+    const targetId = empId ?? selEmpId;
+    const emp = employees.find(e => e.id === targetId);
+    if (!emp) return false;
+    const et = (emp as any).employment_type ?? '';
+    const isContract = et === 'umowa_o_prace' || et === 'contract';
+    const isFreelance = et === 'zlecenie' || et === 'freelance' || et === 'b2b';
+    if (isContract && rs.availability_contract_all_available) return true;
+    if (isFreelance && rs.availability_freelance_all_available) return true;
+    return false;
+  };
+
   const getStatus = (day: string, empId?: string): AvailStatus => {
+    if (isAlwaysAvailable(empId)) return 'available';
     const src = empId ? allData : data;
     const found = src.find((d) => d.day === day && (empId ? d.employee_id === empId : true));
     if (!empId && changes[day]) return changes[day];

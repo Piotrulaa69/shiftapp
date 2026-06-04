@@ -479,6 +479,7 @@ export default function TabLayout() {
             <Tabs.Screen name="notifications" options={{ href: null }} />
             <Tabs.Screen name="availability" options={{ href: null }} />
             <Tabs.Screen name="announcements" options={{ href: null }} />
+            <Tabs.Screen name="shift-swap" options={{ href: null }} />
           </Tabs>
           </View>
         </View>
@@ -509,6 +510,7 @@ export default function TabLayout() {
       <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="availability" options={{ href: null }} />
       <Tabs.Screen name="announcements" options={{ href: null }} />
+      <Tabs.Screen name="shift-swap" options={{ href: null }} />
     </Tabs>
     </>
   );

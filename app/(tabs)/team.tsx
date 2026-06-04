@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     Modal,
     Platform,
     RefreshControl,
@@ -16,8 +17,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TeamSkeleton } from '../../components/Skeleton';
 import { useAuth } from '../../context/AuthContext';
-import { getEmployees, getPointsForEmployee, updateProfile } from '../../lib/db';
-import type { DbProfile } from '../../lib/supabase';
+import { getEmployeeLeaveTypeSettings, getEmployees, getPointsForEmployee, setEmployeeLeaveTypeSetting, updateProfile } from '../../lib/db';
+import type { DbEmployeeLeaveTypeSetting, DbLeaveType, DbProfile } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
 const ROLE_LABELS: Record<string, string> = { owner: 'Właściciel', manager: 'Manager', employee: 'Pracownik' };
@@ -46,6 +47,7 @@ export default function TeamScreen() {
   const [editMinMonthly, setEditMinMonthly] = useState('');
   const [editMaxMonthly, setEditMaxMonthly] = useState('');
   const [editActive, setEditActive] = useState(true);
+  const [editHourlyRate, setEditHourlyRate] = useState('');
   const [saving, setSaving] = useState(false);
 
   const [refreshing, setRefreshing] = useState(false);
@@ -87,12 +89,13 @@ export default function TeamScreen() {
     setEditMinMonthly((emp as any).min_hours_monthly != null ? String((emp as any).min_hours_monthly) : '');
     setEditMaxMonthly(emp.max_hours_monthly != null ? String(emp.max_hours_monthly) : '');
     setEditActive(emp.is_active);
+    setEditHourlyRate((emp as any).hourly_rate != null ? String((emp as any).hourly_rate) : '');
     setEmpPoints(0);
     getPointsForEmployee(rid, emp.id).then((pts) => setEmpPoints(pts.reduce((s, p) => s + p.points, 0)));
     // Load leave types and settings
     setLoadingLeave(true);
     const [types, settings] = await Promise.all([
-      ensureDefaultLeaveTypes(rid),
+      Promise.resolve<DbLeaveType[]>([]),
       getEmployeeLeaveTypeSettings(emp.id),
     ]);
     setLeaveTypes(types);
@@ -142,6 +145,7 @@ export default function TeamScreen() {
       min_hours_monthly: editMinMonthly ? parseInt(editMinMonthly) : null,
       max_hours_monthly: editMaxMonthly ? parseInt(editMaxMonthly) : null,
       is_active: editActive,
+      hourly_rate: editHourlyRate ? parseFloat(editHourlyRate) : null,
     });
     if (ok) {
       setEmployees((prev) => prev.map((e) => e.id === selectedEmp.id ? { ...e, job_title: editJobTitle, phone: editPhone, employment_type: editEmpType, min_hours_weekly: editMinWeekly ? parseInt(editMinWeekly) : null, max_hours_weekly: editMaxWeekly ? parseInt(editMaxWeekly) : null, min_hours_monthly: editMinMonthly ? parseInt(editMinMonthly) : null, max_hours_monthly: editMaxMonthly ? parseInt(editMaxMonthly) : null, is_active: editActive } : e));
@@ -303,6 +307,8 @@ export default function TeamScreen() {
                         <TextInput style={mStyles.input} value={editMaxMonthly} onChangeText={setEditMaxMonthly} keyboardType="numeric" placeholder="np. 880" placeholderTextColor={theme.colors.textMuted} />
                       </View>
                     </View>
+                    <Text style={mStyles.fieldLabel}>Stawka godzinowa (zł/h)</Text>
+                    <TextInput style={[mStyles.input, { marginBottom: 12 }]} value={editHourlyRate} onChangeText={setEditHourlyRate} keyboardType="decimal-pad" placeholder="np. 25.00" placeholderTextColor={theme.colors.textMuted} />
                     <TouchableOpacity style={[mStyles.chip, editActive && mStyles.chipActive, { alignSelf: 'flex-start', marginBottom: 16 }]} onPress={() => setEditActive(!editActive)} activeOpacity={0.7}>
                       <Text style={[mStyles.chipText, editActive && mStyles.chipTextActive]}>{editActive ? '✓ Aktywny' : 'Nieaktywny'}</Text>
                     </TouchableOpacity>
@@ -327,6 +333,7 @@ export default function TeamScreen() {
                         <Text style={{ fontSize: 11, fontWeight: '700', color: selectedEmp?.is_active ? theme.colors.green : theme.colors.error }}>{selectedEmp?.is_active ? 'Aktywny' : 'Nieaktywny'}</Text>
                       </View>
                     </View>
+                    <View style={mStyles.infoRow}><Ionicons name="cash-outline" size={16} color={theme.colors.textMuted} /><Text style={mStyles.infoLabel}>Stawka</Text><Text style={mStyles.infoValue}>{(selectedEmp as any)?.hourly_rate != null ? `${(selectedEmp as any).hourly_rate} zł/h` : '—'}</Text></View>
                     <View style={mStyles.infoRow}><Ionicons name="calendar-outline" size={16} color={theme.colors.textMuted} /><Text style={mStyles.infoLabel}>Dołączył/a</Text><Text style={mStyles.infoValue}>{selectedEmp?.created_at?.slice(0, 10)}</Text></View>
                   </>
                 )}

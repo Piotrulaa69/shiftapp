@@ -62,6 +62,7 @@ export type DbProfile = {
   max_hours_weekly: number | null;
   min_hours_monthly: number | null;
   max_hours_monthly: number | null;
+  hourly_rate: number | null;
   created_at: string;
 };
 

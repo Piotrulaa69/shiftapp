@@ -379,12 +379,14 @@ export async function getClockIns(restaurantId: string, date?: string): Promise<
 // ─── Availability ────────────────────────────────────────────────────────────
 
 export async function getAvailabilityAll(restaurantId: string, month: string): Promise<DbAvailability[]> {
+  const [ay, am] = month.split('-').map(Number);
+  const allEndDate = `${month}-${String(new Date(ay, am, 0).getDate()).padStart(2, '0')}`;
   const { data, error } = await supabase
     .from('availability')
     .select('*')
     .eq('restaurant_id', restaurantId)
     .gte('day', month + '-01')
-    .lte('day', month + '-31')
+    .lte('day', allEndDate)
     .order('day');
   if (error) { console.error('getAvailabilityAll', error); return []; }
   return data as DbAvailability[];
@@ -392,7 +394,8 @@ export async function getAvailabilityAll(restaurantId: string, month: string): P
 
 export async function getAvailability(restaurantId: string, employeeId: string, month: string): Promise<DbAvailability[]> {
   const startDate = month + '-01';
-  const endDate = month + '-31';
+  const [y, m] = month.split('-').map(Number);
+  const endDate = `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
   const { data, error } = await supabase
     .from('availability')
     .select('*')
@@ -840,6 +843,27 @@ export async function getTeamPoints(restaurantId: string): Promise<{ employee_id
   return Object.entries(map).map(([employee_id, total]) => ({ employee_id, total })).sort((a, b) => b.total - a.total);
 }
 
+// ─── Shifts for employee ─────────────────────────────────────────────────────
+
+export async function getShiftsForEmployee(
+  restaurantId: string,
+  employeeId: string,
+  fromDate?: string,
+  toDate?: string,
+): Promise<DbShift[]> {
+  let query = supabase
+    .from('shifts')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .eq('employee_id', employeeId)
+    .order('day', { ascending: false });
+  if (fromDate) query = query.gte('day', fromDate);
+  if (toDate) query = query.lte('day', toDate);
+  const { data, error } = await query;
+  if (error) { console.error('getShiftsForEmployee', error); return []; }
+  return data as DbShift[];
+}
+
 // ─── Shifts by date ───────────────────────────────────────────────────────────
 
 export async function getShiftsForDate(restaurantId: string, date: string): Promise<DbShift[]> {
@@ -1106,7 +1130,7 @@ export async function upsertNotifPrefs(userId: string, prefs: Record<string, str
 
 export async function updateProfile(
   userId: string,
-  fields: Partial<{ first_name: string; last_name: string; phone: string; job_title: string; employment_type: string; min_hours_weekly: number | null; max_hours_weekly: number | null; min_hours_monthly: number | null; max_hours_monthly: number | null; is_active: boolean }>,
+  fields: Partial<{ first_name: string; last_name: string; phone: string; job_title: string; employment_type: string; min_hours_weekly: number | null; max_hours_weekly: number | null; min_hours_monthly: number | null; max_hours_monthly: number | null; is_active: boolean; hourly_rate: number | null }>,
 ): Promise<boolean> {
   const { error } = await supabase.from('profiles').update(fields).eq('id', userId);
   return !error;
@@ -1321,6 +1345,17 @@ export type RestaurantSettings = {
   ai_priority_equal_hours: number;
   ai_priority_fixed_shifts: number;
   ai_priority_min_hours: number;
+  // Extended AI preferences
+  ai_prefer_same_shifts: boolean;
+  ai_respect_day_off_requests: boolean;
+  ai_balance_weekends: boolean;
+  ai_avoid_single_day_gaps: boolean;
+  ai_use_shift_types: boolean;
+  ai_default_shift_start: string;
+  ai_default_shift_end: string;
+  ai_min_hours_per_employee: number;
+  ai_max_consecutive_days: number;
+  ai_notes: string;
 };
 
 const DEFAULT_SETTINGS: RestaurantSettings = {
@@ -1342,6 +1377,16 @@ const DEFAULT_SETTINGS: RestaurantSettings = {
   ai_priority_equal_hours: 60,
   ai_priority_fixed_shifts: 40,
   ai_priority_min_hours: 40,
+  ai_prefer_same_shifts: true,
+  ai_respect_day_off_requests: true,
+  ai_balance_weekends: true,
+  ai_avoid_single_day_gaps: true,
+  ai_use_shift_types: false,
+  ai_default_shift_start: '08:00',
+  ai_default_shift_end: '16:00',
+  ai_min_hours_per_employee: 20,
+  ai_max_consecutive_days: 5,
+  ai_notes: '',
 };
 
 export async function getRestaurantSettings(restaurantId: string): Promise<RestaurantSettings> {

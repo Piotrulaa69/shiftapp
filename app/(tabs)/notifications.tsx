@@ -19,7 +19,7 @@ const ROUTE_MAP: Record<string, string> = {
   shift: '/(tabs)/schedule',
   task: '/(tabs)/tasks',
   leave: '/leave-requests',
-  swap: '/shift-swap',
+  swap: '/(tabs)/shift-swap',
   message: '/chat',
   system: '/(tabs)/dashboard',
 };

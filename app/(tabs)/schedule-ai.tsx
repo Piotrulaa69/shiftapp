@@ -2,18 +2,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text,
-    TextInput, TouchableOpacity, useWindowDimensions, View,
+    TouchableOpacity, useWindowDimensions, View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { createShift, getEmployees } from '../../lib/db';
+import { createShift, getEmployees, getRestaurantSettings } from '../../lib/db';
 import {
     DEFAULT_PREFS, EmpAvail,
     GeneratedShift,
     generateSchedule,
     GenerationResult,
     getApprovedLeaves, getEmployeeAvailability, getSchedulePrefs,
-    SchedulePrefs, upsertEmployeeAvailability, upsertSchedulePrefs,
+    SchedulePrefs, upsertEmployeeAvailability,
 } from '../../lib/schedule';
 import type { DbProfile } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
@@ -43,7 +43,7 @@ export default function ScheduleAIScreen() {
   const [weekOffset, setWeekOffset] = useState(0);
   const weekStart = getWeekStart(weekOffset);
 
-  const [activeTab, setActiveTab] = useState<'grafik' | 'dostepnosc' | 'preferencje'>('grafik');
+  const [activeTab, setActiveTab] = useState<'grafik' | 'dostepnosc'>('grafik');
 
   // Data
   const [employees, setEmployees] = useState<DbProfile[]>([]);
@@ -53,30 +53,39 @@ export default function ScheduleAIScreen() {
   const [editableShifts, setEditableShifts] = useState<GeneratedShift[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
   const dragRef = useRef<{ empId: string; dayIdx: number } | null>(null);
   const [dragOver, setDragOver] = useState<{ empId: string; dayIdx: number } | null>(null);
   const [dragging, setDragging] = useState<{ empId: string; dayIdx: number } | null>(null);
 
-  // Prefs edit state
-  const [editPrefs, setEditPrefs] = useState<SchedulePrefs | null>(null);
-
   const rid = user?.restaurantId ?? '';
 
   const loadData = useCallback(async () => {
     if (!rid) return;
     setDataLoading(true);
-    const [emps, p, avail] = await Promise.all([
+    const [emps, p, avail, rs] = await Promise.all([
       getEmployees(rid),
       getSchedulePrefs(rid),
       getEmployeeAvailability(rid),
+      getRestaurantSettings(rid),
     ]);
     setEmployees(emps as DbProfile[]);
-    const resolvedPrefs = p ?? DEFAULT_PREFS(rid);
+    const base = p ?? DEFAULT_PREFS(rid);
+    // Merge extended AI prefs from RestaurantSettings into SchedulePrefs
+    const resolvedPrefs: SchedulePrefs = {
+      ...base,
+      shift_start: rs.ai_default_shift_start || base.shift_start,
+      shift_end: rs.ai_default_shift_end || base.shift_end,
+      max_consecutive_days: rs.ai_max_consecutive_days || base.max_consecutive_days,
+      ai_balance_weekends: rs.ai_balance_weekends,
+      ai_avoid_single_day_gaps: rs.ai_avoid_single_day_gaps,
+      ai_respect_day_off_requests: rs.ai_respect_day_off_requests,
+      ai_min_hours_per_employee: rs.ai_min_hours_per_employee,
+      ai_priority_equal_hours: rs.ai_priority_equal_hours,
+      ai_priority_preferences: rs.ai_priority_preferences,
+    };
     setPrefs(resolvedPrefs);
-    setEditPrefs({ ...resolvedPrefs });
     setAvailability(avail);
     setDataLoading(false);
   }, [rid]);
@@ -175,14 +184,6 @@ export default function ScheduleAIScreen() {
     if (Platform.OS === 'web') { try { localStorage.removeItem(draftKey); } catch {} }
     setResult(null);
     Alert.alert('Opublikowano!', `Zapisano ${ok} z ${editableShifts.length} zmian. Pracownicy zobaczą je w grafiku.`);
-  };
-
-  const handleSavePrefs = async () => {
-    if (!editPrefs) return;
-    setSaving(true);
-    await upsertSchedulePrefs(editPrefs);
-    setPrefs(editPrefs);
-    setSaving(false);
   };
 
   const toggleAvailability = async (employeeId: string, dayIdx: number, current: boolean) => {
@@ -297,10 +298,10 @@ export default function ScheduleAIScreen() {
 
       {/* Tabs */}
       <View style={s.tabs}>
-        {(['grafik', 'dostepnosc', 'preferencje'] as const).map(tab => (
+        {(['grafik', 'dostepnosc'] as const).map(tab => (
           <TouchableOpacity key={tab} style={[s.tab, activeTab === tab && s.tabActive]} onPress={() => setActiveTab(tab)} activeOpacity={0.7}>
             <Text style={[s.tabText, activeTab === tab && s.tabTextActive]}>
-              {tab === 'grafik' ? 'Grafik' : tab === 'dostepnosc' ? 'Dostępność' : 'Preferencje'}
+              {tab === 'grafik' ? 'Grafik' : 'Dostępność'}
             </Text>
           </TouchableOpacity>
         ))}
@@ -527,92 +528,6 @@ export default function ScheduleAIScreen() {
           </View>
         )}
 
-        {/* ── PREFERENCJE TAB ── */}
-        {activeTab === 'preferencje' && editPrefs && (
-          <View style={s.content}>
-            <Text style={s.sectionTitle}>Preferencje planowania</Text>
-            <Text style={s.sectionSub}>Ustawienia używane przez AI podczas generowania grafiku.</Text>
-
-            {[
-              {
-                label: 'Min. pracowników na zmianie',
-                icon: 'people', color: '#2563EB',
-                value: String(editPrefs.min_staff_per_shift),
-                key: 'min_staff_per_shift',
-                kbd: 'numeric',
-              },
-              {
-                label: 'Maks. godzin tygodniowo',
-                icon: 'trending-up', color: '#D97706',
-                value: String(editPrefs.max_hours_per_week),
-                key: 'max_hours_per_week',
-                kbd: 'numeric',
-              },
-              {
-                label: 'Min. godzin tygodniowo',
-                icon: 'trending-down', color: '#059669',
-                value: String(editPrefs.min_hours_per_week),
-                key: 'min_hours_per_week',
-                kbd: 'numeric',
-              },
-              {
-                label: 'Godzina startu zmiany',
-                icon: 'sunny', color: '#F59E0B',
-                value: editPrefs.shift_start,
-                key: 'shift_start',
-                kbd: 'default',
-              },
-              {
-                label: 'Godzina końca zmiany',
-                icon: 'moon', color: '#7C3AED',
-                value: editPrefs.shift_end,
-                key: 'shift_end',
-                kbd: 'default',
-              },
-              {
-                label: 'Maks. kolejnych dni pracy',
-                icon: 'calendar', color: '#DC2626',
-                value: String(editPrefs.max_consecutive_days),
-                key: 'max_consecutive_days',
-                kbd: 'numeric',
-              },
-            ].map(({ label, icon, color, value, key, kbd }) => (
-              <View key={key} style={s.prefRow}>
-                <View style={[s.prefIcon, { backgroundColor: color + '18' }]}>
-                  <Ionicons name={icon as any} size={18} color={color} />
-                </View>
-                <Text style={s.prefLabel}>{label}</Text>
-                <TextInput
-                  style={s.prefInput}
-                  value={value}
-                  onChangeText={v => setEditPrefs(p => p ? { ...p, [key]: kbd === 'numeric' ? parseInt(v) || 0 : v } : p)}
-                  keyboardType={kbd as any}
-                />
-              </View>
-            ))}
-
-            <View style={{ gap: 4 }}>
-              <Text style={s.formLabel}>Notatki dla AI (opcjonalnie)</Text>
-              <TextInput
-                style={[s.prefInput, { height: 80, textAlignVertical: 'top', paddingTop: 10 }]}
-                value={editPrefs.notes ?? ''}
-                onChangeText={v => setEditPrefs(p => p ? { ...p, notes: v } : p)}
-                placeholder="np. Marta nie może pracować w poniedziałek rano..."
-                placeholderTextColor={theme.colors.textMuted}
-                multiline
-              />
-            </View>
-
-            <TouchableOpacity style={[s.saveBtn, saving && s.saveBtnLoading]} onPress={handleSavePrefs} activeOpacity={0.85} disabled={saving}>
-              <Ionicons name={saving ? 'hourglass' : 'checkmark-circle'} size={18} color="#fff" />
-              <Text style={s.saveBtnText}>{saving ? 'Zapisywanie...' : 'Zapisz preferencje'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.generateSaveBtn} onPress={() => { handleSavePrefs(); handleGenerate(); setActiveTab('grafik'); }} activeOpacity={0.85}>
-              <Ionicons name="sparkles" size={18} color="#fff" />
-              <Text style={s.generateSaveBtnText}>Zapisz i generuj grafik</Text>
-            </TouchableOpacity>
-          </View>
-        )}
       </ScrollView>
     </SafeAreaView>
   );

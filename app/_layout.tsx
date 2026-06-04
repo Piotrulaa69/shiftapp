@@ -21,7 +21,6 @@ export default function RootLayout() {
           <Stack.Screen name="onboarding" />
           <Stack.Screen name="shift-detail" />
           <Stack.Screen name="earnings" />
-          <Stack.Screen name="shift-swap" />
           <Stack.Screen name="chat" />
           <Stack.Screen name="task/confirm-photo" />
           <Stack.Screen name="task/confirm-values" />

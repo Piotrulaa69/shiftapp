@@ -41,6 +41,7 @@ export default function TeamFullScreen() {
   const [editMinMonthly, setEditMinMonthly] = useState('');
   const [editMaxMonthly, setEditMaxMonthly] = useState('');
   const [editActive, setEditActive] = useState(true);
+  const [editHourlyRate, setEditHourlyRate] = useState('');
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -69,6 +70,7 @@ export default function TeamFullScreen() {
     setEditMinMonthly(emp.min_hours_monthly?.toString() || '');
     setEditMaxMonthly(emp.max_hours_monthly?.toString() || '');
     setEditActive(emp.is_active !== false);
+    setEditHourlyRate((emp as any).hourly_rate != null ? String((emp as any).hourly_rate) : '');
     const pointsLedger = await getPointsForEmployee(rid, emp.id);
     const totalPoints = pointsLedger.reduce((sum, p) => sum + (p.points || 0), 0);
     setEmpPoints(totalPoints);
@@ -86,6 +88,7 @@ export default function TeamFullScreen() {
       min_hours_monthly: editMinMonthly ? parseInt(editMinMonthly) : null,
       max_hours_monthly: editMaxMonthly ? parseInt(editMaxMonthly) : null,
       is_active: editActive,
+      hourly_rate: editHourlyRate ? parseFloat(editHourlyRate) : null,
     });
     setSaving(false);
     if (success) {
@@ -354,6 +357,8 @@ export default function TeamFullScreen() {
                     <TextInput style={mStyles.input} value={editMinMonthly} onChangeText={setEditMinMonthly} placeholder="np. 80" placeholderTextColor={theme.colors.textMuted} keyboardType="number-pad" />
                     <Text style={mStyles.fieldLabel}>Max godziny miesięcznie</Text>
                     <TextInput style={mStyles.input} value={editMaxMonthly} onChangeText={setEditMaxMonthly} placeholder="np. 160" placeholderTextColor={theme.colors.textMuted} keyboardType="number-pad" />
+                    <Text style={mStyles.fieldLabel}>Stawka godzinowa (zł/h)</Text>
+                    <TextInput style={mStyles.input} value={editHourlyRate} onChangeText={setEditHourlyRate} placeholder="np. 25.00" placeholderTextColor={theme.colors.textMuted} keyboardType="decimal-pad" />
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 }}>
                       <TouchableOpacity onPress={() => setEditActive(!editActive)} style={[mStyles.toggle, editActive ? mStyles.toggleOn : mStyles.toggleOff]}>
                         <View style={[mStyles.toggleDot, editActive && mStyles.toggleDotOn]} />
@@ -390,6 +395,10 @@ export default function TeamFullScreen() {
                     <View style={mStyles.fieldRow}>
                       <Text style={mStyles.fieldLabel}>Min/Max godziny miesięcznie</Text>
                       <Text style={mStyles.fieldValue}>{selectedEmp?.min_hours_monthly || '-'} / {selectedEmp?.max_hours_monthly || '-'}</Text>
+                    </View>
+                    <View style={mStyles.fieldRow}>
+                      <Text style={mStyles.fieldLabel}>Stawka godzinowa</Text>
+                      <Text style={mStyles.fieldValue}>{(selectedEmp as any)?.hourly_rate != null ? `${(selectedEmp as any).hourly_rate} zł/h` : 'Nie ustawiono'}</Text>
                     </View>
                     <View style={mStyles.fieldRow}>
                       <Text style={mStyles.fieldLabel}>Status</Text>

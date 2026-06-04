@@ -825,7 +825,7 @@ export default function ScheduleScreen() {
             <Ionicons name="time-outline" size={20} color="#2563EB" />
             <Text style={{ fontSize: 9, fontWeight: '600', color: theme.colors.text }}>Ewidencja</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={{ flex: 1, flexDirection: 'column', alignItems: 'center', gap: 4, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 10, backgroundColor: theme.colors.white, borderWidth: 1.5, borderColor: theme.colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 }} onPress={() => router.push('/shift-swap')} activeOpacity={0.7}>
+          <TouchableOpacity style={{ flex: 1, flexDirection: 'column', alignItems: 'center', gap: 4, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 10, backgroundColor: theme.colors.white, borderWidth: 1.5, borderColor: theme.colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 }} onPress={() => router.push('/(tabs)/shift-swap')} activeOpacity={0.7}>
             <Ionicons name="swap-horizontal-outline" size={20} color="#7C3AED" />
             <Text style={{ fontSize: 9, fontWeight: '600', color: theme.colors.text }}>Wymiana</Text>
           </TouchableOpacity>

@@ -11,6 +11,17 @@ export type SchedulePrefs = {
   shift_end: string;
   max_consecutive_days: number;
   notes?: string;
+  // Extended AI prefs (mirrored from RestaurantSettings)
+  ai_balance_weekends?: boolean;
+  ai_avoid_single_day_gaps?: boolean;
+  ai_respect_day_off_requests?: boolean;
+  ai_min_hours_per_employee?: number;
+  ai_priority_equal_hours?: number;
+  ai_priority_preferences?: number;
+  // Aliases used when merging from RestaurantSettings
+  ai_default_shift_start?: string;
+  ai_default_shift_end?: string;
+  ai_max_consecutive_days?: number;
 };
 
 export type EmpAvail = {
@@ -65,20 +76,29 @@ export function generateSchedule(
 
   const hoursMap: Record<string, number> = {};
   const shiftsMap: Record<string, number> = {};
-  employees.forEach(e => { hoursMap[e.id] = 0; shiftsMap[e.id] = 0; });
+  const consecutiveMap: Record<string, number> = {};
+  const weekendShiftsMap: Record<string, number> = {};
+  employees.forEach(e => { hoursMap[e.id] = 0; shiftsMap[e.id] = 0; consecutiveMap[e.id] = 0; weekendShiftsMap[e.id] = 0; });
 
   const shiftHours = parseHours(prefs.shift_end) - parseHours(prefs.shift_start);
+  const maxConsecutive = prefs.max_consecutive_days ?? 5;
+  const minHoursPerEmp = prefs.ai_min_hours_per_employee ?? prefs.min_hours_per_week ?? 0;
+  const respectDayOff = prefs.ai_respect_day_off_requests !== false;
+  const balanceWeekends = prefs.ai_balance_weekends === true;
+  const equalHoursPriority = prefs.ai_priority_equal_hours ?? 60;
 
   for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
     const date = new Date(weekStart);
     date.setDate(date.getDate() + dayIdx);
     const dateStr = date.toISOString().split('T')[0];
+    const isWeekend = dayIdx >= 5; // Sat=5, Sun=6
 
     const available = employees.filter(emp => {
       if (hoursMap[emp.id] + shiftHours > prefs.max_hours_per_week) return false;
+      if (consecutiveMap[emp.id] >= maxConsecutive) return false;
 
       const avail = availability.find(a => a.employee_id === emp.id && a.day_of_week === dayIdx);
-      if (avail !== undefined && !avail.available) return false;
+      if (respectDayOff && avail !== undefined && !avail.available) return false;
 
       const onLeave = leaves.some(l =>
         l.employee_id === emp.id &&
@@ -88,11 +108,22 @@ export function generateSchedule(
       );
       if (onLeave) return false;
 
+      // Weekend balancing: skip emp if they have too many weekends relative to others
+      if (isWeekend && balanceWeekends) {
+        const avgWeekendShifts = Object.values(weekendShiftsMap).reduce((s, v) => s + v, 0) / employees.length;
+        if (weekendShiftsMap[emp.id] > avgWeekendShifts + 0.5) return false;
+      }
+
       return true;
     });
 
-    // Sort by fewest shifts assigned (fairness)
-    available.sort((a, b) => (shiftsMap[a.id] ?? 0) - (shiftsMap[b.id] ?? 0));
+    // Sort priority: equal hours (fairness) weighted by priority setting
+    available.sort((a, b) => {
+      const hoursDiff = hoursMap[a.id] - hoursMap[b.id];
+      const shiftsDiff = shiftsMap[a.id] - shiftsMap[b.id];
+      // Higher equal hours priority = more weight on hours balance
+      return equalHoursPriority >= 50 ? hoursDiff : shiftsDiff;
+    });
 
     const toAssign = available.slice(0, prefs.min_staff_per_shift);
 
@@ -122,6 +153,14 @@ export function generateSchedule(
       });
       hoursMap[emp.id] += Math.max(h, 0);
       shiftsMap[emp.id] += 1;
+      consecutiveMap[emp.id] += 1;
+      if (isWeekend) weekendShiftsMap[emp.id] += 1;
+    }
+
+    // Reset consecutive counter for employees who didn't work today
+    const assignedIds = new Set(toAssign.map(e => e.id));
+    for (const emp of employees) {
+      if (!assignedIds.has(emp.id)) consecutiveMap[emp.id] = 0;
     }
   }
 

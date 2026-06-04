@@ -48,6 +48,7 @@ function TaskCard({ task, onToggle, onDelete, onDetail, onStart, onFinish, assig
   const router = useRouter();
   const confirmCfg = task.confirmation_type ? CONFIRM_CONFIG[task.confirmation_type as ConfirmationType] : null;
   const inProgress = task.status === 'w_trakcie';
+  const isActionable = task.status === 'do_zrobienia' || task.status === 'w_trakcie';
 
   return (
     <TouchableOpacity style={[tStyles.card, inProgress && tStyles.cardInProgress]} activeOpacity={0.85} onPress={onDetail ?? onToggle}>
@@ -90,7 +91,7 @@ function TaskCard({ task, onToggle, onDelete, onDetail, onStart, onFinish, assig
               <Text style={tStyles.assigneeText}>{assigneeName}</Text>
             </View>
           )}
-          {!task.completed && onStart && !inProgress && (
+          {isActionable && onStart && !inProgress && (
             <TouchableOpacity
               style={[tStyles.actionBtn, { backgroundColor: theme.colors.primaryLight }]}
               onPress={(e) => { e.stopPropagation?.(); onStart(); }}
@@ -100,7 +101,7 @@ function TaskCard({ task, onToggle, onDelete, onDetail, onStart, onFinish, assig
               <Text style={[tStyles.actionBtnText, { color: theme.colors.primary }]}>Rozpocznij</Text>
             </TouchableOpacity>
           )}
-          {!task.completed && onFinish && inProgress && !confirmCfg && (
+          {isActionable && onFinish && inProgress && !confirmCfg && (
             <TouchableOpacity
               style={[tStyles.actionBtn, { backgroundColor: theme.colors.greenLight }]}
               onPress={(e) => { e.stopPropagation?.(); onFinish(); }}
@@ -110,7 +111,7 @@ function TaskCard({ task, onToggle, onDelete, onDetail, onStart, onFinish, assig
               <Text style={[tStyles.actionBtnText, { color: theme.colors.green }]}>Zakończ</Text>
             </TouchableOpacity>
           )}
-          {confirmCfg && !task.completed && (
+          {confirmCfg && isActionable && (
             <TouchableOpacity
               style={[tStyles.actionBtn, { backgroundColor: confirmCfg.bg }]}
               onPress={(e) => { e.stopPropagation?.(); router.push({ pathname: confirmCfg.route as any, params: { taskId: task.id } }); }}
