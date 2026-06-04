@@ -43,14 +43,17 @@ serve(async (req) => {
     const totalAmount = basePrice + (extraEmployees * extraPrice)
 
     // Sprawdź czy restauracja istnieje
+    console.log('Looking up restaurant:', restaurant_id)
     const { data: restaurant, error: restaurantError } = await supabase
       .from('restaurants')
       .select('id, stripe_customer_id')
       .eq('id', restaurant_id)
       .single()
 
+    console.log('Restaurant lookup result:', { restaurant, restaurantError })
+
     if (restaurantError || !restaurant) {
-      return new Response(JSON.stringify({ error: 'Restaurant not found' }), {
+      return new Response(JSON.stringify({ error: 'Restaurant not found', details: restaurantError?.message }), {
         status: 404,
         headers: {
           'Content-Type': 'application/json',
@@ -189,7 +192,9 @@ serve(async (req) => {
     }
   } catch (error) {
     console.error('Error:', error)
-    return new Response(JSON.stringify({ error: error.message }), {
+    const message = error instanceof Error ? error.message : String(error)
+    const stack = error instanceof Error ? error.stack : undefined
+    return new Response(JSON.stringify({ error: message, stack }), {
       status: 500,
       headers: {
         'Content-Type': 'application/json',

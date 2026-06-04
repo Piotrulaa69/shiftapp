@@ -81,6 +81,7 @@ export default function SubscriptionScreen() {
         },
       });
 
+      console.log('Edge function response:', { data, error });
       if (error) throw error;
 
       if (Platform.OS === 'web') {
