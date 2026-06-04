@@ -194,7 +194,7 @@ function buildJoinPortal(step: Step, loading: boolean, err: string, restaurantNa
 
 export default function JoinScreen() {
   const router = useRouter();
-  const { joinWithCode, isLoading } = useAuth();
+  const { joinWithCode, isLoading, refreshUser } = useAuth();
   const { showAlert } = useAlert();
 
   const [step, setStep] = useState<Step>('code');
@@ -361,6 +361,7 @@ export default function JoinScreen() {
             nfz_branch: nfz, tax_office: tax, pit_electronic: pit,
           }).eq('id', pendingUID);
         }
+        await refreshUser();
         router.replace('/(tabs)/dashboard');
         return;
       }
@@ -458,6 +459,7 @@ export default function JoinScreen() {
           pit_electronic: mPit,
         }).eq('id', mUID);
       }
+      await refreshUser();
       router.replace('/(tabs)/dashboard');
     };
 
