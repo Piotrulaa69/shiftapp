@@ -49,6 +49,7 @@ export default function ScheduleAIScreen() {
   const [employees, setEmployees] = useState<DbProfile[]>([]);
   const [prefs, setPrefs] = useState<SchedulePrefs | null>(null);
   const [availability, setAvailability] = useState<EmpAvail[]>([]);
+  const [restaurantSettings, setRestaurantSettings] = useState<any>(null);
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [editableShifts, setEditableShifts] = useState<GeneratedShift[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
@@ -87,6 +88,7 @@ export default function ScheduleAIScreen() {
     };
     setPrefs(resolvedPrefs);
     setAvailability(avail);
+    setRestaurantSettings(rs);
     setDataLoading(false);
   }, [rid]);
 
@@ -116,7 +118,7 @@ export default function ScheduleAIScreen() {
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 6);
     const leaves = await getApprovedLeaves(rid, weekStart, weekEnd);
-    const res = generateSchedule(employees, availability, leaves as any, prefs, weekStart);
+    const res = generateSchedule(employees, availability, leaves as any, prefs, weekStart, restaurantSettings?.min_staffing ?? {});
     setResult(res);
     if (Platform.OS === 'web') {
       try { localStorage.setItem(draftKey, JSON.stringify(res.shifts)); } catch {}

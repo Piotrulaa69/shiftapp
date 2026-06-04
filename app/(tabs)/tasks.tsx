@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Image, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileHeader from '../../components/MobileHeader';
 import { TasksSkeleton } from '../../components/Skeleton';
@@ -364,7 +364,6 @@ export default function TasksScreen() {
       description: newDesc.trim(),
       assigned_to: assignTo,
       assigned_time: newTime,
-      scheduled_date: taskDate || todayStr(),
       priority: newPriority,
       duration_min: parseInt(newDuration) || 30,
       confirmation_type: newConfirm,
@@ -376,8 +375,13 @@ export default function TasksScreen() {
       points: canApprove && points ? parseInt(points) || 0 : 0,
       target_group_id: newAssignedGroup,
     });
-    if (created) setTasks((prev) => [...prev, created]);
+    if (created) {
+      setTasks((prev) => [...prev, created]);
+    } else {
+      Alert.alert('Błąd zapisu', 'Nie udało się dodać zadania. Sprawdź konsolę po szczegóły.');
+    }
     setSaving(false);
+    if (!created) return;
     setShowModal(false);
     setModalStep(1);
     setNewTitle(''); setNewDesc(''); setNewTime('08:00'); setNewPriority('normalny'); setNewDuration('30'); setNewConfirm(null); setNewAssignedTo(''); setNewAssignedGroup(null);

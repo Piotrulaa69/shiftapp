@@ -64,7 +64,8 @@ export function generateSchedule(
   availability: EmpAvail[],
   leaves: { employee_id: string; start_date: string; end_date: string; status: string }[],
   prefs: SchedulePrefs,
-  weekStart: Date
+  weekStart: Date,
+  minStaffing: Record<string, any> = {}
 ): GenerationResult {
   const shifts: GeneratedShift[] = [];
   const warnings: string[] = [];
@@ -87,11 +88,35 @@ export function generateSchedule(
   const balanceWeekends = prefs.ai_balance_weekends === true;
   const equalHoursPriority = prefs.ai_priority_equal_hours ?? 60;
 
+  const weeklyConfig = minStaffing.weekly ?? {};
+  const dateExceptions = minStaffing.dates ?? {};
+
+  // Fallback to single number if no per-role config
+  const useSimpleMode = Object.keys(weeklyConfig).length === 0;
+  const simpleMinStaff = prefs.min_staff_per_shift ?? 2;
+
   for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
     const date = new Date(weekStart);
     date.setDate(date.getDate() + dayIdx);
     const dateStr = date.toISOString().split('T')[0];
     const isWeekend = dayIdx >= 5; // Sat=5, Sun=6
+
+    // Get staffing targets for this day
+    let dayTargets: Record<string, number> = {};
+    if (dateExceptions[dateStr]) {
+      dayTargets = dateExceptions[dateStr];
+    } else if (!useSimpleMode) {
+      // Use weekly config
+      for (const [role, counts] of Object.entries(weeklyConfig)) {
+        const arr = counts as number[];
+        if (arr && arr[dayIdx] > 0) {
+          dayTargets[role] = arr[dayIdx];
+        }
+      }
+    } else {
+      // Simple mode: single target for all roles
+      dayTargets = { _all: simpleMinStaff };
+    }
 
     const available = employees.filter(emp => {
       if (hoursMap[emp.id] + shiftHours > prefs.max_hours_per_week) return false;
@@ -125,40 +150,54 @@ export function generateSchedule(
       return equalHoursPriority >= 50 ? hoursDiff : shiftsDiff;
     });
 
-    const toAssign = available.slice(0, prefs.min_staff_per_shift);
+    // Assign employees per role
+    const assignedIds = new Set<string>();
+    let totalAssigned = 0;
 
-    if (toAssign.length < prefs.min_staff_per_shift) {
-      warnings.push(
-        `${DAY_NAMES[dayIdx]}: niewystarczająca obsada — ${toAssign.length}/${prefs.min_staff_per_shift} os.`
-      );
+    for (const [role, targetCount] of Object.entries(dayTargets)) {
+      if (targetCount <= 0) continue;
+
+      // Filter available employees for this role
+      const roleAvailable = role === '_all'
+        ? available.filter(e => !assignedIds.has(e.id))
+        : available.filter(e => e.job_title === role && !assignedIds.has(e.id));
+
+      const toAssign = roleAvailable.slice(0, targetCount);
+      toAssign.forEach(e => assignedIds.add(e.id));
+      totalAssigned += toAssign.length;
+
+      if (toAssign.length < targetCount) {
+        warnings.push(
+          `${DAY_NAMES[dayIdx]} (${role}): niewystarczająca obsada — ${toAssign.length}/${targetCount} os.`
+        );
+      }
+
+      for (const emp of toAssign) {
+        const avail = availability.find(a => a.employee_id === emp.id && a.day_of_week === dayIdx);
+        const start = avail?.preferred_start ?? prefs.shift_start;
+        const end = avail?.preferred_end ?? prefs.shift_end;
+        const h = parseHours(end) - parseHours(start);
+
+        shifts.push({
+          employee_id: emp.id,
+          employee_name: `${emp.first_name} ${emp.last_name}`,
+          employee_color: COLORS[emp.id],
+          date: dateStr,
+          day_of_week: dayIdx,
+          start_time: start,
+          end_time: end,
+          hours: Math.max(h, 0),
+        });
+        hoursMap[emp.id] += Math.max(h, 0);
+        shiftsMap[emp.id] += 1;
+        consecutiveMap[emp.id] += 1;
+        if (isWeekend) weekendShiftsMap[emp.id] += 1;
+      }
     }
 
-    staffPerDay.push(toAssign.length);
-
-    for (const emp of toAssign) {
-      const avail = availability.find(a => a.employee_id === emp.id && a.day_of_week === dayIdx);
-      const start = avail?.preferred_start ?? prefs.shift_start;
-      const end = avail?.preferred_end ?? prefs.shift_end;
-      const h = parseHours(end) - parseHours(start);
-
-      shifts.push({
-        employee_id: emp.id,
-        employee_name: `${emp.first_name} ${emp.last_name}`,
-        employee_color: COLORS[emp.id],
-        date: dateStr,
-        day_of_week: dayIdx,
-        start_time: start,
-        end_time: end,
-        hours: Math.max(h, 0),
-      });
-      hoursMap[emp.id] += Math.max(h, 0);
-      shiftsMap[emp.id] += 1;
-      consecutiveMap[emp.id] += 1;
-      if (isWeekend) weekendShiftsMap[emp.id] += 1;
-    }
+    staffPerDay.push(totalAssigned);
 
     // Reset consecutive counter for employees who didn't work today
-    const assignedIds = new Set(toAssign.map(e => e.id));
     for (const emp of employees) {
       if (!assignedIds.has(emp.id)) consecutiveMap[emp.id] = 0;
     }

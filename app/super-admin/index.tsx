@@ -16,7 +16,6 @@ import {
     getSubscriptions,
     getSubscriptionsOverview,
     getSystemStats,
-    impersonateRestaurant,
     upsertSubscription,
     type PromoCode,
     type RestaurantWithStats,
@@ -228,7 +227,7 @@ export default function SuperAdminDashboard() {
     );
     switch (nav) {
       case 'dashboard':     return <DashboardTab stats={stats} restaurants={restaurants} activity={activity} subOverview={subOverview} setNav={setNav} />;
-      case 'restaurants':   return <RestaurantsTab restaurants={filtered} search={search} setSearch={setSearch} onAdd={() => setShowCreate(true)} user={user} setImpersonating={setImpersonating} onSelectRestaurant={setSelectedRestaurant} />;
+      case 'restaurants':   return <RestaurantsTab restaurants={filtered} search={search} setSearch={setSearch} onAdd={() => setShowCreate(true)} onSelectRestaurant={setSelectedRestaurant} />;
       case 'subscriptions': return <SubscriptionsTab subscriptions={subscriptions} overview={subOverview} restaurants={restaurants} onRefresh={loadAll} />;
       case 'users':         return <UsersTab restaurants={restaurants} />;
       case 'activity':      return <ActivityTab activity={activity} />;
@@ -480,7 +479,7 @@ function DashboardTab({ stats, restaurants, activity, subOverview, setNav }: any
 }
 
 // ── TAB: Restaurants ─────────────────────────────────────
-function RestaurantsTab({ restaurants, search, setSearch, onAdd, user, setImpersonating, onSelectRestaurant }: any) {
+function RestaurantsTab({ restaurants, search, setSearch, onAdd, onSelectRestaurant }: any) {
   return (
     <View style={{ gap: 14 }}>
       <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
@@ -495,39 +494,13 @@ function RestaurantsTab({ restaurants, search, setSearch, onAdd, user, setImpers
       </View>
       {restaurants.length === 0 && <Text style={{ textAlign: 'center', color: theme.colors.textMuted, marginTop: 24 }}>Brak restauracji</Text>}
       {restaurants.map((r: RestaurantWithStats) => (
-  <RestaurantRow
-    key={r.id}
-    r={r}
-    expanded
-    onPress={() => onSelectRestaurant(r)}
-    onImpersonate={async (id) => {
-      console.log('List impersonate button clicked', { id, userId: user?.id });
-      if (!user?.id) {
-        console.log('Missing user id in list impersonate');
-        return;
-      }
-      setImpersonating(id);
-      console.log('Calling impersonateRestaurant from list');
-      const result = await impersonateRestaurant(user.id, id);
-      console.log('impersonateRestaurant result from list', result);
-      setImpersonating(null);
-      
-      if (result.success) {
-        Alert.alert(
-          'Sukces', 
-          'Przełączono w tryb zarządzania restauracją. Przeładowanie aplikacji...',
-          [
-            { text: 'OK', onPress: () => window.location.reload() }
-          ]
-        );
-      } else {
-        console.log('Error - would show alert');
-        Alert.alert('Błąd', result.error || 'Nie udało się przełączyć');
-      }
-      console.log('List impersonate finished');
-    }}
-  />
-))}
+        <RestaurantRow
+          key={r.id}
+          r={r}
+          expanded
+          onPress={() => onSelectRestaurant(r)}
+        />
+      ))}
     </View>
   );
 }

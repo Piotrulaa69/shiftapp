@@ -109,6 +109,201 @@ function SliderRow({ label, sub, icon, value, onChange }: { label: string; sub?:
   );
 }
 
+function StaffingSection({ value, onChange }: { value: Record<string, any>; onChange: (v: Record<string, any>) => void }) {
+  const [showAddRole, setShowAddRole] = useState(false);
+  const [newRole, setNewRole] = useState('');
+  const [showDateException, setShowDateException] = useState(false);
+  const [exceptionDate, setExceptionDate] = useState('');
+  const [exceptionCounts, setExceptionCounts] = useState<Record<string, number>>({});
+
+  const DAYS = ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd'];
+  const weekly = value.weekly ?? {};
+  const dates = value.dates ?? {};
+
+  const updateWeekly = (role: string, dayIdx: number, count: number) => {
+    const newWeekly = { ...weekly };
+    if (!newWeekly[role]) newWeekly[role] = [0, 0, 0, 0, 0, 0, 0];
+    newWeekly[role][dayIdx] = count;
+    onChange({ ...value, weekly: newWeekly });
+  };
+
+  const addRole = () => {
+    if (!newRole.trim()) return;
+    const newWeekly = { ...weekly };
+    newWeekly[newRole.trim()] = [0, 0, 0, 0, 0, 0, 0];
+    onChange({ ...value, weekly: newWeekly });
+    setNewRole('');
+    setShowAddRole(false);
+  };
+
+  const removeRole = (role: string) => {
+    const newWeekly = { ...weekly };
+    delete newWeekly[role];
+    onChange({ ...value, weekly: newWeekly });
+  };
+
+  const addDateException = () => {
+    if (!exceptionDate || Object.keys(exceptionCounts).length === 0) return;
+    const newDates = { ...dates };
+    newDates[exceptionDate] = { ...exceptionCounts };
+    onChange({ ...value, dates: newDates });
+    setExceptionDate('');
+    setExceptionCounts({});
+    setShowDateException(false);
+  };
+
+  const removeDateException = (date: string) => {
+    const newDates = { ...dates };
+    delete newDates[date];
+    onChange({ ...value, dates: newDates });
+  };
+
+  return (
+    <View style={{ gap: 16 }}>
+      <Text style={s.infoValue}>Konfiguracja minimalnej obsady per stanowisko i dzień tygodnia. Używana przez AI przy generowaniu grafiku.</Text>
+
+      {/* Weekly staffing */}
+      <View style={s.staffingContainer}>
+        <View style={s.staffingHeader}>
+          <Text style={s.staffingHeaderTitle}>Obsada tygodniowa</Text>
+          <TouchableOpacity style={s.addSmallBtn} onPress={() => setShowAddRole(true)} activeOpacity={0.7}>
+            <Ionicons name="add" size={14} color={theme.colors.primary} />
+            <Text style={s.addSmallText}>Dodaj stanowisko</Text>
+          </TouchableOpacity>
+        </View>
+
+        {showAddRole && (
+          <View style={s.addRow}>
+            <TextInput
+              style={s.addInput}
+              value={newRole}
+              onChangeText={setNewRole}
+              placeholder="np. kucharz, kelner"
+              placeholderTextColor={theme.colors.textMuted}
+            />
+            <TouchableOpacity style={s.addConfirmBtn} onPress={addRole} activeOpacity={0.7}>
+              <Ionicons name="checkmark" size={16} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.addCancelBtn} onPress={() => { setShowAddRole(false); setNewRole(''); }} activeOpacity={0.7}>
+              <Ionicons name="close" size={16} color={theme.colors.text} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {Object.keys(weekly).length === 0 && (
+          <Text style={s.emptyText}>Brak skonfigurowanych stanowisk. Dodaj pierwsze stanowisko.</Text>
+        )}
+
+        {Object.entries(weekly).map(([role, counts]) => (
+          <View key={role} style={s.roleRow}>
+            <View style={s.roleHeader}>
+              <Text style={s.roleName}>{role}</Text>
+              <TouchableOpacity onPress={() => removeRole(role)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="trash-outline" size={14} color={theme.colors.error} />
+              </TouchableOpacity>
+            </View>
+            <View style={s.daysGrid}>
+              {DAYS.map((day, idx) => (
+                <View key={day} style={s.dayCell}>
+                  <Text style={s.dayLabel}>{day}</Text>
+                  <View style={s.dayControls}>
+                    <TouchableOpacity
+                      style={s.dayBtn}
+                      onPress={() => updateWeekly(role, idx, Math.max(0, (counts as number[])[idx] - 1))}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="remove" size={12} color={theme.colors.text} />
+                    </TouchableOpacity>
+                    <Text style={s.dayCount}>{(counts as number[])[idx]}</Text>
+                    <TouchableOpacity
+                      style={s.dayBtn}
+                      onPress={() => updateWeekly(role, idx, (counts as number[])[idx] + 1)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="add" size={12} color={theme.colors.text} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        ))}
+      </View>
+
+      {/* Date exceptions */}
+      <View style={s.staffingContainer}>
+        <View style={s.staffingHeader}>
+          <Text style={s.staffingHeaderTitle}>Wyjątki datowe</Text>
+          <TouchableOpacity style={s.addSmallBtn} onPress={() => setShowDateException(true)} activeOpacity={0.7}>
+            <Ionicons name="add" size={14} color={theme.colors.primary} />
+            <Text style={s.addSmallText}>Dodaj wyjątek</Text>
+          </TouchableOpacity>
+        </View>
+
+        {showDateException && (
+          <View style={s.exceptionRow}>
+            <TextInput
+              style={s.dateInput}
+              value={exceptionDate}
+              onChangeText={setExceptionDate}
+              placeholder="RRRR-MM-DD (np. 2026-03-08)"
+              placeholderTextColor={theme.colors.textMuted}
+            />
+            <View style={s.exceptionCounts}>
+              {Object.keys(weekly).map((role) => (
+                <View key={role} style={s.exceptionCountCell}>
+                  <Text style={s.exceptionCountLabel}>{role}</Text>
+                  <View style={s.exceptionCountControls}>
+                    <TouchableOpacity
+                      style={s.exceptionCountBtn}
+                      onPress={() => setExceptionCounts((prev) => ({ ...prev, [role]: Math.max(0, (prev[role] || 0) - 1) }))}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="remove" size={12} color={theme.colors.text} />
+                    </TouchableOpacity>
+                    <Text style={s.exceptionCountValue}>{exceptionCounts[role] || 0}</Text>
+                    <TouchableOpacity
+                      style={s.exceptionCountBtn}
+                      onPress={() => setExceptionCounts((prev) => ({ ...prev, [role]: (prev[role] || 0) + 1 }))}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="add" size={12} color={theme.colors.text} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+            <TouchableOpacity style={s.addConfirmBtn} onPress={addDateException} activeOpacity={0.7}>
+              <Ionicons name="checkmark" size={16} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.addCancelBtn} onPress={() => { setShowDateException(false); setExceptionDate(''); setExceptionCounts({}); }} activeOpacity={0.7}>
+              <Ionicons name="close" size={16} color={theme.colors.text} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {Object.keys(dates).length === 0 && (
+          <Text style={s.emptyText}>Brak wyjątków datowych. Dodaj wyjątek dla konkretnej daty.</Text>
+        )}
+
+        {Object.entries(dates).map(([date, counts]) => (
+          <View key={date} style={s.exceptionItem}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.exceptionDate}>{date}</Text>
+              <Text style={s.exceptionCountsText}>
+                {Object.entries(counts as Record<string, number>).map(([role, count]) => `${role}: ${count}`).join(', ')}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => removeDateException(date)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="trash-outline" size={14} color={theme.colors.error} />
+            </TouchableOpacity>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export default function SettingsScreen() {
   const router = useRouter();
   const { user, restaurant, refreshRestaurant, isOwner, isManager } = useAuth();
@@ -258,11 +453,10 @@ export default function SettingsScreen() {
           <>
             {/* ── 2. Minimalna obsada ── */}
             <SectionCard {...SECTION_ICONS.staffing} title="Minimalna obsada">
-              <Text style={s.infoValue}>Konfiguracja minimalnej obsady per stanowisko i dzień tygodnia. Używana przez AI przy generowaniu grafiku.</Text>
-              <View style={[s.infoRow, { marginTop: 12 }]}>
-                <Ionicons name="information-circle-outline" size={14} color={theme.colors.textMuted} />
-                <Text style={[s.infoValue, { flex: 1 }]}>Zaawansowana konfiguracja obsady dostępna po uruchomieniu modułu AI Grafik.</Text>
-              </View>
+              <StaffingSection
+                value={rs.min_staffing ?? {}}
+                onChange={(v) => update('min_staffing', v)}
+              />
             </SectionCard>
 
             {/* ── 3. Zasady dyspozycyjności ── */}
@@ -619,6 +813,36 @@ const s = StyleSheet.create({
   settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   settingLabel: { fontSize: 14, color: theme.colors.text },
   settingValue: { fontSize: 14, color: theme.colors.textMuted },
+  // Staffing section
+  staffingContainer: { backgroundColor: theme.colors.surface, borderRadius: 12, padding: 12, gap: 12 },
+  staffingHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  staffingHeaderTitle: { fontSize: 13, fontWeight: '700', color: theme.colors.text },
+  addSmallBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: theme.colors.primaryLight },
+  addSmallText: { fontSize: 12, fontWeight: '600', color: theme.colors.primary },
+  addRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
+  addInput: { flex: 1, borderWidth: 1.5, borderColor: theme.colors.border, borderRadius: 8, padding: 8, fontSize: 13, color: theme.colors.text, backgroundColor: theme.colors.card },
+  addConfirmBtn: { width: 32, height: 32, borderRadius: 8, backgroundColor: theme.colors.green, alignItems: 'center', justifyContent: 'center' },
+  addCancelBtn: { width: 32, height: 32, borderRadius: 8, backgroundColor: theme.colors.surface, alignItems: 'center', justifyContent: 'center' },
+  roleRow: { backgroundColor: theme.colors.card, borderRadius: 10, padding: 12, gap: 12 },
+  roleHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  roleName: { fontSize: 14, fontWeight: '700', color: theme.colors.text },
+  daysGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  dayCell: { width: 48, alignItems: 'center', gap: 4 },
+  dayLabel: { fontSize: 11, fontWeight: '600', color: theme.colors.textMuted, textTransform: 'uppercase' },
+  dayControls: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  dayBtn: { width: 24, height: 24, borderRadius: 6, backgroundColor: theme.colors.surface, alignItems: 'center', justifyContent: 'center' },
+  dayCount: { fontSize: 13, fontWeight: '700', color: theme.colors.text, minWidth: 20, textAlign: 'center' },
+  exceptionRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 8 },
+  dateInput: { flex: 1, borderWidth: 1.5, borderColor: theme.colors.border, borderRadius: 8, padding: 8, fontSize: 13, color: theme.colors.text, backgroundColor: theme.colors.card },
+  exceptionCounts: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  exceptionCountCell: { alignItems: 'center', gap: 4 },
+  exceptionCountLabel: { fontSize: 11, fontWeight: '600', color: theme.colors.textMuted },
+  exceptionCountControls: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  exceptionCountBtn: { width: 24, height: 24, borderRadius: 6, backgroundColor: theme.colors.surface, alignItems: 'center', justifyContent: 'center' },
+  exceptionCountValue: { fontSize: 12, fontWeight: '700', color: theme.colors.text, minWidth: 20, textAlign: 'center' },
+  exceptionItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  exceptionDate: { fontSize: 13, fontWeight: '600', color: theme.colors.text },
+  exceptionCountsText: { fontSize: 12, color: theme.colors.textMuted },
 });
 
 const m = StyleSheet.create({
