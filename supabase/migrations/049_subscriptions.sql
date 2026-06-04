@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS public.subscriptions (
   stripe_customer_id TEXT,
   stripe_subscription_id TEXT,
   stripe_payment_intent_id TEXT,
+  stripe_checkout_session_id TEXT,
   status TEXT NOT NULL DEFAULT 'pending', -- pending, active, cancelled, failed, past_due
   base_price INTEGER NOT NULL DEFAULT 9900, -- 99 zł w groszach
   extra_employee_price INTEGER NOT NULL DEFAULT 1900, -- 19 zł w groszach

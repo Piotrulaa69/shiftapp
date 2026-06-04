@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -13,8 +13,10 @@ const EXTRA_PRICE = 19; // 19 zł za każdego dodatkowego
 export default function SubscriptionScreen() {
   const { restaurant } = useAuth();
   const router = useRouter();
+  const params = useLocalSearchParams();
   const [employeeCount, setEmployeeCount] = useState(5);
   const [loading, setLoading] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const [subscription, setSubscription] = useState<any>(null);
 
   const extraEmployees = Math.max(0, employeeCount - 5);
@@ -22,7 +24,15 @@ export default function SubscriptionScreen() {
 
   useEffect(() => {
     loadSubscription();
-  }, []);
+    
+    // Sprawdź czy wrócił z sukcesem Stripe Checkout
+    if (params.success === 'true') {
+      Alert.alert('Sukces', 'Płatność zakończona pomyślnie!');
+      loadSubscription();
+    } else if (params.canceled === 'true') {
+      Alert.alert('Anulowano', 'Płatność została anulowana.');
+    }
+  }, [params]);
 
   const loadSubscription = async () => {
     if (!restaurant?.id) return;
@@ -39,7 +49,36 @@ export default function SubscriptionScreen() {
   };
 
   const handlePayment = async () => {
-    Alert.alert('Informacja', 'Płatności kartą dostępne tylko w aplikacji mobilnej (iOS/Android)');
+    if (!restaurant?.id) return;
+    setProcessing(true);
+
+    try {
+      // Wywołaj Edge Function
+      const { data, error } = await supabase.functions.invoke('create-payment-intent', {
+        body: {
+          restaurant_id: restaurant.id,
+          employee_count: employeeCount,
+          platform: Platform.OS === 'web' ? 'web' : 'mobile',
+        },
+      });
+
+      if (error) throw error;
+
+      if (Platform.OS === 'web') {
+        // Dla web - redirect do Stripe Checkout
+        const { checkoutUrl } = data;
+        if (checkoutUrl) {
+          window.location.href = checkoutUrl;
+        }
+      } else {
+        // Dla mobile - użyj PaymentIntent (wymaga Stripe React Native)
+        Alert.alert('Informacja', 'Płatności kartą dostępne tylko w aplikacji mobilnej (iOS/Android)');
+      }
+    } catch (error: any) {
+      Alert.alert('Błąd', error.message || 'Wystąpił błąd podczas przetwarzania płatności');
+    } finally {
+      setProcessing(false);
+    }
   };
 
   if (loading) {
@@ -121,14 +160,23 @@ export default function SubscriptionScreen() {
             </View>
 
             <View style={s.cardSection}>
-              <Text style={s.cardLabel}>Płatności kartą dostępne tylko w aplikacji mobilnej (iOS/Android)</Text>
+              <Text style={s.cardLabel}>
+                {Platform.OS === 'web' 
+                  ? 'Po kliknięciu "Zapłać" zostaniesz przekierowany do bezpiecznej strony Stripe' 
+                  : 'Płatności kartą dostępne tylko w aplikacji mobilnej (iOS/Android)'}
+              </Text>
             </View>
 
             <TouchableOpacity
-              style={s.payBtn}
+              style={[s.payBtn, processing && s.payBtnDisabled]}
               onPress={handlePayment}
+              disabled={processing}
             >
-              <Text style={s.payBtnText}>Zapłać {totalPrice} zł</Text>
+              {processing ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={s.payBtnText}>Zapłać {totalPrice} zł</Text>
+              )}
             </TouchableOpacity>
           </>
         )}

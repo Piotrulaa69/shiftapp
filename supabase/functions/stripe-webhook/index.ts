@@ -1,7 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4'
 import Stripe from 'https://esm.sh/stripe@14.18.0'
-import { crypto } from 'https://deno.land/std@0.168.0/crypto/mod.ts'
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
   apiVersion: '2023-10-16',
@@ -36,6 +35,25 @@ serve(async (req) => {
 
   try {
     switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session
+        const restaurantId = session.metadata?.restaurant_id
+        const employeeCount = parseInt(session.metadata?.employee_count || '5')
+
+        // Aktualizuj subskrypcję
+        await supabase
+          .from('subscriptions')
+          .update({
+            status: 'active',
+            current_period_start: new Date().toISOString(),
+            current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // +30 dni
+          })
+          .eq('stripe_checkout_session_id', session.id)
+
+        console.log(`Checkout session completed for restaurant ${restaurantId}`)
+        break
+      }
+
       case 'payment_intent.succeeded': {
         const paymentIntent = event.data.object as Stripe.PaymentIntent
         const restaurantId = paymentIntent.metadata.restaurant_id

@@ -12,7 +12,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
 serve(async (req) => {
   try {
-    const { restaurant_id, employee_count } = await req.json()
+    const { restaurant_id, employee_count, platform = 'mobile' } = await req.json()
 
     if (!restaurant_id || !employee_count) {
       return new Response(JSON.stringify({ error: 'Missing required fields' }), {
@@ -56,52 +56,113 @@ serve(async (req) => {
         .eq('id', restaurant_id)
     }
 
-    // Utwórz PaymentIntent
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: totalAmount,
-      currency: 'pln',
-      customer: customerId,
-      metadata: {
-        restaurant_id,
-        employee_count: employee_count.toString(),
-      },
-      automatic_payment_methods: {
-        enabled: true,
-      },
-    })
-
-    // Utwórz rekord subskrypcji w bazie
-    const { data: subscription, error: subError } = await supabase
-      .from('subscriptions')
-      .insert({
-        restaurant_id,
-        stripe_customer_id: customerId,
-        stripe_payment_intent_id: paymentIntent.id,
-        status: 'pending',
-        base_price: basePrice,
-        extra_employee_price: extraPrice,
-        employee_count,
-        total_amount: totalAmount,
-        currency: 'pln',
+    // Dla web użyj Stripe Checkout, dla mobile użyj PaymentIntent
+    if (platform === 'web') {
+      // Utwórz Stripe Checkout Session
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        payment_method_types: ['card'],
+        line_items: [{
+          price_data: {
+            currency: 'pln',
+            product_data: {
+              name: `Subskrypcja ShiftApp - ${employee_count} pracowników`,
+              description: `${basePrice / 100} zł za 5 pracowników + ${extraEmployees * (extraPrice / 100)} zł za ${extraEmployees} dodatkowych`,
+            },
+            unit_amount: totalAmount,
+          },
+          quantity: 1,
+        }],
+        mode: 'payment',
+        success_url: `${req.headers.get('origin') || 'http://localhost:8081'}/subscription?success=true`,
+        cancel_url: `${req.headers.get('origin') || 'http://localhost:8081'}/subscription?canceled=true`,
+        metadata: {
+          restaurant_id,
+          employee_count: employee_count.toString(),
+          base_price: basePrice.toString(),
+          extra_employee_price: extraPrice.toString(),
+        },
       })
-      .select()
-      .single()
 
-    if (subError) {
-      console.error('Subscription creation error:', subError)
-    }
+      // Utwórz rekord subskrypcji w bazie
+      const { data: subscription, error: subError } = await supabase
+        .from('subscriptions')
+        .insert({
+          restaurant_id,
+          stripe_customer_id: customerId,
+          stripe_checkout_session_id: session.id,
+          status: 'pending',
+          base_price: basePrice,
+          extra_employee_price: extraPrice,
+          employee_count,
+          total_amount: totalAmount,
+          currency: 'pln',
+        })
+        .select()
+        .single()
 
-    return new Response(
-      JSON.stringify({
-        clientSecret: paymentIntent.client_secret,
-        paymentIntentId: paymentIntent.id,
-        amount: totalAmount,
-        subscriptionId: subscription?.id,
-      }),
-      {
-        headers: { 'Content-Type': 'application/json' },
+      if (subError) {
+        console.error('Subscription creation error:', subError)
       }
-    )
+
+      return new Response(
+        JSON.stringify({
+          checkoutUrl: session.url,
+          sessionId: session.id,
+          subscriptionId: subscription?.id,
+        }),
+        {
+          headers: { 'Content-Type': 'application/json' },
+        }
+      )
+    } else {
+      // Dla mobile - PaymentIntent
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: totalAmount,
+        currency: 'pln',
+        customer: customerId,
+        metadata: {
+          restaurant_id,
+          employee_count: employee_count.toString(),
+        },
+        automatic_payment_methods: {
+          enabled: true,
+        },
+      })
+
+      // Utwórz rekord subskrypcji w bazie
+      const { data: subscription, error: subError } = await supabase
+        .from('subscriptions')
+        .insert({
+          restaurant_id,
+          stripe_customer_id: customerId,
+          stripe_payment_intent_id: paymentIntent.id,
+          status: 'pending',
+          base_price: basePrice,
+          extra_employee_price: extraPrice,
+          employee_count,
+          total_amount: totalAmount,
+          currency: 'pln',
+        })
+        .select()
+        .single()
+
+      if (subError) {
+        console.error('Subscription creation error:', subError)
+      }
+
+      return new Response(
+        JSON.stringify({
+          clientSecret: paymentIntent.client_secret,
+          paymentIntentId: paymentIntent.id,
+          amount: totalAmount,
+          subscriptionId: subscription?.id,
+        }),
+        {
+          headers: { 'Content-Type': 'application/json' },
+        }
+      )
+    }
   } catch (error) {
     console.error('Error:', error)
     return new Response(JSON.stringify({ error: error.message }), {
