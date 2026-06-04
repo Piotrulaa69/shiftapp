@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { StripeProvider } from '@stripe/stripe-react-native';
 import { Redirect, Tabs, usePathname, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
