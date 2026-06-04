@@ -19,7 +19,7 @@ AS $$
     END
   FROM profiles WHERE id = auth.uid();
 $$;
-
+     
 -- 3. Zaktualizuj funkcję my_role() — super admin z aktywną restauracją działa jak 'owner'
 CREATE OR REPLACE FUNCTION public.my_role()
 RETURNS TEXT

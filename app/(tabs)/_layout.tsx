@@ -528,6 +528,7 @@ export default function TabLayout() {
     <>
       <SupportBanner />
       <TrialBanner />
+      <StripeProvider publishableKey="pk_live_51TeaiqHkD2Xnspp74CohUTMOZW3QoqnldajIHwGZYkp5TfBUNL6fUlgxGLnSUpggOWz8Vxcgqnhpm8EHRDeLwdLl00gpgfXpg6">
     <Tabs
       tabBar={(props) => <MobileTabBar {...props} />}
       screenOptions={{ headerShown: false }}
@@ -549,7 +550,9 @@ export default function TabLayout() {
       <Tabs.Screen name="availability" options={{ href: null }} />
       <Tabs.Screen name="announcements" options={{ href: null }} />
       <Tabs.Screen name="shift-swap" options={{ href: null }} />
+      <Tabs.Screen name="subscription" options={{ href: null }} />
     </Tabs>
+    </StripeProvider>
     </>
   );
 }
