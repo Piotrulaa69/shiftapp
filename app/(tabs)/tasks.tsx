@@ -151,16 +151,16 @@ const tStyles = StyleSheet.create({
   },
   priorityAccent: { width: 4 },
   body: { flex: 1, padding: 14 },
-  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  priorityBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: theme.borderRadius.full },
+  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 6 },
+  priorityBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: theme.borderRadius.full, flexShrink: 1 },
   priorityText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.2 },
   timeRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   timeText: { ...theme.typography.caption, color: theme.colors.textMuted },
   title: { fontSize: 14, fontWeight: '700', color: theme.colors.text, marginBottom: 4 },
   titleDone: { textDecorationLine: 'line-through', color: theme.colors.textMuted },
   desc: { ...theme.typography.caption, color: theme.colors.textSecondary, lineHeight: 16, marginBottom: 10 },
-  footer: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  duration: { flexDirection: 'row', alignItems: 'center', gap: 3, flex: 1 },
+  footer: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', minHeight: 28 },
+  duration: { flexDirection: 'row', alignItems: 'center', gap: 3, marginRight: 'auto' },
   durationText: { ...theme.typography.caption, color: theme.colors.textMuted },
   statusText: { fontSize: 12, fontWeight: '600' },
   cardInProgress: {
@@ -183,8 +183,8 @@ const tStyles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 4,
   },
   actionBtnText: { fontSize: 12, fontWeight: '700' },
-  assigneeTag: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.full, paddingHorizontal: 8, paddingVertical: 3 },
-  assigneeText: { fontSize: 11, fontWeight: '600', color: theme.colors.textSecondary },
+  assigneeTag: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.full, paddingHorizontal: 8, paddingVertical: 3, maxWidth: 120 },
+  assigneeText: { fontSize: 11, fontWeight: '600', color: theme.colors.textSecondary, flexShrink: 1 },
   rejectionBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FFF0EF', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginTop: 4, marginBottom: 2, borderLeftWidth: 3, borderLeftColor: theme.colors.error },
   rejectionText: { fontSize: 12, fontWeight: '600', color: theme.colors.error, flex: 1 },
   pointsBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: theme.colors.yellowLight, borderRadius: theme.borderRadius.full, paddingHorizontal: 7, paddingVertical: 2 },
@@ -1267,8 +1267,8 @@ export default function TasksScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
-  scrollContent: { padding: 16, gap: 14, paddingBottom: 40 },
-  scrollContentDesktop: { maxWidth: 700, alignSelf: 'center' as const, width: '100%', paddingHorizontal: 32 },
+  scrollContent: { paddingBottom: 40 },
+  scrollContentDesktop: { maxWidth: 700, alignSelf: 'center' as const, width: '100%' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1295,16 +1295,17 @@ const styles = StyleSheet.create({
 
   progressCard: {
     backgroundColor: theme.colors.card,
-    marginHorizontal: 16,
-    marginTop: 16,
     borderRadius: theme.borderRadius.lg,
     padding: 18,
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 4,
     ...theme.shadows.card,
   },
-  progressTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
-  progressTitle: { fontSize: 15, fontWeight: '700', color: theme.colors.text, marginBottom: 2 },
+  progressTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, gap: 8 },
+  progressTitle: { fontSize: 15, fontWeight: '700', color: theme.colors.text, marginBottom: 2, flexShrink: 1 },
   progressSub: { ...theme.typography.caption, color: theme.colors.textSecondary },
-  progressPct: { fontSize: 28, fontWeight: '800', color: theme.colors.primary },
+  progressPct: { fontSize: 28, fontWeight: '800', color: theme.colors.primary, flexShrink: 0 },
   progressBg: {
     height: 8,
     backgroundColor: theme.colors.background,
@@ -1351,7 +1352,7 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary },
   tabTextActive: { color: theme.colors.white },
 
-  body: { padding: 16, paddingTop: 14 },
+  body: { paddingHorizontal: 16, paddingTop: 14 },
   sectionRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1382,7 +1383,7 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 16, fontWeight: '700', color: theme.colors.textMuted },
   emptySub: { fontSize: 13, color: theme.colors.textMuted, textAlign: 'center', paddingHorizontal: 32 },
 
-  empRow: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
+  empRow: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
   empChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: theme.colors.card,
@@ -1398,7 +1399,7 @@ const styles = StyleSheet.create({
   },
   empAvatarActive: { backgroundColor: theme.colors.primary },
   empAvatarText: { fontSize: 9, fontWeight: '800', color: theme.colors.textSecondary },
-  empName: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary, maxWidth: 70 },
+  empName: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary, maxWidth: 90, flexShrink: 1 },
   empNameActive: { color: theme.colors.primary },
   empCountBadge: {
     backgroundColor: theme.colors.surface,
@@ -1407,7 +1408,7 @@ const styles = StyleSheet.create({
   },
   empCountText: { fontSize: 10, fontWeight: '700', color: theme.colors.textMuted },
 
-  filterToggleWrap: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
+  filterToggleWrap: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
   filterToggle: {
     flex: 1, paddingVertical: 9, paddingHorizontal: 16, borderRadius: theme.borderRadius.full,
     borderWidth: 1.5, borderColor: theme.colors.border, backgroundColor: theme.colors.card,
@@ -1422,8 +1423,8 @@ const mStyles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   sheet: { backgroundColor: theme.colors.card, borderRadius: 20, width: '100%', maxWidth: 560, maxHeight: '92%', overflow: 'hidden' },
   sheetDesktop: { maxWidth: 560, width: '100%' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: theme.colors.border, gap: 12 },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.text, flex: 1 },
   body: { padding: 20, gap: 4 },
   label: { fontSize: 13, fontWeight: '700', color: theme.colors.textSecondary, marginTop: 12, marginBottom: 6 },
   input: {
@@ -1453,7 +1454,7 @@ const mStyles = StyleSheet.create({
   cancelText: { fontSize: 15, fontWeight: '700', color: theme.colors.textSecondary },
   saveBtn: { flex: 2, height: 50, borderRadius: theme.borderRadius.md, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center' },
   saveBtnDisabled: { opacity: 0.5 },
-  saveText: { fontSize: 15, fontWeight: '700', color: theme.colors.white },
+  saveText: { fontSize: 15, fontWeight: '700', color: theme.colors.white, flexShrink: 1 },
   empChipModal: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
   empChipModalActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primaryLight },
   empAvatarSmall: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
@@ -1461,8 +1462,8 @@ const mStyles = StyleSheet.create({
   empChipModalText: { fontSize: 13, fontWeight: '500', color: theme.colors.textSecondary },
   empChipModalTextActive: { color: theme.colors.primary, fontWeight: '600' },
 
-  confirmRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
-  confirmBtn: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
+  confirmRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  confirmBtn: { alignItems: 'center', gap: 4, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1.5, borderColor: theme.colors.border, backgroundColor: theme.colors.surface, minWidth: 70 },
   confirmBtnActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primaryLight },
   confirmBtnText: { fontSize: 11, fontWeight: '600', color: theme.colors.textMuted },
   confirmBtnTextActive: { color: theme.colors.primary },
