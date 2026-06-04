@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
 import type { RestaurantSettings, ShiftTypeRow } from '../../lib/db';
-import { deleteShiftType, getRestaurantSettings, getShiftTypes, updateRestaurant, upsertRestaurantSettings, upsertShiftType } from '../../lib/db';
+import { deleteShiftType, getEmployees, getRestaurantSettings, getShiftTypes, updateRestaurant, upsertRestaurantSettings, upsertShiftType } from '../../lib/db';
 import { theme } from '../../styles/theme';
 
 const SECTION_ICONS: Record<string, { icon: string; color: string; bg: string }> = {
@@ -109,8 +109,9 @@ function SliderRow({ label, sub, icon, value, onChange }: { label: string; sub?:
   );
 }
 
-function StaffingSection({ value, onChange }: { value: Record<string, any>; onChange: (v: Record<string, any>) => void }) {
+function StaffingSection({ value, onChange, existingRoles, isDesktop }: { value: Record<string, any>; onChange: (v: Record<string, any>) => void; existingRoles: string[]; isDesktop: boolean }) {
   const [showAddRole, setShowAddRole] = useState(false);
+  const [showRolePicker, setShowRolePicker] = useState(false);
   const [newRole, setNewRole] = useState('');
   const [showDateException, setShowDateException] = useState(false);
   const [exceptionDate, setExceptionDate] = useState('');
@@ -158,6 +159,8 @@ function StaffingSection({ value, onChange }: { value: Record<string, any>; onCh
     onChange({ ...value, dates: newDates });
   };
 
+  const availableRoles = existingRoles.filter(r => !weekly[r]);
+
   return (
     <View style={{ gap: 16 }}>
       <Text style={s.infoValue}>Konfiguracja minimalnej obsady per stanowisko i dzień tygodnia. Używana przez AI przy generowaniu grafiku.</Text>
@@ -166,22 +169,27 @@ function StaffingSection({ value, onChange }: { value: Record<string, any>; onCh
       <View style={s.staffingContainer}>
         <View style={s.staffingHeader}>
           <Text style={s.staffingHeaderTitle}>Obsada tygodniowa</Text>
-          <TouchableOpacity style={s.addSmallBtn} onPress={() => setShowAddRole(true)} activeOpacity={0.7}>
-            <Ionicons name="add" size={14} color={theme.colors.primary} />
-            <Text style={s.addSmallText}>Dodaj stanowisko</Text>
-          </TouchableOpacity>
+          {availableRoles.length > 0 && (
+            <TouchableOpacity style={s.addSmallBtn} onPress={() => setShowAddRole(true)} activeOpacity={0.7}>
+              <Ionicons name="add" size={14} color={theme.colors.primary} />
+              <Text style={s.addSmallText}>Dodaj stanowisko</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {showAddRole && (
           <View style={s.addRow}>
-            <TextInput
-              style={s.addInput}
-              value={newRole}
-              onChangeText={setNewRole}
-              placeholder="np. kucharz, kelner"
-              placeholderTextColor={theme.colors.textMuted}
-            />
-            <TouchableOpacity style={s.addConfirmBtn} onPress={addRole} activeOpacity={0.7}>
+            <TouchableOpacity
+              style={[s.rolePickerBtn, newRole && s.rolePickerBtnSelected]}
+              onPress={() => setShowRolePicker(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={[s.rolePickerText, newRole && s.rolePickerTextSelected]}>
+                {newRole || 'Wybierz stanowisko'}
+              </Text>
+              <Ionicons name="chevron-down" size={16} color={newRole ? theme.colors.text : theme.colors.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.addConfirmBtn} onPress={addRole} activeOpacity={0.7} disabled={!newRole}>
               <Ionicons name="checkmark" size={16} color="#fff" />
             </TouchableOpacity>
             <TouchableOpacity style={s.addCancelBtn} onPress={() => { setShowAddRole(false); setNewRole(''); }} activeOpacity={0.7}>
@@ -300,6 +308,34 @@ function StaffingSection({ value, onChange }: { value: Record<string, any>; onCh
           </View>
         ))}
       </View>
+
+      {/* Role picker modal */}
+      <Modal visible={showRolePicker} animationType="fade" transparent onRequestClose={() => setShowRolePicker(false)}>
+        <View style={m.overlay}>
+          <View style={[m.sheet, isDesktop && m.sheetDesktop]}>
+            <View style={m.header}>
+              <Text style={m.title}>Wybierz stanowisko</Text>
+              <TouchableOpacity onPress={() => setShowRolePicker(false)}><Ionicons name="close" size={24} color={theme.colors.text} /></TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={m.body}>
+              {availableRoles.map((role) => (
+                <TouchableOpacity
+                  key={role}
+                  style={[m.optionItem, newRole === role && m.optionItemSelected]}
+                  onPress={() => { setNewRole(role); setShowRolePicker(false); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[m.optionText, newRole === role && m.optionTextSelected]}>{role}</Text>
+                  {newRole === role && <Ionicons name="checkmark" size={18} color={theme.colors.primary} />}
+                </TouchableOpacity>
+              ))}
+              {availableRoles.length === 0 && (
+                <Text style={s.emptyText}>Brak dostępnych stanowisk. Wszystkie są już dodane.</Text>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -335,6 +371,9 @@ export default function SettingsScreen() {
   const [stStart, setStStart] = useState('08:00');
   const [stEnd, setStEnd] = useState('16:00');
 
+  // ── Employees (for job titles) ──
+  const [employees, setEmployees] = useState<any[]>([]);
+
   useEffect(() => {
     if (restaurant) {
       setRName(restaurant.name || '');
@@ -345,9 +384,10 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     if (!rid) return;
-    Promise.all([getRestaurantSettings(rid), getShiftTypes(rid)]).then(([cfg, st]) => {
+    Promise.all([getRestaurantSettings(rid), getShiftTypes(rid), getEmployees(rid)]).then(([cfg, st, emps]) => {
       setRs(cfg);
       setShiftTypes(st);
+      setEmployees(emps);
     });
   }, [rid]);
 
@@ -456,6 +496,8 @@ export default function SettingsScreen() {
               <StaffingSection
                 value={rs.min_staffing ?? {}}
                 onChange={(v) => update('min_staffing', v)}
+                existingRoles={[...new Set(employees.map((e: any) => e.job_title).filter(Boolean))]}
+                isDesktop={isDesktop}
               />
             </SectionCard>
 
@@ -843,6 +885,11 @@ const s = StyleSheet.create({
   exceptionItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   exceptionDate: { fontSize: 13, fontWeight: '600', color: theme.colors.text },
   exceptionCountsText: { fontSize: 12, color: theme.colors.textMuted },
+  // Role picker
+  rolePickerBtn: { flex: 1, borderWidth: 1.5, borderColor: theme.colors.border, borderRadius: 8, padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.colors.card },
+  rolePickerBtnSelected: { borderColor: theme.colors.primary },
+  rolePickerText: { fontSize: 14, color: theme.colors.textMuted },
+  rolePickerTextSelected: { color: theme.colors.text },
 });
 
 const m = StyleSheet.create({
@@ -854,4 +901,8 @@ const m = StyleSheet.create({
   body: { padding: 16, paddingBottom: 32 },
   colorDot: { width: 36, height: 36, borderRadius: 18 },
   colorDotActive: { borderWidth: 3, borderColor: theme.colors.text },
+  optionItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  optionItemSelected: { backgroundColor: theme.colors.primaryLight },
+  optionText: { fontSize: 15, color: theme.colors.text },
+  optionTextSelected: { fontWeight: '700', color: theme.colors.primary },
 });
