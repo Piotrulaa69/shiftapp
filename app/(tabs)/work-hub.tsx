@@ -74,6 +74,15 @@ const MANAGEMENT_TILES: HubTile[] = [
     route: '/(tabs)/settings',
   },
   {
+    id: 'subscription',
+    title: 'Subskrypcja',
+    subtitle: 'Zarządzaj płatnościami',
+    icon: 'card',
+    iconColor: '#DB2777',
+    iconBg: '#FDF2F8',
+    route: '/(tabs)/subscription',
+  },
+  {
     id: 'schedule-editor',
     title: 'Edycja grafiku',
     subtitle: 'Zarządzaj zmianami zespołu',

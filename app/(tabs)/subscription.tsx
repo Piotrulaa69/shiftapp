@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { CardField, useConfirmPayment } from '@stripe/stripe-react-native';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -14,12 +13,9 @@ const EXTRA_PRICE = 19; // 19 zł za każdego dodatkowego
 export default function SubscriptionScreen() {
   const { restaurant } = useAuth();
   const router = useRouter();
-  const { confirmPayment, loading: stripeLoading } = useConfirmPayment();
   const [employeeCount, setEmployeeCount] = useState(5);
   const [loading, setLoading] = useState(false);
-  const [processing, setProcessing] = useState(false);
   const [subscription, setSubscription] = useState<any>(null);
-  const [clientSecret, setClientSecret] = useState('');
 
   const extraEmployees = Math.max(0, employeeCount - 5);
   const totalPrice = BASE_PRICE + (extraEmployees * EXTRA_PRICE);
@@ -43,39 +39,7 @@ export default function SubscriptionScreen() {
   };
 
   const handlePayment = async () => {
-    if (!restaurant?.id) return;
-    setProcessing(true);
-
-    try {
-      // Wywołaj Edge Function
-      const { data, error } = await supabase.functions.invoke('create-payment-intent', {
-        body: {
-          restaurant_id: restaurant.id,
-          employee_count: employeeCount,
-        },
-      });
-
-      if (error) throw error;
-
-      const { clientSecret: secret, paymentIntentId, subscriptionId } = data;
-      setClientSecret(secret);
-
-      // Potwierdź płatność przez Stripe
-      const { error: stripeError } = await confirmPayment(secret, {
-        paymentMethodType: 'Card',
-      });
-
-      if (stripeError) {
-        Alert.alert('Błąd płatności', stripeError.message);
-      } else {
-        Alert.alert('Sukces', 'Płatność zakończona pomyślnie!');
-        await loadSubscription();
-      }
-    } catch (error: any) {
-      Alert.alert('Błąd', error.message || 'Wystąpił błąd podczas przetwarzania płatności');
-    } finally {
-      setProcessing(false);
-    }
+    Alert.alert('Informacja', 'Płatności kartą dostępne tylko w aplikacji mobilnej (iOS/Android)');
   };
 
   if (loading) {
@@ -157,27 +121,14 @@ export default function SubscriptionScreen() {
             </View>
 
             <View style={s.cardSection}>
-              <Text style={s.cardLabel}>Dane karty</Text>
-              <CardField
-                postalCodeEnabled={false}
-                placeholders={{
-                  number: 'XXXX XXXX XXXX XXXX',
-                }}
-                cardStyle={s.cardField}
-                style={s.cardContainer}
-              />
+              <Text style={s.cardLabel}>Płatności kartą dostępne tylko w aplikacji mobilnej (iOS/Android)</Text>
             </View>
 
             <TouchableOpacity
-              style={[s.payBtn, processing && s.payBtnDisabled]}
+              style={s.payBtn}
               onPress={handlePayment}
-              disabled={processing}
             >
-              {processing ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={s.payBtnText}>Zapłać {totalPrice} zł</Text>
-              )}
+              <Text style={s.payBtnText}>Zapłać {totalPrice} zł</Text>
             </TouchableOpacity>
           </>
         )}

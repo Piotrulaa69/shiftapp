@@ -501,7 +501,21 @@ export default function SettingsScreen() {
               />
             </SectionCard>
 
-            {/* ── 3. Zasady dyspozycyjności ── */}
+            {/* ── 3. Subskrypcja ── */}
+            <SectionCard {...SECTION_ICONS.ai} title="Subskrypcja">
+              <Text style={s.infoValue}>Zarządzaj płatnościami za subskrypcję aplikacji.</Text>
+              <TouchableOpacity
+                style={s.actionBtn}
+                onPress={() => router.push('/(tabs)/subscription')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="card-outline" size={20} color={theme.colors.primary} />
+                <Text style={s.actionBtnText}>Zarządzaj subskrypcją</Text>
+                <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
+              </TouchableOpacity>
+            </SectionCard>
+
+            {/* ── 4. Zasady dyspozycyjności ── */}
             <SectionCard {...SECTION_ICONS.availability} title="Zasady dyspozycyjności">
               <ToggleRow
                 label="Umowy — zawsze dostępni"
@@ -890,6 +904,8 @@ const s = StyleSheet.create({
   rolePickerBtnSelected: { borderColor: theme.colors.primary },
   rolePickerText: { fontSize: 14, color: theme.colors.textMuted },
   rolePickerTextSelected: { color: theme.colors.text },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, backgroundColor: theme.colors.surface, borderRadius: 8 },
+  actionBtnText: { fontSize: 14, fontWeight: '600', color: theme.colors.text, flex: 1 },
 });
 
 const m = StyleSheet.create({
