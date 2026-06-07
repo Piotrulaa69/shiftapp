@@ -7,16 +7,17 @@
 import type {
     DbAbsence,
     DbAnnouncement,
-    DbAvailability, DbClockIn, DbConversation, DbDocument, DbDocumentTemplate,
+    DbAvailability, DbClockIn, DbConversation, DbCourse, DbCourseProgress, DbDocument, DbDocumentTemplate,
     DbEmployeeGroup, DbEmployeeGroupAssignment, DbEmployeeLeaveQuota, DbEmployeeLeaveTypeSetting,
-    DbInvitation, DbLeaveRequest, DbLeaveType, DbMessage, DbPointsLedger,
+    DbInvitation, DbLeaveRequest, DbLeaveType, DbLesson, DbMessage, DbPointsLedger,
     DbProfile, DbPromoCode, DbRestaurant, DbShift, DbShiftSwap, DbTask,
+    DbTopic, DbTopicProgress,
     DbTraining
 } from './supabase';
 import { supabase } from './supabase';
 
 // Re-export types for screens
-export type { DbProfile as AppUser, DbInvitation as Invitation, DbRestaurant as Restaurant, DbShift as Shift, DbTask as Task, DbTraining as Training };
+export type { DbProfile as AppUser, DbCourse, DbCourseProgress, DbLesson, DbTopic, DbTopicProgress, DbInvitation as Invitation, DbRestaurant as Restaurant, DbShift as Shift, DbTask as Task, DbTraining as Training };
 
 export type ShiftStatus = 'zaplanowana' | 'do_potwierdzenia' | 'potwierdzona' | 'urlop';
 export type TaskPriority = 'wysoki' | 'normalny' | 'niski';
@@ -1458,4 +1459,177 @@ export async function reviewLeaveRequestWithNotes(
       id);
   }
   return !error;
+}
+
+// ─── Courses ──────────────────────────────────────────────────────────────────
+
+export async function getCourses(restaurantId: string): Promise<DbCourse[]> {
+  const { data, error } = await supabase
+    .from('courses')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .order('sort_order', { ascending: true });
+  if (error) { console.error('getCourses', error); return []; }
+  return data as DbCourse[];
+}
+
+export async function createCourse(restaurantId: string, fields: Partial<DbCourse>): Promise<DbCourse | null> {
+  const { data, error } = await supabase
+    .from('courses')
+    .insert({ restaurant_id: restaurantId, ...fields })
+    .select()
+    .single();
+  if (error) { console.error('createCourse', error); return null; }
+  return data as DbCourse;
+}
+
+export async function updateCourse(courseId: string, fields: Partial<DbCourse>): Promise<boolean> {
+  const { error } = await supabase.from('courses').update(fields).eq('id', courseId);
+  if (error) { console.error('updateCourse', error); }
+  return !error;
+}
+
+export async function deleteCourse(courseId: string): Promise<boolean> {
+  const { error } = await supabase.from('courses').delete().eq('id', courseId);
+  if (error) { console.error('deleteCourse', error); }
+  return !error;
+}
+
+// ─── Lessons ──────────────────────────────────────────────────────────────────
+
+export async function getLessons(courseId: string): Promise<DbLesson[]> {
+  const { data, error } = await supabase
+    .from('lessons')
+    .select('*')
+    .eq('course_id', courseId)
+    .order('sort_order', { ascending: true });
+  if (error) { console.error('getLessons', error); return []; }
+  return data as DbLesson[];
+}
+
+export async function createLesson(restaurantId: string, courseId: string, fields: Partial<DbLesson>): Promise<DbLesson | null> {
+  const { data, error } = await supabase
+    .from('lessons')
+    .insert({ restaurant_id: restaurantId, course_id: courseId, ...fields })
+    .select()
+    .single();
+  if (error) { console.error('createLesson', error); return null; }
+  return data as DbLesson;
+}
+
+export async function updateLesson(lessonId: string, fields: Partial<DbLesson>): Promise<boolean> {
+  const { error } = await supabase.from('lessons').update(fields).eq('id', lessonId);
+  if (error) { console.error('updateLesson', error); }
+  return !error;
+}
+
+export async function deleteLesson(lessonId: string): Promise<boolean> {
+  const { error } = await supabase.from('lessons').delete().eq('id', lessonId);
+  if (error) { console.error('deleteLesson', error); }
+  return !error;
+}
+
+// ─── Topics ───────────────────────────────────────────────────────────────────
+
+export async function getTopics(lessonId: string): Promise<DbTopic[]> {
+  const { data, error } = await supabase
+    .from('topics')
+    .select('*')
+    .eq('lesson_id', lessonId)
+    .order('sort_order', { ascending: true });
+  if (error) { console.error('getTopics', error); return []; }
+  return data as DbTopic[];
+}
+
+export async function createTopic(restaurantId: string, lessonId: string, fields: Partial<DbTopic>): Promise<DbTopic | null> {
+  const { data, error } = await supabase
+    .from('topics')
+    .insert({ restaurant_id: restaurantId, lesson_id: lessonId, ...fields })
+    .select()
+    .single();
+  if (error) { console.error('createTopic', error); return null; }
+  return data as DbTopic;
+}
+
+export async function updateTopic(topicId: string, fields: Partial<DbTopic>): Promise<boolean> {
+  const { error } = await supabase.from('topics').update(fields).eq('id', topicId);
+  if (error) { console.error('updateTopic', error); }
+  return !error;
+}
+
+export async function deleteTopic(topicId: string): Promise<boolean> {
+  const { error } = await supabase.from('topics').delete().eq('id', topicId);
+  if (error) { console.error('deleteTopic', error); }
+  return !error;
+}
+
+// ─── Topic / Course progress ──────────────────────────────────────────────────
+
+export async function markTopicCompleted(restaurantId: string, topicId: string, employeeId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('topic_progress')
+    .upsert({
+      topic_id: topicId,
+      employee_id: employeeId,
+      restaurant_id: restaurantId,
+      completed: true,
+      completed_at: new Date().toISOString(),
+    }, { onConflict: 'topic_id,employee_id' });
+  if (error) { console.error('markTopicCompleted', error); }
+  return !error;
+}
+
+export async function getTopicProgress(restaurantId: string, employeeId: string): Promise<DbTopicProgress[]> {
+  const { data, error } = await supabase
+    .from('topic_progress')
+    .select('*')
+    .eq('employee_id', employeeId)
+    .eq('restaurant_id', restaurantId);
+  if (error) { console.error('getTopicProgress', error); return []; }
+  return data as DbTopicProgress[];
+}
+
+export async function getCourseProgress(restaurantId: string, employeeId: string): Promise<DbCourseProgress[]> {
+  const { data, error } = await supabase
+    .from('course_progress')
+    .select('*')
+    .eq('employee_id', employeeId)
+    .eq('restaurant_id', restaurantId);
+  if (error) { console.error('getCourseProgress', error); return []; }
+  return data as DbCourseProgress[];
+}
+
+export async function upsertCourseProgress(restaurantId: string, courseId: string, employeeId: string, progressPercent: number): Promise<boolean> {
+  const completed = progressPercent >= 100;
+  const { error } = await supabase
+    .from('course_progress')
+    .upsert({
+      course_id: courseId,
+      employee_id: employeeId,
+      restaurant_id: restaurantId,
+      progress_percent: progressPercent,
+      completed,
+      completed_at: completed ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'course_id,employee_id' });
+  if (error) { console.error('upsertCourseProgress', error); }
+  return !error;
+}
+
+export async function uploadTopicVideo(restaurantId: string, topicId: string, fileUri: string, fileName: string): Promise<string | null> {
+  const path = `${restaurantId}/${topicId}/${fileName}`;
+  const response = await fetch(fileUri);
+  const blob = await response.blob();
+  const { error } = await supabase.storage
+    .from('training-videos')
+    .upload(path, blob, { upsert: true, contentType: blob.type });
+  if (error) { console.error('uploadTopicVideo', error); return null; }
+  return path;
+}
+
+export async function getTopicVideoUrl(storagePath: string): Promise<string | null> {
+  const { data } = await supabase.storage
+    .from('training-videos')
+    .createSignedUrl(storagePath, 3600);
+  return data?.signedUrl ?? null;
 }

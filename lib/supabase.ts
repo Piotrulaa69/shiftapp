@@ -395,3 +395,73 @@ export type DbLocation = {
   manager_id: string | null;
   created_at: string;
 };
+
+export type DbCourse = {
+  id: string;
+  restaurant_id: string;
+  title: string;
+  description: string | null;
+  category: string;
+  cover_image_url: string | null;
+  assigned_roles: string[];
+  required: boolean;
+  is_template: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DbLesson = {
+  id: string;
+  course_id: string;
+  restaurant_id: string;
+  title: string;
+  description: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type QuizAnswer = { id: string; text: string; correct: boolean };
+export type QuizQuestion = { id: string; question: string; answers: QuizAnswer[] };
+export type DbTopicQuiz = { questions: QuizQuestion[]; pass_score: number };
+
+export type DbTopic = {
+  id: string;
+  lesson_id: string;
+  restaurant_id: string;
+  title: string;
+  description: string | null;
+  content_text: string | null;
+  video_url: string | null;
+  video_storage_path: string | null;
+  video_duration_sec: number | null;
+  quiz_data: DbTopicQuiz | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DbTopicProgress = {
+  id: string;
+  topic_id: string;
+  employee_id: string;
+  restaurant_id: string;
+  completed: boolean;
+  completed_at: string | null;
+  quiz_score: number | null;
+  quiz_passed: boolean;
+  created_at: string;
+};
+
+export type DbCourseProgress = {
+  id: string;
+  course_id: string;
+  employee_id: string;
+  restaurant_id: string;
+  progress_percent: number;
+  completed: boolean;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};

@@ -83,6 +83,15 @@ const MANAGEMENT_TILES: HubTile[] = [
     route: '/(tabs)/subscription',
   },
   {
+    id: 'courses',
+    title: 'Kursy i szkolenia',
+    subtitle: 'Twórz kursy, lekcje i tematy z video',
+    icon: 'play-circle',
+    iconColor: '#7C3AED',
+    iconBg: '#F5F3FF',
+    route: '/(tabs)/kursy/manage',
+  },
+  {
     id: 'schedule-editor',
     title: 'Edycja grafiku',
     subtitle: 'Zarządzaj zmianami zespołu',

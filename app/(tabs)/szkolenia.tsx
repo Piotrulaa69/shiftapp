@@ -6,12 +6,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileHeader from '../../components/MobileHeader';
 import { CardSkeleton, Skeleton } from '../../components/Skeleton';
 import { useAuth } from '../../context/AuthContext';
-import { getPointsForEmployee, getTeamPoints, getTrainings } from '../../lib/db';
-import type { DbPointsLedger, DbTraining } from '../../lib/supabase';
+import { getCourseProgress, getCourses, getPointsForEmployee, getTeamPoints, getTrainings } from '../../lib/db';
+import type { DbCourse, DbCourseProgress, DbPointsLedger, DbTraining } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
 type FilterKey = 'wszystkie' | 'dla_mnie' | 'obowiazkowe' | 'nowe';
-type TabKey = 'szkolenia' | 'punkty';
+type TabKey = 'kursy' | 'szkolenia' | 'punkty';
 
 const POINT_EVENT_LABELS: Record<string, { label: string; icon: string; color: string }> = {
   clock_in_on_time: { label: 'Zameldowanie na czas', icon: 'time-outline', color: '#22C55E' },
@@ -169,13 +169,27 @@ const tStyles = StyleSheet.create({
   btnTextDone: { color: theme.colors.textSecondary },
 });
 
+const CAT_COLORS: Record<string, string> = {
+  'BHP': '#EF4444', 'Obsługa': '#8B5CF6', 'Kuchnia': '#22C55E', 'Barista': '#F97316',
+  'Sprzedaż': '#06B6D4', 'Procedury': '#2563EB', 'Ogólne': theme.colors.primary,
+};
+const CAT_ICONS_COURSES: Record<string, string> = {
+  'BHP': 'shield-checkmark-outline', 'Obsługa': 'people-outline', 'Kuchnia': 'restaurant-outline',
+  'Barista': 'cafe-outline', 'Sprzedaż': 'trending-up-outline', 'Procedury': 'document-text-outline', 'Ogólne': 'book-outline',
+};
+
 export default function SzkoleniaScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const rid = user?.restaurantId ?? '';
+  const isOwner = user?.role === 'owner';
+  const isManager = user?.role === 'manager';
   const [trainings, setTrainings] = useState<DbTraining[]>([]);
+  const [courses, setCourses] = useState<DbCourse[]>([]);
+  const [courseProgress, setCourseProgress] = useState<DbCourseProgress[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterKey>('wszystkie');
-  const [activeTab, setActiveTab] = useState<TabKey>('szkolenia');
+  const [activeTab, setActiveTab] = useState<TabKey>('kursy');
   const [points, setPoints] = useState<DbPointsLedger[]>([]);
   const [ranking, setRanking] = useState<{ employee_id: string; total: number; name: string }[]>([]);
   const [pointsLoading, setPointsLoading] = useState(false);
@@ -185,23 +199,29 @@ export default function SzkoleniaScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadTrainings = useCallback(async () => {
+  const loadAll = useCallback(async () => {
     if (!rid) return;
-    const data = await getTrainings(rid);
-    setTrainings(data);
-  }, [rid]);
+    const [tr, cs, cp] = await Promise.all([
+      getTrainings(rid),
+      getCourses(rid),
+      getCourseProgress(rid, user!.id),
+    ]);
+    setTrainings(tr);
+    setCourses(cs);
+    setCourseProgress(cp);
+  }, [rid, user?.id]);
 
   useFocusEffect(useCallback(() => {
     if (!rid) return;
     setLoading(true);
-    loadTrainings().then(() => setLoading(false));
+    loadAll().then(() => setLoading(false));
   }, [rid]));
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadTrainings();
+    await loadAll();
     setRefreshing(false);
-  }, [loadTrainings]);
+  }, [loadAll]);
 
   useEffect(() => {
     if (!rid || !user || activeTab !== 'punkty') return;
@@ -268,14 +288,20 @@ export default function SzkoleniaScreen() {
       )}
 
       {/* Tab bar */}
-      <View style={styles.tabBar}>
-        {([['szkolenia', 'Szkolenia', 'book-outline'], ['punkty', 'Punkty', 'star-outline']] as const).map(([key, label, icon]) => (
-          <TouchableOpacity key={key} style={[styles.tabBarBtn, activeTab === key && styles.tabBarBtnActive]} onPress={() => setActiveTab(key)} activeOpacity={0.7}>
-            <Ionicons name={icon as any} size={14} color={activeTab === key ? theme.colors.primary : theme.colors.textSecondary} />
-            <Text style={[styles.tabBarText, activeTab === key && styles.tabBarTextActive]}>{label}</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll} contentContainerStyle={styles.tabsRow}>
+        {([['kursy', 'Kursy', 'play-circle-outline'], ['szkolenia', 'Szkolenia', 'book-outline'], ['punkty', 'Punkty', 'star-outline']] as const).map(([key, label, icon]) => (
+          <TouchableOpacity key={key} style={[styles.tabBtn, activeTab === key && styles.tabBtnActive]} onPress={() => setActiveTab(key as TabKey)} activeOpacity={0.7}>
+            <Ionicons name={icon as any} size={15} color={activeTab === key ? theme.colors.primary : theme.colors.textSecondary} />
+            <Text style={[styles.tabBtnText, activeTab === key && styles.tabBtnTextActive]}>{label}</Text>
           </TouchableOpacity>
         ))}
-      </View>
+        {(isOwner || isManager) && (
+          <TouchableOpacity style={styles.tabBtn} onPress={() => router.push('/(tabs)/kursy/manage' as any)} activeOpacity={0.7}>
+            <Ionicons name="settings-outline" size={15} color={theme.colors.textSecondary} />
+            <Text style={styles.tabBtnText}>Zarządzaj</Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, isDesktop && styles.scrollContentDesktop]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}>
         {/* Progress card */}
@@ -330,7 +356,71 @@ export default function SzkoleniaScreen() {
           </View>
         )}
 
-        {activeTab === 'szkolenia' ? (
+        {activeTab === 'kursy' ? (
+          /* ── Kursy tab ── */
+          <View style={styles.body}>
+            <Text style={styles.sectionTitle}>Dostępne kursy</Text>
+            {courses.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="play-circle-outline" size={40} color={theme.colors.border} />
+                <Text style={styles.emptyText}>Brak kursów{(isOwner || isManager) ? ' — dodaj pierwszy w Zarządzaj' : ''}</Text>
+              </View>
+            ) : courses.map((c) => {
+              const color = CAT_COLORS[c.category] ?? theme.colors.primary;
+              const icon = CAT_ICONS_COURSES[c.category] ?? 'book-outline';
+              const cp = courseProgress.find((p) => p.course_id === c.id);
+              const pct = cp?.progress_percent ?? 0;
+              const done = cp?.completed ?? false;
+              return (
+                <TouchableOpacity
+                  key={c.id}
+                  style={cStyles.card}
+                  onPress={() => router.push({ pathname: '/(tabs)/kursy/[courseId]' as any, params: { courseId: c.id } })}
+                  activeOpacity={0.85}
+                >
+                  <View style={[cStyles.accent, { backgroundColor: color }]} />
+                  <View style={cStyles.body}>
+                    <View style={cStyles.topRow}>
+                      <View style={[cStyles.iconCircle, { backgroundColor: color + '18' }]}>
+                        <Ionicons name={icon as any} size={22} color={color} />
+                      </View>
+                      <View style={cStyles.info}>
+                        <Text style={cStyles.title} numberOfLines={2}>{c.title}</Text>
+                        <View style={cStyles.metaRow}>
+                          <View style={[cStyles.catPill, { backgroundColor: color + '18' }]}>
+                            <Text style={[cStyles.catText, { color }]}>{c.category}</Text>
+                          </View>
+                          {c.required && <View style={cStyles.reqPill}><Text style={cStyles.reqText}>Obowiązkowy</Text></View>}
+                        </View>
+                      </View>
+                      {done && <Ionicons name="checkmark-circle" size={22} color={theme.colors.green} />}
+                    </View>
+                    {pct > 0 && (
+                      <View style={cStyles.progressGroup}>
+                        <View style={cStyles.progressBg}>
+                          <View style={[cStyles.progressFill, { width: `${pct}%` as any, backgroundColor: color }]} />
+                        </View>
+                        <Text style={[cStyles.progressPct, { color }]}>{pct}%</Text>
+                      </View>
+                    )}
+                    <View style={cStyles.footer}>
+                      <TouchableOpacity
+                        style={[cStyles.btn, done && cStyles.btnDone, { backgroundColor: done ? theme.colors.surface : color }]}
+                        onPress={() => router.push({ pathname: '/(tabs)/kursy/[courseId]' as any, params: { courseId: c.id } })}
+                        activeOpacity={0.85}
+                      >
+                        <Ionicons name={done ? 'refresh-outline' : pct > 0 ? 'play-forward-outline' : 'play-outline'} size={14} color={done ? theme.colors.textSecondary : '#fff'} />
+                        <Text style={[cStyles.btnText, done && cStyles.btnTextDone]}>
+                          {done ? 'Powtórz' : pct > 0 ? 'Kontynuuj' : 'Rozpocznij'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : activeTab === 'szkolenia' ? (
           <>
             {/* Training list */}
             <View style={styles.body}>
@@ -562,11 +652,12 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', paddingVertical: 32, gap: 10 },
   emptyText: { fontSize: 14, color: theme.colors.textMuted },
 
-  tabBar: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 4, marginTop: 8, gap: 8 },
-  tabBarBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
-  tabBarBtnActive: { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primary },
-  tabBarText: { fontSize: 12, fontWeight: '600' as const, color: theme.colors.textSecondary },
-  tabBarTextActive: { color: theme.colors.primary },
+  tabsScroll: { flexGrow: 0, backgroundColor: theme.colors.card, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  tabsRow: { flexDirection: 'row', paddingHorizontal: 8 },
+  tabBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 13, paddingHorizontal: 14, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabBtnActive: { borderBottomColor: theme.colors.primary },
+  tabBtnText: { fontSize: 13, fontWeight: '600' as const, color: theme.colors.textMuted },
+  tabBtnTextActive: { color: theme.colors.primary },
 
   pointsSummary: { flexDirection: 'row', backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.lg, padding: 20, marginBottom: 16 },
   pointsSummaryCol: { flex: 1, alignItems: 'center' as const },
@@ -586,4 +677,28 @@ const styles = StyleSheet.create({
   rankPos: { fontSize: 15, fontWeight: '700' as const, color: theme.colors.textSecondary, width: 36 },
   rankName: { flex: 1, fontSize: 14, color: theme.colors.text },
   rankPoints: { fontSize: 14, fontWeight: '700' as const, color: theme.colors.primary },
+});
+
+const cStyles = StyleSheet.create({
+  card: { flexDirection: 'row', backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.lg, marginBottom: 10, overflow: 'hidden', ...theme.shadows.card },
+  accent: { width: 4 },
+  body: { flex: 1, padding: 14 },
+  topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 10 },
+  iconCircle: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  info: { flex: 1 },
+  title: { fontSize: 14, fontWeight: '700', color: theme.colors.text, marginBottom: 4 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  catPill: { borderRadius: theme.borderRadius.full, paddingHorizontal: 6, paddingVertical: 2 },
+  catText: { fontSize: 10, fontWeight: '700' },
+  reqPill: { borderRadius: theme.borderRadius.full, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: theme.colors.orangeLight },
+  reqText: { fontSize: 10, fontWeight: '700', color: theme.colors.orange },
+  progressGroup: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  progressBg: { flex: 1, height: 6, backgroundColor: theme.colors.surface, borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 3 },
+  progressPct: { fontSize: 11, fontWeight: '700', width: 30, textAlign: 'right' },
+  footer: { flexDirection: 'row', alignItems: 'center' },
+  btn: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: theme.borderRadius.full, paddingHorizontal: 14, paddingVertical: 7 },
+  btnDone: { backgroundColor: theme.colors.surface },
+  btnText: { fontSize: 12, fontWeight: '700', color: '#fff' },
+  btnTextDone: { color: theme.colors.textSecondary },
 });
