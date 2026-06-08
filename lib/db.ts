@@ -1230,6 +1230,15 @@ export async function removeEmployeeFromGroup(employeeId: string, groupId: strin
   return !error;
 }
 
+export async function getMyGroupIds(userId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('employee_group_assignments')
+    .select('group_id')
+    .eq('employee_id', userId);
+  if (error) { console.error('getMyGroupIds', error); return []; }
+  return (data ?? []).map((r: any) => r.group_id);
+}
+
 export async function getEmployeeGroupsWithMembers(restaurantId: string): Promise<(DbEmployeeGroup & { members: string[] })[]> {
   const groups = await getEmployeeGroups(restaurantId);
   const result = await Promise.all(groups.map(async (g) => {

@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileHeader from '../../components/MobileHeader';
 import { CardSkeleton, Skeleton } from '../../components/Skeleton';
 import { useAuth } from '../../context/AuthContext';
-import { getCourseProgress, getCourses, getPointsForEmployee, getTeamPoints, getTrainings } from '../../lib/db';
+import { getCourseProgress, getCourses, getMyGroupIds, getPointsForEmployee, getTeamPoints, getTrainings } from '../../lib/db';
 import type { DbCourse, DbCourseProgress, DbPointsLedger, DbTraining } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
@@ -193,6 +193,7 @@ export default function SzkoleniaScreen() {
   const [points, setPoints] = useState<DbPointsLedger[]>([]);
   const [ranking, setRanking] = useState<{ employee_id: string; total: number; name: string }[]>([]);
   const [pointsLoading, setPointsLoading] = useState(false);
+  const [myGroupIds, setMyGroupIds] = useState<string[]>([]);
 
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
@@ -201,14 +202,16 @@ export default function SzkoleniaScreen() {
 
   const loadAll = useCallback(async () => {
     if (!rid) return;
-    const [tr, cs, cp] = await Promise.all([
+    const [tr, cs, cp, gids] = await Promise.all([
       getTrainings(rid),
       getCourses(rid),
       getCourseProgress(rid, user!.id),
+      getMyGroupIds(user!.id),
     ]);
     setTrainings(tr);
     setCourses(cs);
     setCourseProgress(cp);
+    setMyGroupIds(gids);
   }, [rid, user?.id]);
 
   useFocusEffect(useCallback(() => {
@@ -360,12 +363,16 @@ export default function SzkoleniaScreen() {
           /* ── Kursy tab ── */
           <View style={styles.body}>
             <Text style={styles.sectionTitle}>Dostępne kursy</Text>
-            {courses.length === 0 ? (
+            {(() => {
+              const visibleCourses = (isOwner || isManager)
+                ? courses
+                : courses.filter(c => !c.assigned_group_ids?.length || c.assigned_group_ids.some(id => myGroupIds.includes(id)));
+              return visibleCourses.length === 0 ? (
               <View style={styles.emptyState}>
                 <Ionicons name="play-circle-outline" size={40} color={theme.colors.border} />
-                <Text style={styles.emptyText}>Brak kursów{(isOwner || isManager) ? ' — dodaj pierwszy w Zarządzaj' : ''}</Text>
+                <Text style={styles.emptyText}>Brak kursów{(isOwner || isManager) ? ' — dodaj pierwszy w Zarządzaj' : ' przypisanych do twojej grupy'}</Text>
               </View>
-            ) : courses.map((c) => {
+            ) : visibleCourses.map((c) => {
               const color = CAT_COLORS[c.category] ?? theme.colors.primary;
               const icon = CAT_ICONS_COURSES[c.category] ?? 'book-outline';
               const cp = courseProgress.find((p) => p.course_id === c.id);
@@ -418,7 +425,7 @@ export default function SzkoleniaScreen() {
                   </View>
                 </TouchableOpacity>
               );
-            })}
+            }); })()}
           </View>
         ) : activeTab === 'szkolenia' ? (
           <>

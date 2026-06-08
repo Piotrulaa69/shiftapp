@@ -13,10 +13,10 @@ import {
     createCourse, createLesson, createTopic,
     DbCourse, DbLesson, DbTopic,
     deleteCourse, deleteLesson,
-    deleteTopic, getCourses, getLessons, getTopics, updateCourse,
+    deleteTopic, getCourses, getEmployeeGroups, getLessons, getTopics, updateCourse,
     updateLesson, updateTopic, uploadTopicVideo,
 } from '../../../lib/db';
-import type { QuizQuestion } from '../../../lib/supabase';
+import type { DbEmployeeGroup, QuizQuestion } from '../../../lib/supabase';
 import { theme } from '../../../styles/theme';
 
 const CATEGORIES = ['BHP', 'Obsługa', 'Kuchnia', 'Barista', 'Sprzedaż', 'Procedury', 'Ogólne'];
@@ -53,7 +53,9 @@ export default function ManageCoursesScreen() {
   const [showTopicModal, setShowTopicModal] = useState(false);
 
   // Forms
-  const EMPTY_COURSE = { title: '', description: '', category: 'Ogólne', required: false };
+  const [groups, setGroups] = useState<DbEmployeeGroup[]>([]);
+
+  const EMPTY_COURSE = { title: '', description: '', category: 'Ogólne', required: false, assigned_group_ids: [] as string[] };
   const EMPTY_LESSON = { title: '', description: '' };
   const EMPTY_TOPIC: TForm = { title: '', description: '', content_text: '', video_url: '', quiz_enabled: false, quiz_pass_score: 70, quiz_questions: [] };
 
@@ -69,8 +71,9 @@ export default function ManageCoursesScreen() {
   const loadCourses = useCallback(async () => {
     if (!rid) return;
     setLoading(true);
-    const data = await getCourses(rid);
+    const [data, grps] = await Promise.all([getCourses(rid), getEmployeeGroups(rid)]);
     setCourses(data);
+    setGroups(grps);
     setLoading(false);
   }, [rid]);
 
@@ -96,14 +99,14 @@ export default function ManageCoursesScreen() {
 
   // ─── Course CRUD ─────────────────────────────────────────────────────────────
   const openNewCourse = () => { setEditingCourse(null); setCForm(EMPTY_COURSE); setShowCourseModal(true); };
-  const openEditCourse = (c: DbCourse) => { setEditingCourse(c); setCForm({ title: c.title, description: c.description ?? '', category: c.category, required: c.required }); setShowCourseModal(true); };
+  const openEditCourse = (c: DbCourse) => { setEditingCourse(c); setCForm({ title: c.title, description: c.description ?? '', category: c.category, required: c.required, assigned_group_ids: c.assigned_group_ids ?? [] }); setShowCourseModal(true); };
   const saveCourse = async () => {
     if (!cForm.title.trim()) { Alert.alert('Błąd', 'Podaj tytuł kursu'); return; }
     setSaving(true);
     if (editingCourse) {
-      await updateCourse(editingCourse.id, { title: cForm.title.trim(), description: cForm.description.trim() || null, category: cForm.category, required: cForm.required });
+      await updateCourse(editingCourse.id, { title: cForm.title.trim(), description: cForm.description.trim() || null, category: cForm.category, required: cForm.required, assigned_group_ids: cForm.assigned_group_ids });
     } else {
-      await createCourse(rid, { title: cForm.title.trim(), description: cForm.description.trim() || null, category: cForm.category, required: cForm.required });
+      await createCourse(rid, { title: cForm.title.trim(), description: cForm.description.trim() || null, category: cForm.category, required: cForm.required, assigned_group_ids: cForm.assigned_group_ids });
     }
     setSaving(false);
     setShowCourseModal(false);
@@ -185,20 +188,32 @@ export default function ManageCoursesScreen() {
   const setQuizCorrect = (qid: string, aid: string) => setTForm(f => ({ ...f, quiz_questions: f.quiz_questions.map(q => q.id !== qid ? q : { ...q, answers: q.answers.map(a => ({ ...a, correct: a.id === aid })) }) }));
 
   const pickAndUploadVideo = async () => {
-    if (!editingTopic) { Alert.alert('Najpierw zapisz temat', 'Utwórz temat, a następnie edytuj go żeby dodać video.'); return; }
+    let topicToUpload = editingTopic;
+    if (!topicToUpload) {
+      if (!tForm.title.trim()) { Alert.alert('Brak tytułu', 'Wpisz najpierw tytuł tematu'); return; }
+      setSaving(true);
+      const quiz_data = tForm.quiz_enabled && tForm.quiz_questions.length > 0 ? { questions: tForm.quiz_questions, pass_score: tForm.quiz_pass_score } : null;
+      const created = await createTopic(rid, selectedLesson!.id, { title: tForm.title.trim(), description: tForm.description.trim() || null, content_text: tForm.content_text.trim() || null, video_url: tForm.video_url.trim() || null, sort_order: topics.length, quiz_data });
+      setSaving(false);
+      if (!created) { Alert.alert('Błąd', 'Nie udało się zapisać tematu'); return; }
+      setEditingTopic(created);
+      topicToUpload = created;
+      const ts = await getTopics(selectedLesson!.id);
+      setTopics(ts);
+    }
     try {
       const result = await DocumentPicker.getDocumentAsync({ type: 'video/*', copyToCacheDirectory: true });
       if (result.canceled) return;
       const file = result.assets[0];
       setUploading(true);
-      const path = await uploadTopicVideo(rid, editingTopic.id, file.uri, file.name);
+      const path = await uploadTopicVideo(rid, topicToUpload.id, file.uri, file.name);
       if (path) {
-        await updateTopic(editingTopic.id, { video_storage_path: path, video_url: null });
+        await updateTopic(topicToUpload.id, { video_storage_path: path, video_url: null });
         setTForm((f) => ({ ...f, video_url: '' }));
         Alert.alert('Sukces', 'Film został przesłany!');
         const ts = await getTopics(selectedLesson!.id);
         setTopics(ts);
-        const updated = ts.find((t) => t.id === editingTopic.id);
+        const updated = ts.find((t) => t.id === topicToUpload!.id);
         if (updated) setEditingTopic(updated);
       } else {
         Alert.alert('Błąd', 'Nie udało się przesłać pliku.');
@@ -376,6 +391,32 @@ export default function ManageCoursesScreen() {
                 </View>
                 <Text style={m.checkLabel}>Kurs obowiązkowy</Text>
               </TouchableOpacity>
+              {groups.length > 0 && (
+                <>
+                  <View style={m.quizDivider} />
+                  <Text style={m.label}>Widoczny dla grup</Text>
+                  <Text style={[m.label, { fontSize: 11, fontWeight: '400', marginTop: -4, textTransform: 'none', color: theme.colors.textMuted }]}>
+                    Zostaw puste → kurs widzą wszyscy pracownicy
+                  </Text>
+                  <View style={{ gap: 8, marginTop: 8 }}>
+                    {groups.map((g) => {
+                      const isSelected = cForm.assigned_group_ids.includes(g.id);
+                      return (
+                        <TouchableOpacity
+                          key={g.id}
+                          style={[m.groupRow, isSelected && m.groupRowSelected, { borderLeftWidth: 3, borderLeftColor: g.color }]}
+                          onPress={() => setCForm(f => ({ ...f, assigned_group_ids: isSelected ? f.assigned_group_ids.filter(id => id !== g.id) : [...f.assigned_group_ids, g.id] }))}
+                          activeOpacity={0.8}
+                        >
+                          <View style={[m.groupDot, { backgroundColor: g.color }]} />
+                          <Text style={[m.groupName, isSelected && m.groupNameSelected]}>{g.name}</Text>
+                          {isSelected && <Ionicons name="checkmark-circle" size={18} color={theme.colors.primary} />}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
             </ScrollView>
             <View style={m.footer}>
               <TouchableOpacity style={m.cancelBtn} onPress={() => setShowCourseModal(false)}><Text style={m.cancelBtnText}>Anuluj</Text></TouchableOpacity>
@@ -432,8 +473,7 @@ export default function ManageCoursesScreen() {
               <TextInput style={[m.input, m.inputMultiLg]} placeholder="Treść materiału szkoleniowego..." placeholderTextColor={theme.colors.textMuted} value={tForm.content_text} onChangeText={(v) => setTForm((f) => ({ ...f, content_text: v }))} multiline numberOfLines={5} />
               <Text style={m.label}>Video URL</Text>
               <TextInput style={m.input} placeholder="https://youtube.com/... lub https://cdn.example.com/video.mp4" placeholderTextColor={theme.colors.textMuted} value={tForm.video_url} onChangeText={(v) => setTForm((f) => ({ ...f, video_url: v }))} autoCapitalize="none" keyboardType="url" />
-              {editingTopic && (
-                <TouchableOpacity style={m.uploadBtn} onPress={pickAndUploadVideo} disabled={uploading} activeOpacity={0.8}>
+              <TouchableOpacity style={m.uploadBtn} onPress={pickAndUploadVideo} disabled={uploading || saving} activeOpacity={0.8}>
                   <View style={m.uploadBtnIcon}>
                     {uploading ? <ActivityIndicator size="small" color={theme.colors.primary} /> : <Ionicons name="cloud-upload-outline" size={20} color={theme.colors.primary} />}
                   </View>
@@ -442,7 +482,6 @@ export default function ManageCoursesScreen() {
                     <Text style={m.uploadBtnSub}>MP4, WebM, MOV • max 500 MB</Text>
                   </View>
                 </TouchableOpacity>
-              )}
               {editingTopic?.video_storage_path && (
                 <View style={m.uploadedBadge}>
                   <Ionicons name="checkmark-circle" size={18} color={theme.colors.green} />
@@ -630,4 +669,10 @@ const m = StyleSheet.create({
 
   addQuestionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 14, borderRadius: theme.borderRadius.lg, borderWidth: 1.5, borderColor: theme.colors.primary, borderStyle: 'dashed', marginTop: 4, backgroundColor: theme.colors.primaryLight },
   addQuestionText: { fontSize: 14, fontWeight: '700', color: theme.colors.primary },
+
+  groupRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: theme.borderRadius.lg, backgroundColor: theme.colors.surface, borderWidth: 1.5, borderColor: theme.colors.border },
+  groupRowSelected: { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primary },
+  groupDot: { width: 10, height: 10, borderRadius: 5 },
+  groupName: { flex: 1, fontSize: 14, fontWeight: '600', color: theme.colors.text },
+  groupNameSelected: { color: theme.colors.primary },
 });

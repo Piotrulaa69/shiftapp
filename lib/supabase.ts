@@ -404,6 +404,7 @@ export type DbCourse = {
   category: string;
   cover_image_url: string | null;
   assigned_roles: string[];
+  assigned_group_ids: string[];
   required: boolean;
   is_template: boolean;
   sort_order: number;
