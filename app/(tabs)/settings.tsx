@@ -7,6 +7,7 @@ import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
 import type { RestaurantSettings, ShiftTypeRow } from '../../lib/db';
 import { deleteShiftType, getEmployees, getRestaurantSettings, getShiftTypes, updateRestaurant, upsertRestaurantSettings, upsertShiftType } from '../../lib/db';
+import type { DbEmployeeGroup } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
 const SECTION_ICONS: Record<string, { icon: string; color: string; bg: string }> = {
@@ -109,16 +110,22 @@ function SliderRow({ label, sub, icon, value, onChange }: { label: string; sub?:
   );
 }
 
-function StaffingSection({ value, onChange, existingRoles, isDesktop }: { value: Record<string, any>; onChange: (v: Record<string, any>) => void; existingRoles: string[]; isDesktop: boolean }) {
+type StaffingMode = 'roles' | 'groups';
+
+function StaffingSection({ value, onChange, existingRoles, groups, isDesktop }: { value: Record<string, any>; onChange: (v: Record<string, any>) => void; existingRoles: string[]; groups: DbEmployeeGroup[]; isDesktop: boolean }) {
   const [showAddRole, setShowAddRole] = useState(false);
   const [showRolePicker, setShowRolePicker] = useState(false);
   const [newRole, setNewRole] = useState('');
+  const [showAddGroup, setShowAddGroup] = useState(false);
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
   const [showDateException, setShowDateException] = useState(false);
   const [exceptionDate, setExceptionDate] = useState('');
   const [exceptionCounts, setExceptionCounts] = useState<Record<string, number>>({});
+  const [mode, setMode] = useState<StaffingMode>(value.mode ?? 'roles');
 
   const DAYS = ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd'];
   const weekly = value.weekly ?? {};
+  const groupsConfig = value.groups ?? {};
   const dates = value.dates ?? {};
 
   const updateWeekly = (role: string, dayIdx: number, count: number) => {
@@ -126,6 +133,18 @@ function StaffingSection({ value, onChange, existingRoles, isDesktop }: { value:
     if (!newWeekly[role]) newWeekly[role] = [0, 0, 0, 0, 0, 0, 0];
     newWeekly[role][dayIdx] = count;
     onChange({ ...value, weekly: newWeekly });
+  };
+
+  const updateGroups = (groupId: string, dayIdx: number, count: number) => {
+    const newGroups = { ...groupsConfig };
+    if (!newGroups[groupId]) newGroups[groupId] = [0, 0, 0, 0, 0, 0, 0];
+    newGroups[groupId][dayIdx] = count;
+    onChange({ ...value, groups: newGroups });
+  };
+
+  const toggleMode = (newMode: StaffingMode) => {
+    setMode(newMode);
+    onChange({ ...value, mode: newMode });
   };
 
   const addRole = () => {
@@ -141,6 +160,21 @@ function StaffingSection({ value, onChange, existingRoles, isDesktop }: { value:
     const newWeekly = { ...weekly };
     delete newWeekly[role];
     onChange({ ...value, weekly: newWeekly });
+  };
+
+  const addGroup = () => {
+    if (!selectedGroupId) return;
+    const newGroups = { ...groupsConfig };
+    newGroups[selectedGroupId] = [0, 0, 0, 0, 0, 0, 0];
+    onChange({ ...value, groups: newGroups });
+    setSelectedGroupId('');
+    setShowAddGroup(false);
+  };
+
+  const removeGroup = (groupId: string) => {
+    const newGroups = { ...groupsConfig };
+    delete newGroups[groupId];
+    onChange({ ...value, groups: newGroups });
   };
 
   const addDateException = () => {
@@ -160,24 +194,60 @@ function StaffingSection({ value, onChange, existingRoles, isDesktop }: { value:
   };
 
   const availableRoles = existingRoles.filter(r => !weekly[r]);
+  const availableGroups = groups.filter(g => !groupsConfig[g.id]);
+
+  const currentConfig = mode === 'roles' ? weekly : groupsConfig;
+  const hasConfig = Object.keys(currentConfig).length > 0;
 
   return (
     <View style={{ gap: 16 }}>
-      <Text style={s.infoValue}>Konfiguracja minimalnej obsady per stanowisko i dzień tygodnia. Używana przez AI przy generowaniu grafiku.</Text>
+      <Text style={s.infoValue}>Konfiguracja minimalnej obsady używana przez AI przy generowaniu grafiku. Wybierz czy definiujesz obsadę per stanowisko czy per grupa pracownicza.</Text>
 
-      {/* Weekly staffing */}
+      {/* Mode Toggle */}
+      <View style={s.modeToggle}>
+        <TouchableOpacity
+          style={[s.modeBtn, mode === 'roles' && s.modeBtnActive]}
+          onPress={() => toggleMode('roles')}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="briefcase-outline" size={16} color={mode === 'roles' ? theme.colors.primary : theme.colors.textMuted} />
+          <Text style={[s.modeBtnText, mode === 'roles' && s.modeBtnTextActive]}>Stanowiska</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.modeBtn, mode === 'groups' && s.modeBtnActive]}
+          onPress={() => toggleMode('groups')}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="people-outline" size={16} color={mode === 'groups' ? theme.colors.primary : theme.colors.textMuted} />
+          <Text style={[s.modeBtnText, mode === 'groups' && s.modeBtnTextActive]}>Grupy</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Weekly staffing - conditional based on mode */}
       <View style={s.staffingContainer}>
         <View style={s.staffingHeader}>
-          <Text style={s.staffingHeaderTitle}>Obsada tygodniowa</Text>
-          {availableRoles.length > 0 && (
-            <TouchableOpacity style={s.addSmallBtn} onPress={() => setShowAddRole(true)} activeOpacity={0.7}>
-              <Ionicons name="add" size={14} color={theme.colors.primary} />
-              <Text style={s.addSmallText}>Dodaj stanowisko</Text>
-            </TouchableOpacity>
+          <Text style={s.staffingHeaderTitle}>
+            {mode === 'roles' ? 'Stanowiska' : 'Grupy pracownicze'}
+          </Text>
+          {mode === 'roles' ? (
+            availableRoles.length > 0 && (
+              <TouchableOpacity style={s.addSmallBtn} onPress={() => setShowAddRole(true)} activeOpacity={0.7}>
+                <Ionicons name="add" size={14} color={theme.colors.primary} />
+                <Text style={s.addSmallText}>Dodaj stanowisko</Text>
+              </TouchableOpacity>
+            )
+          ) : (
+            availableGroups.length > 0 && (
+              <TouchableOpacity style={s.addSmallBtn} onPress={() => setShowAddGroup(true)} activeOpacity={0.7}>
+                <Ionicons name="add" size={14} color={theme.colors.primary} />
+                <Text style={s.addSmallText}>Dodaj grupę</Text>
+              </TouchableOpacity>
+            )
           )}
         </View>
 
-        {showAddRole && (
+        {/* Add Role UI */}
+        {mode === 'roles' && showAddRole && (
           <View style={s.addRow}>
             <TouchableOpacity
               style={[s.rolePickerBtn, newRole && s.rolePickerBtnSelected]}
@@ -198,11 +268,41 @@ function StaffingSection({ value, onChange, existingRoles, isDesktop }: { value:
           </View>
         )}
 
-        {Object.keys(weekly).length === 0 && (
-          <Text style={s.emptyText}>Brak skonfigurowanych stanowisk. Dodaj pierwsze stanowisko.</Text>
+        {/* Add Group UI */}
+        {mode === 'groups' && showAddGroup && (
+          <View style={s.addRow}>
+            <View style={{ flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {availableGroups.map((g) => (
+                <TouchableOpacity
+                  key={g.id}
+                  style={[s.groupChip, selectedGroupId === g.id && s.groupChipSelected, { borderLeftWidth: 3, borderLeftColor: g.color }]}
+                  onPress={() => setSelectedGroupId(g.id)}
+                  activeOpacity={0.8}
+                >
+                  <View style={[s.groupDot, { backgroundColor: g.color }]} />
+                  <Text style={[s.groupChipText, selectedGroupId === g.id && s.groupChipTextSelected]}>{g.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity style={s.addConfirmBtn} onPress={addGroup} activeOpacity={0.7} disabled={!selectedGroupId}>
+              <Ionicons name="checkmark" size={16} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.addCancelBtn} onPress={() => { setShowAddGroup(false); setSelectedGroupId(''); }} activeOpacity={0.7}>
+              <Ionicons name="close" size={16} color={theme.colors.text} />
+            </TouchableOpacity>
+          </View>
         )}
 
-        {Object.entries(weekly).map(([role, counts]) => (
+        {/* Empty state */}
+        {mode === 'roles' && Object.keys(weekly).length === 0 && (
+          <Text style={s.emptyText}>Brak skonfigurowanych stanowisk. Dodaj pierwsze stanowisko.</Text>
+        )}
+        {mode === 'groups' && Object.keys(groupsConfig).length === 0 && (
+          <Text style={s.emptyText}>Brak skonfigurowanych grup. Dodaj pierwszą grupę.</Text>
+        )}
+
+        {/* Roles list */}
+        {mode === 'roles' && Object.entries(weekly).map(([role, counts]) => (
           <View key={role} style={s.roleRow}>
             <View style={s.roleHeader}>
               <Text style={s.roleName}>{role}</Text>
@@ -236,6 +336,49 @@ function StaffingSection({ value, onChange, existingRoles, isDesktop }: { value:
             </View>
           </View>
         ))}
+
+        {/* Groups list */}
+        {mode === 'groups' && Object.entries(groupsConfig).map(([groupId, counts]) => {
+          const group = groups.find(g => g.id === groupId);
+          if (!group) return null;
+          return (
+            <View key={groupId} style={[s.roleRow, { borderLeftWidth: 4, borderLeftColor: group.color }]}>
+              <View style={s.roleHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <View style={[s.groupDot, { backgroundColor: group.color }]} />
+                  <Text style={s.roleName}>{group.name}</Text>
+                </View>
+                <TouchableOpacity onPress={() => removeGroup(groupId)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="trash-outline" size={14} color={theme.colors.error} />
+                </TouchableOpacity>
+              </View>
+              <View style={s.daysGrid}>
+                {DAYS.map((day, idx) => (
+                  <View key={day} style={s.dayCell}>
+                    <Text style={s.dayLabel}>{day}</Text>
+                    <View style={s.dayControls}>
+                      <TouchableOpacity
+                        style={s.dayBtn}
+                        onPress={() => updateGroups(groupId, idx, Math.max(0, (counts as number[])[idx] - 1))}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="remove" size={12} color={theme.colors.text} />
+                      </TouchableOpacity>
+                      <Text style={s.dayCount}>{(counts as number[])[idx]}</Text>
+                      <TouchableOpacity
+                        style={s.dayBtn}
+                        onPress={() => updateGroups(groupId, idx, (counts as number[])[idx] + 1)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="add" size={12} color={theme.colors.text} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          );
+        })}
       </View>
 
       {/* Date exceptions */}
@@ -373,6 +516,7 @@ export default function SettingsScreen() {
 
   // ── Employees (for job titles) ──
   const [employees, setEmployees] = useState<any[]>([]);
+  const [groups, setGroups] = useState<DbEmployeeGroup[]>([]);
 
   useEffect(() => {
     if (restaurant) {
@@ -497,6 +641,7 @@ export default function SettingsScreen() {
                 value={rs.min_staffing ?? {}}
                 onChange={(v) => update('min_staffing', v)}
                 existingRoles={[...new Set(employees.map((e: any) => e.job_title).filter(Boolean))]}
+                groups={groups}
                 isDesktop={isDesktop}
               />
             </SectionCard>
@@ -906,6 +1051,18 @@ const s = StyleSheet.create({
   rolePickerTextSelected: { color: theme.colors.text },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, backgroundColor: theme.colors.surface, borderRadius: 8 },
   actionBtnText: { fontSize: 14, fontWeight: '600', color: theme.colors.text, flex: 1 },
+  // Mode toggle for staffing
+  modeToggle: { flexDirection: 'row', backgroundColor: theme.colors.surface, borderRadius: 10, padding: 4 },
+  modeBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, borderRadius: 8 },
+  modeBtnActive: { backgroundColor: theme.colors.card },
+  modeBtnText: { fontSize: 13, fontWeight: '600', color: theme.colors.textMuted },
+  modeBtnTextActive: { color: theme.colors.primary },
+  // Group chips
+  groupChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: theme.colors.surface, borderWidth: 1.5, borderColor: theme.colors.border },
+  groupChipSelected: { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primary },
+  groupDot: { width: 10, height: 10, borderRadius: 5 },
+  groupChipText: { fontSize: 13, fontWeight: '600', color: theme.colors.text },
+  groupChipTextSelected: { color: theme.colors.primary },
 });
 
 const m = StyleSheet.create({
