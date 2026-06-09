@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
 import type { RestaurantSettings, ShiftTypeRow } from '../../lib/db';
-import { deleteShiftType, getEmployees, getRestaurantSettings, getShiftTypes, updateRestaurant, upsertRestaurantSettings, upsertShiftType } from '../../lib/db';
+import { deleteShiftType, getEmployeeGroups, getEmployees, getRestaurantSettings, getShiftTypes, updateRestaurant, upsertRestaurantSettings, upsertShiftType } from '../../lib/db';
 import type { DbEmployeeGroup } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
@@ -528,10 +528,11 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     if (!rid) return;
-    Promise.all([getRestaurantSettings(rid), getShiftTypes(rid), getEmployees(rid)]).then(([cfg, st, emps]) => {
+    Promise.all([getRestaurantSettings(rid), getShiftTypes(rid), getEmployees(rid), getEmployeeGroups(rid)]).then(([cfg, st, emps, gr]) => {
       setRs(cfg);
       setShiftTypes(st);
       setEmployees(emps);
+      setGroups(gr);
     });
   }, [rid]);
 
