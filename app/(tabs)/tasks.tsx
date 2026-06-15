@@ -282,6 +282,9 @@ export default function TasksScreen() {
   const [taskDate, setTaskDate] = useState<string>('');
   const [showCustomDate, setShowCustomDate] = useState(false);
   const [customDateInput, setCustomDateInput] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [pickerMonth, setPickerMonth] = useState(new Date().getMonth());
+  const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
 
   // Modal step: 1 = basic info, 2 = recurrence settings
   const [modalStep, setModalStep] = useState(1);
@@ -332,6 +335,30 @@ export default function TasksScreen() {
     if (dateKey === tomorrow) return 'Jutro';
     const [y, m, d] = dateKey.split('-');
     return `${d}.${m}.${y}`;
+  };
+
+  // Calendar helpers for date picker
+  const MONTH_NAMES = ['Sty', 'Lut', 'Mar', 'Kwi', 'Maj', 'Cze', 'Lip', 'Sie', 'Wrz', 'Paź', 'Lis', 'Gru'];
+  const DAY_NAMES_SHORT = ['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb', 'Nd'];
+
+  const getDaysInMonth = (year: number, month: number) => {
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startDayOfWeek = firstDay.getDay(); // 0 = Sunday, 1 = Monday
+    const adjustedStart = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1; // Adjust to Monday start
+
+    const days: (number | null)[] = [];
+    for (let i = 0; i < adjustedStart; i++) days.push(null);
+    for (let i = 1; i <= daysInMonth; i++) days.push(i);
+    return days;
+  };
+
+  const selectPickerDate = (day: number) => {
+    const dateStr = `${pickerYear}-${String(pickerMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    setTaskDate(dateStr);
+    setShowDatePicker(false);
+    setShowCustomDate(true);
   };
 
   useFocusEffect(useCallback(() => {
@@ -452,7 +479,7 @@ export default function TasksScreen() {
     setCfgValueItems([]); setCfgCheckItems([]); setCfgPrompt('');
     setIsRecurring(false); setRecurrencePattern('daily'); setRecurrenceEndDate(''); setSelectedDays([]);
     setPoints('');
-    setTaskDate(''); setShowCustomDate(false); setCustomDateInput('');
+    setTaskDate(''); setShowCustomDate(false); setCustomDateInput(''); setShowDatePicker(false);
     setRecurrenceTime('10:00'); setRecurrenceEndNoLimit(true);
   };
 
@@ -939,15 +966,52 @@ export default function TasksScreen() {
                         <Text style={[mStyles.startChipText, taskDate === opt.value && !showCustomDate && mStyles.startChipTextActive]}>{opt.label}</Text>
                       </TouchableOpacity>
                     ))}
-                    <TouchableOpacity style={[mStyles.startChip, showCustomDate && mStyles.startChipActive]} onPress={() => setShowCustomDate(v => !v)} activeOpacity={0.7}>
-                      <Ionicons name="calendar-outline" size={14} color={showCustomDate ? '#fff' : theme.colors.textSecondary} />
-                      <Text style={[mStyles.startChipText, showCustomDate && mStyles.startChipTextActive]}>{showCustomDate && taskDate ? formatDateDisplay(taskDate) : 'Wybierz datę'}</Text>
+                    <TouchableOpacity style={[mStyles.startChip, (showCustomDate || showDatePicker) && mStyles.startChipActive]} onPress={() => setShowDatePicker(true)} activeOpacity={0.7}>
+                      <Ionicons name="calendar-outline" size={14} color={(showCustomDate || showDatePicker) ? '#fff' : theme.colors.textSecondary} />
+                      <Text style={[mStyles.startChipText, (showCustomDate || showDatePicker) && mStyles.startChipTextActive]}>{showCustomDate && taskDate ? formatDateDisplay(taskDate) : 'Wybierz datę'}</Text>
                     </TouchableOpacity>
                   </View>
-                  {showCustomDate && (
-                    <TextInput style={[mStyles.input, { marginBottom: 4 }]} value={customDateInput}
-                      onChangeText={(v) => { setCustomDateInput(v); if (/^\d{4}-\d{2}-\d{2}$/.test(v)) setTaskDate(v); }}
-                      placeholder="YYYY-MM-DD" placeholderTextColor={theme.colors.textMuted} keyboardType="numbers-and-punctuation" />
+
+                  {/* Date Picker Calendar */}
+                  {showDatePicker && (
+                    <View style={mStyles.calendarContainer}>
+                      <View style={mStyles.calendarHeader}>
+                        <TouchableOpacity onPress={() => setPickerMonth(m => m === 0 ? (setPickerYear(y => y - 1), 11) : m - 1)}>
+                          <Ionicons name="chevron-back" size={20} color={theme.colors.text} />
+                        </TouchableOpacity>
+                        <Text style={mStyles.calendarTitle}>{MONTH_NAMES[pickerMonth]} {pickerYear}</Text>
+                        <TouchableOpacity onPress={() => setPickerMonth(m => m === 11 ? (setPickerYear(y => y + 1), 0) : m + 1)}>
+                          <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+                        </TouchableOpacity>
+                      </View>
+                      <View style={mStyles.calendarWeekDays}>
+                        {DAY_NAMES_SHORT.map(d => <Text key={d} style={mStyles.calendarWeekDay}>{d}</Text>)}
+                      </View>
+                      <View style={mStyles.calendarGrid}>
+                        {getDaysInMonth(pickerYear, pickerMonth).map((day, idx) => (
+                          <TouchableOpacity
+                            key={idx}
+                            style={[
+                              mStyles.calendarDay,
+                              day === null && mStyles.calendarDayEmpty,
+                              day !== null && `${pickerYear}-${String(pickerMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` === taskDate && mStyles.calendarDaySelected
+                            ]}
+                            onPress={() => day !== null && selectPickerDate(day)}
+                            disabled={day === null}
+                          >
+                            {day !== null && (
+                              <Text style={[
+                                mStyles.calendarDayText,
+                                `${pickerYear}-${String(pickerMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` === taskDate && mStyles.calendarDayTextSelected
+                              ]}>{day}</Text>
+                            )}
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                      <TouchableOpacity style={mStyles.calendarCloseBtn} onPress={() => setShowDatePicker(false)}>
+                        <Text style={mStyles.calendarCloseText}>Zamknij</Text>
+                      </TouchableOpacity>
+                    </View>
                   )}
                   {!!taskDate && !showCustomDate && (
                     <View style={mStyles.dateInfoBadge}>
@@ -1584,4 +1648,19 @@ const mStyles = StyleSheet.create({
   dayCircleActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
   dayCircleText: { fontSize: 13, fontWeight: '700', color: theme.colors.text },
   dayCircleTextActive: { color: '#fff' },
+
+  // Calendar picker styles
+  calendarContainer: { backgroundColor: theme.colors.surface, borderRadius: 12, padding: 12, marginTop: 8, marginBottom: 8 },
+  calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingHorizontal: 8 },
+  calendarTitle: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
+  calendarWeekDays: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 8 },
+  calendarWeekDay: { fontSize: 12, fontWeight: '600', color: theme.colors.textMuted, width: 36, textAlign: 'center' },
+  calendarGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-around' },
+  calendarDay: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', margin: 2 },
+  calendarDayEmpty: { backgroundColor: 'transparent' },
+  calendarDaySelected: { backgroundColor: theme.colors.primary },
+  calendarDayText: { fontSize: 14, fontWeight: '500', color: theme.colors.text },
+  calendarDayTextSelected: { color: '#fff', fontWeight: '700' },
+  calendarCloseBtn: { alignSelf: 'center', marginTop: 12, paddingVertical: 8, paddingHorizontal: 20, backgroundColor: theme.colors.card, borderRadius: 8 },
+  calendarCloseText: { fontSize: 14, fontWeight: '600', color: theme.colors.primary },
 });
