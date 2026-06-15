@@ -111,6 +111,7 @@ export type DbTask = {
   title: string;
   description: string;
   assigned_time: string;
+  scheduled_date: string | null;
   completed: boolean;
   priority: 'wysoki' | 'normalny' | 'niski';
   status: 'do_zrobienia' | 'w_trakcie' | 'czeka_na_zatwierdzenie' | 'zatwierdzone' | 'odrzucone' | 'zamkniete';

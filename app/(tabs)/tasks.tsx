@@ -7,7 +7,7 @@ import MobileHeader from '../../components/MobileHeader';
 import { TasksSkeleton } from '../../components/Skeleton';
 import TimePickerRow from '../../components/TimePickerRow';
 import { useAuth } from '../../context/AuthContext';
-import { createTask, approveTask as dbApproveTask, deleteTask as dbDeleteTask, rejectTask as dbRejectTask, toggleTask as dbToggleTask, getEmployeeGroupsWithMembers, getEmployees, getTasks, submitTaskForApproval } from '../../lib/db';
+import { createTask, approveTask as dbApproveTask, deleteTask as dbDeleteTask, rejectTask as dbRejectTask, toggleTask as dbToggleTask, getEmployeeGroupsWithMembers, getEmployees, getMyGroupIds, getTasks, submitTaskForApproval } from '../../lib/db';
 import type { DbProfile, DbTask } from '../../lib/supabase';
 import { supabase } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
@@ -35,7 +35,7 @@ const TABS_EMPLOYEE: { key: string; label: string }[] = [
 
 const TAB_APPROVAL = { key: 'czeka_na_zatwierdzenie', label: 'Do zatwierdzenia' };
 
-function TaskCard({ task, onToggle, onDelete, onDetail, onStart, onFinish, assigneeName }: {
+function TaskCard({ task, onToggle, onDelete, onDetail, onStart, onFinish, assigneeName, groupName }: {
   task: DbTask;
   onToggle: () => void;
   onDelete?: () => void;
@@ -43,12 +43,25 @@ function TaskCard({ task, onToggle, onDelete, onDetail, onStart, onFinish, assig
   onStart?: () => void;
   onFinish?: () => void;
   assigneeName?: string;
+  groupName?: string;
 }) {
   const p = PRIORITY_CONFIG[task.priority as TaskPriority] ?? PRIORITY_CONFIG.normalny;
   const router = useRouter();
   const confirmCfg = task.confirmation_type ? CONFIRM_CONFIG[task.confirmation_type as ConfirmationType] : null;
   const inProgress = task.status === 'w_trakcie';
   const isActionable = task.status === 'do_zrobienia' || task.status === 'w_trakcie';
+
+  // Format date for display
+  const formatTaskDate = (dateStr: string | null) => {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return null;
+    const today = new Date();
+    const isToday = d.toDateString() === today.toDateString();
+    if (isToday) return 'Dziś';
+    return d.toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' });
+  };
+  const taskDate = formatTaskDate(task.scheduled_date);
 
   return (
     <TouchableOpacity style={[tStyles.card, inProgress && tStyles.cardInProgress]} activeOpacity={0.85} onPress={onDetail ?? onToggle}>
@@ -61,9 +74,17 @@ function TaskCard({ task, onToggle, onDelete, onDetail, onStart, onFinish, assig
               : <Text style={[tStyles.priorityText, { color: p.color }]}>{p.label}</Text>
             }
           </View>
-          <View style={tStyles.timeRow}>
-            <Ionicons name="time-outline" size={12} color={theme.colors.textMuted} />
-            <Text style={tStyles.timeText}>{task.assigned_time}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {taskDate && (
+              <View style={tStyles.dateBadge}>
+                <Ionicons name="calendar-outline" size={11} color={theme.colors.primary} />
+                <Text style={tStyles.dateText}>{taskDate}</Text>
+              </View>
+            )}
+            <View style={tStyles.timeRow}>
+              <Ionicons name="time-outline" size={12} color={theme.colors.textMuted} />
+              <Text style={tStyles.timeText}>{task.assigned_time}</Text>
+            </View>
           </View>
         </View>
         <Text style={[tStyles.title, task.completed && tStyles.titleDone]}>{task.title}</Text>
@@ -89,6 +110,12 @@ function TaskCard({ task, onToggle, onDelete, onDetail, onStart, onFinish, assig
             <View style={tStyles.assigneeTag}>
               <Ionicons name="person-outline" size={11} color={theme.colors.textSecondary} />
               <Text style={tStyles.assigneeText}>{assigneeName}</Text>
+            </View>
+          )}
+          {groupName && (
+            <View style={[tStyles.assigneeTag, { backgroundColor: theme.colors.purpleLight }]}>
+              <Ionicons name="people-outline" size={11} color={theme.colors.purple} />
+              <Text style={[tStyles.assigneeText, { color: theme.colors.purple }]}>{groupName}</Text>
             </View>
           )}
           {isActionable && onStart && !inProgress && (
@@ -189,6 +216,8 @@ const tStyles = StyleSheet.create({
   rejectionText: { fontSize: 12, fontWeight: '600', color: theme.colors.error, flex: 1 },
   pointsBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: theme.colors.yellowLight, borderRadius: theme.borderRadius.full, paddingHorizontal: 7, paddingVertical: 2 },
   pointsText: { fontSize: 11, fontWeight: '700', color: theme.colors.yellow },
+  dateBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: theme.colors.primaryLight, borderRadius: theme.borderRadius.full, paddingHorizontal: 7, paddingVertical: 2 },
+  dateText: { fontSize: 11, fontWeight: '700', color: theme.colors.primary },
 });
 
 type CfgValueItem = { id: string; name: string; unit: string; min: string; max: string };
@@ -214,6 +243,7 @@ export default function TasksScreen() {
   const [tasks, setTasks] = useState<DbTask[]>([]);
   const [employees, setEmployees] = useState<DbProfile[]>([]);
   const [groups, setGroups] = useState<(any & { members: string[] })[]>([]);
+  const [myGroupIds, setMyGroupIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<string>('all');
   const [showModal, setShowModal] = useState(false);
@@ -281,13 +311,15 @@ export default function TasksScreen() {
       getTasks(rid),
       canApprove ? getEmployees(rid) : Promise.resolve([]),
       canApprove ? getEmployeeGroupsWithMembers(rid) : Promise.resolve([]),
-    ]).then(([taskData, empData, groupData]) => {
+      user ? getMyGroupIds(user.id) : Promise.resolve([]),
+    ]).then(([taskData, empData, groupData, myGroups]) => {
       setTasks(taskData);
       setEmployees(empData);
       setGroups(groupData);
+      setMyGroupIds(myGroups);
       setLoading(false);
     });
-  }, [rid, canApprove]));
+  }, [rid, canApprove, user]));
 
   // Auto-open create modal if ?new=true in URL
   useFocusEffect(useCallback(() => {
@@ -346,7 +378,8 @@ export default function TasksScreen() {
   const handleCreate = async () => {
     if (!newTitle.trim()) return;
     setSaving(true);
-    const assignTo = newAssignedTo === 'ALL' ? null : (newAssignedTo || user?.id || null);
+    // Allow group-only assignment - if group is selected, assigned_to can be null
+    const assignTo = newAssignedTo === 'ALL' ? null : (newAssignedTo || null);
     let confirmationConfig: any = null;
     if (newConfirm === 'values' && cfgValueItems.length > 0) {
       confirmationConfig = { items: cfgValueItems.map(i => ({ id: i.id, name: i.name, unit: i.unit, min: parseFloat(i.min) || 0, max: parseFloat(i.max) || 100 })) };
@@ -364,6 +397,7 @@ export default function TasksScreen() {
       description: newDesc.trim(),
       assigned_to: assignTo,
       assigned_time: newTime,
+      scheduled_date: taskDate || null,
       priority: newPriority,
       duration_min: parseInt(newDuration) || 30,
       confirmation_type: newConfirm,
@@ -403,8 +437,11 @@ export default function TasksScreen() {
   const progress = totalCount > 0 ? completedCount / totalCount : 0;
   const todoCount = tasks.filter((t) => !t.completed).length;
 
+  // Filter tasks: employees see tasks assigned to them OR to their groups
   const empFiltered = !canApprove
-    ? showMineOnly ? tasks.filter((t) => t.assigned_to === user?.id) : tasks
+    ? showMineOnly
+      ? tasks.filter((t) => t.assigned_to === user?.id || (t.target_group_id && myGroupIds.includes(t.target_group_id)))
+      : tasks.filter((t) => t.assigned_to === user?.id || (t.target_group_id && myGroupIds.includes(t.target_group_id)))
     : selectedEmployeeId
     ? tasks.filter((t) => t.assigned_to === selectedEmployeeId)
     : tasks;
@@ -600,7 +637,8 @@ export default function TasksScreen() {
               {wTrakcie.map((t) => {
                 const emp = employees.find((e) => e.id === t.assigned_to);
                 const name = emp ? `${emp.first_name} ${emp.last_name}` : undefined;
-                return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} onFinish={() => finishTask(t.id)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} />;
+                const group = t.target_group_id ? groups.find((g) => g.id === t.target_group_id) : undefined;
+                return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} onFinish={() => finishTask(t.id)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} groupName={group?.name} />;
               })}
             </>
           )}
@@ -615,7 +653,8 @@ export default function TasksScreen() {
               {doZrobienia.map((t) => {
                 const emp = employees.find((e) => e.id === t.assigned_to);
                 const name = emp ? `${emp.first_name} ${emp.last_name}` : undefined;
-                return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} onStart={() => startTask(t.id)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} />;
+                const group = t.target_group_id ? groups.find((g) => g.id === t.target_group_id) : undefined;
+                return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} onStart={() => startTask(t.id)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} groupName={group?.name} />;
               })}
             </>
           )}
@@ -630,7 +669,8 @@ export default function TasksScreen() {
               {zamkniete.map((t) => {
                 const emp = employees.find((e) => e.id === t.assigned_to);
                 const name = emp ? `${emp.first_name} ${emp.last_name}` : undefined;
-                return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} />;
+                const group = t.target_group_id ? groups.find((g) => g.id === t.target_group_id) : undefined;
+                return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} groupName={group?.name} />;
               })}
             </>
           )}
