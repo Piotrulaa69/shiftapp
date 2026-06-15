@@ -304,6 +304,36 @@ export default function TasksScreen() {
     return `${day}.${m}.${y}`;
   };
 
+  // Helper to group tasks by scheduled date
+  const groupTasksByDate = (tasks: DbTask[]) => {
+    const groups: Record<string, DbTask[]> = {};
+    const today = todayStr();
+    const tomorrow = offsetDate(1);
+
+    tasks.forEach((t) => {
+      const dateKey = t.scheduled_date || 'no-date';
+      if (!groups[dateKey]) groups[dateKey] = [];
+      groups[dateKey].push(t);
+    });
+
+    // Sort dates: today first, then tomorrow, then future, then past, then no-date
+    const sortedKeys = Object.keys(groups).sort((a, b) => {
+      if (a === 'no-date') return 1;
+      if (b === 'no-date') return -1;
+      return a.localeCompare(b);
+    });
+
+    return { groups, sortedKeys, today, tomorrow };
+  };
+
+  const getDateLabel = (dateKey: string, today: string, tomorrow: string) => {
+    if (dateKey === 'no-date') return 'Bez daty';
+    if (dateKey === today) return 'Dziś';
+    if (dateKey === tomorrow) return 'Jutro';
+    const [y, m, d] = dateKey.split('-');
+    return `${d}.${m}.${y}`;
+  };
+
   useFocusEffect(useCallback(() => {
     if (!rid) return;
     setLoading(true);
@@ -643,21 +673,36 @@ export default function TasksScreen() {
             </>
           )}
 
-          {doZrobienia.length > 0 && (
-            <>
-              <View style={[styles.sectionRow, wTrakcie.length > 0 ? { marginTop: 8 } : {}]}>
-                <View style={[styles.sectionDot, { backgroundColor: theme.colors.textMuted }]} />
-                <Text style={styles.sectionLabel}>Do zrobienia</Text>
-                <Text style={styles.sectionCount}>{doZrobienia.length}</Text>
-              </View>
-              {doZrobienia.map((t) => {
-                const emp = employees.find((e) => e.id === t.assigned_to);
-                const name = emp ? `${emp.first_name} ${emp.last_name}` : undefined;
-                const group = t.target_group_id ? groups.find((g) => g.id === t.target_group_id) : undefined;
-                return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} onStart={() => startTask(t.id)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} groupName={group?.name} />;
-              })}
-            </>
-          )}
+          {/* Do zrobienia - grouped by date */}
+          {(() => {
+            const { groups: dateGroups, sortedKeys, today, tomorrow } = groupTasksByDate(doZrobienia);
+            if (sortedKeys.length === 0) return null;
+            return (
+              <>
+                {sortedKeys.map((dateKey, idx) => {
+                  const dateTasks = dateGroups[dateKey];
+                  const isToday = dateKey === today;
+                  const isTomorrow = dateKey === tomorrow;
+                  const label = getDateLabel(dateKey, today, tomorrow);
+                  return (
+                    <View key={dateKey} style={idx > 0 || wTrakcie.length > 0 ? { marginTop: 12 } : {}}>
+                      <View style={styles.sectionRow}>
+                        <View style={[styles.sectionDot, { backgroundColor: isToday ? theme.colors.error : isTomorrow ? theme.colors.orange : theme.colors.textMuted }]} />
+                        <Text style={[styles.sectionLabel, isToday && { color: theme.colors.error, fontWeight: '700' }]}>{label}</Text>
+                        <Text style={styles.sectionCount}>{dateTasks.length}</Text>
+                      </View>
+                      {dateTasks.map((t) => {
+                        const emp = employees.find((e) => e.id === t.assigned_to);
+                        const name = emp ? `${emp.first_name} ${emp.last_name}` : undefined;
+                        const group = t.target_group_id ? groups.find((g: any) => g.id === t.target_group_id) : undefined;
+                        return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} onStart={() => startTask(t.id)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} groupName={group?.name} />;
+                      })}
+                    </View>
+                  );
+                })}
+              </>
+            );
+          })()}
 
           {zamkniete.length > 0 && (
             <>
