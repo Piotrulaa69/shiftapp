@@ -297,6 +297,12 @@ export default function TasksScreen() {
   const [modalStep, setModalStep] = useState(1);
   // Weekly quick-select for step 1 summary
   const [recurrenceTime, setRecurrenceTime] = useState('10:00');
+
+  // Accordion collapse state for future task sections
+  const [thisWeekOpen, setThisWeekOpen] = useState(false);
+  const [nextWeekOpen, setNextWeekOpen] = useState(false);
+  const [laterOpen, setLaterOpen] = useState(false);
+  const [recurringOpen, setRecurringOpen] = useState(false);
   const [recurrenceEndNoLimit, setRecurrenceEndNoLimit] = useState(true);
 
   const todayStr = () => {
@@ -543,18 +549,16 @@ export default function TasksScreen() {
   const progress = totalCount > 0 ? completedCount / totalCount : 0;
   const todoCount = tasks.filter((t) => !t.completed).length;
 
-  // Date window: employees see only tasks for today and tomorrow (or tasks with no date)
+  // Date window helpers
   const today = todayStr();
   const tomorrow = offsetDate(1);
-  const isInDateWindow = (t: DbTask) => {
-    if (!t.scheduled_date) return true; // tasks without a date always visible
-    return t.scheduled_date <= tomorrow; // today, yesterday (overdue), or tomorrow
-  };
+  const day2 = offsetDate(2);   // ≤2 days → immediate (auto-promote)
+  const day7 = offsetDate(7);   // 3-7 days → ten tydzień
+  const day14 = offsetDate(14); // 8-14 days → przyszły tydzień
 
-  // Filter tasks: employees see tasks assigned to them OR to their groups
+  // Filter tasks: employees see ALL tasks assigned to them (no date window restriction)
   const empFiltered = !canApprove
     ? tasks.filter((t) =>
-        isInDateWindow(t) &&
         (t.assigned_to === user?.id || (t.target_group_id && myGroupIds.includes(t.target_group_id)))
       )
     : selectedEmployeeId
@@ -572,6 +576,21 @@ export default function TasksScreen() {
   const doZrobienia = filtered.filter((t) => !t.completed && t.status === 'do_zrobienia');
   const wTrakcie = filtered.filter((t) => t.status === 'w_trakcie' && !t.completed);
   const zamkniete = filtered.filter((t) => t.completed);
+
+  // Time-bucket splits (only for 'all' tab, non-completed tasks)
+  const immediateDoZrobienia = doZrobienia.filter((t) =>
+    !t.scheduled_date || t.scheduled_date <= day2
+  );
+  const thisWeekTasks = doZrobienia.filter((t) =>
+    t.scheduled_date && t.scheduled_date > day2 && t.scheduled_date <= day7 && !t.is_recurring
+  );
+  const nextWeekTasks = doZrobienia.filter((t) =>
+    t.scheduled_date && t.scheduled_date > day7 && t.scheduled_date <= day14 && !t.is_recurring
+  );
+  const laterTasks = doZrobienia.filter((t) =>
+    t.scheduled_date && t.scheduled_date > day14 && !t.is_recurring
+  );
+  const recurringFutureTasks = doZrobienia.filter((t) => t.is_recurring);
 
   const approveTask = async (id: string) => {
     const task = tasks.find((t) => t.id === id);
@@ -758,8 +777,137 @@ export default function TasksScreen() {
             </>
           )}
 
-          {/* Do zrobienia - grouped by date */}
-          {(() => {
+          {/* Do zrobienia – immediate tasks grouped by date (≤2 days) */}
+          {activeTab === 'all' && (() => {
+            const { groups: dateGroups, sortedKeys } = groupTasksByDate(immediateDoZrobienia);
+            if (sortedKeys.length === 0 && thisWeekTasks.length === 0 && nextWeekTasks.length === 0 && laterTasks.length === 0 && recurringFutureTasks.length === 0) return null;
+            return (
+              <>
+                {sortedKeys.map((dateKey, idx) => {
+                  const dateTasks = dateGroups[dateKey];
+                  const isToday = dateKey === today;
+                  const isTomorrow = dateKey === tomorrow;
+                  const isDay2 = dateKey === day2;
+                  const isPast = dateKey !== 'no-date' && dateKey < today;
+                  const label = getDateLabel(dateKey, today, tomorrow);
+                  return (
+                    <View key={dateKey} style={idx > 0 || wTrakcie.length > 0 ? { marginTop: 12 } : {}}>
+                      <View style={styles.sectionRow}>
+                        <View style={[styles.sectionDot, { backgroundColor: isPast ? theme.colors.error : isToday ? theme.colors.error : isTomorrow ? theme.colors.orange : theme.colors.textMuted }]} />
+                        <Text style={[styles.sectionLabel, (isToday || isPast) && { color: theme.colors.error, fontWeight: '700' }]}>{label}</Text>
+                        {isToday && <View style={styles.todayBadge}><Text style={styles.todayBadgeText}>NA DZIŚ</Text></View>}
+                        {isPast && <View style={[styles.todayBadge, { backgroundColor: theme.colors.errorLight }]}><Text style={[styles.todayBadgeText, { color: theme.colors.error }]}>ZALEGŁE</Text></View>}
+                        {isTomorrow && <View style={[styles.todayBadge, { backgroundColor: theme.colors.orangeLight }]}><Text style={[styles.todayBadgeText, { color: theme.colors.orange }]}>JUTRO</Text></View>}
+                        {isDay2 && !isTomorrow && <View style={[styles.todayBadge, { backgroundColor: '#FEF3C7' }]}><Text style={[styles.todayBadgeText, { color: '#D97706' }]}>POJUTRZE</Text></View>}
+                        <Text style={styles.sectionCount}>{dateTasks.length}</Text>
+                      </View>
+                      {dateTasks.map((t) => {
+                        const emp = employees.find((e) => e.id === t.assigned_to);
+                        const name = emp ? `${emp.first_name} ${emp.last_name}` : undefined;
+                        const group = t.target_group_id ? groups.find((g: any) => g.id === t.target_group_id) : undefined;
+                        return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={canApprove ? () => deleteTask(t.id) : undefined} onEdit={canApprove ? () => openEditTask(t) : undefined} onDetail={() => setDetailTask(t)} onStart={() => startTask(t.id)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} groupName={group?.name} />;
+                      })}
+                    </View>
+                  );
+                })}
+
+                {/* ── Ten tydzień (3-7 dni) ── */}
+                {thisWeekTasks.length > 0 && (
+                  <View style={{ marginTop: 12 }}>
+                    <TouchableOpacity style={styles.accordionHeader} onPress={() => setThisWeekOpen((p) => !p)} activeOpacity={0.8}>
+                      <View style={styles.accordionLeft}>
+                        <View style={[styles.sectionDot, { backgroundColor: '#0891B2' }]} />
+                        <Text style={[styles.sectionLabel, { color: '#0891B2' }]}>Najbliższe dni</Text>
+                        <View style={[styles.todayBadge, { backgroundColor: '#E0F2FE' }]}>
+                          <Text style={[styles.todayBadgeText, { color: '#0891B2' }]}>DO TYGODNIA</Text>
+                        </View>
+                        <Text style={styles.sectionCount}>{thisWeekTasks.length}</Text>
+                      </View>
+                      <Ionicons name={thisWeekOpen ? 'chevron-up' : 'chevron-down'} size={18} color='#0891B2' />
+                    </TouchableOpacity>
+                    {thisWeekOpen && thisWeekTasks.map((t) => {
+                      const emp = employees.find((e) => e.id === t.assigned_to);
+                      const name = emp ? `${emp.first_name} ${emp.last_name}` : undefined;
+                      const group = t.target_group_id ? groups.find((g: any) => g.id === t.target_group_id) : undefined;
+                      return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={canApprove ? () => deleteTask(t.id) : undefined} onEdit={canApprove ? () => openEditTask(t) : undefined} onDetail={() => setDetailTask(t)} onStart={() => startTask(t.id)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} groupName={group?.name} />;
+                    })}
+                  </View>
+                )}
+
+                {/* ── Przyszły tydzień (8-14 dni) ── */}
+                {nextWeekTasks.length > 0 && (
+                  <View style={{ marginTop: 12 }}>
+                    <TouchableOpacity style={styles.accordionHeader} onPress={() => setNextWeekOpen((p) => !p)} activeOpacity={0.8}>
+                      <View style={styles.accordionLeft}>
+                        <View style={[styles.sectionDot, { backgroundColor: '#7C3AED' }]} />
+                        <Text style={[styles.sectionLabel, { color: '#7C3AED' }]}>Przyszły tydzień</Text>
+                        <View style={[styles.todayBadge, { backgroundColor: '#EDE9FE' }]}>
+                          <Text style={[styles.todayBadgeText, { color: '#7C3AED' }]}>8-14 DNI</Text>
+                        </View>
+                        <Text style={styles.sectionCount}>{nextWeekTasks.length}</Text>
+                      </View>
+                      <Ionicons name={nextWeekOpen ? 'chevron-up' : 'chevron-down'} size={18} color='#7C3AED' />
+                    </TouchableOpacity>
+                    {nextWeekOpen && nextWeekTasks.map((t) => {
+                      const emp = employees.find((e) => e.id === t.assigned_to);
+                      const name = emp ? `${emp.first_name} ${emp.last_name}` : undefined;
+                      const group = t.target_group_id ? groups.find((g: any) => g.id === t.target_group_id) : undefined;
+                      return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={canApprove ? () => deleteTask(t.id) : undefined} onEdit={canApprove ? () => openEditTask(t) : undefined} onDetail={() => setDetailTask(t)} onStart={() => startTask(t.id)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} groupName={group?.name} />;
+                    })}
+                  </View>
+                )}
+
+                {/* ── Za jakiś czas (15+ dni) ── */}
+                {laterTasks.length > 0 && (
+                  <View style={{ marginTop: 12 }}>
+                    <TouchableOpacity style={styles.accordionHeader} onPress={() => setLaterOpen((p) => !p)} activeOpacity={0.8}>
+                      <View style={styles.accordionLeft}>
+                        <View style={[styles.sectionDot, { backgroundColor: theme.colors.textMuted }]} />
+                        <Text style={styles.sectionLabel}>Za jakiś czas</Text>
+                        <View style={styles.todayBadge}>
+                          <Text style={styles.todayBadgeText}>15+ DNI</Text>
+                        </View>
+                        <Text style={styles.sectionCount}>{laterTasks.length}</Text>
+                      </View>
+                      <Ionicons name={laterOpen ? 'chevron-up' : 'chevron-down'} size={18} color={theme.colors.textMuted} />
+                    </TouchableOpacity>
+                    {laterOpen && laterTasks.map((t) => {
+                      const emp = employees.find((e) => e.id === t.assigned_to);
+                      const name = emp ? `${emp.first_name} ${emp.last_name}` : undefined;
+                      const group = t.target_group_id ? groups.find((g: any) => g.id === t.target_group_id) : undefined;
+                      return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={canApprove ? () => deleteTask(t.id) : undefined} onEdit={canApprove ? () => openEditTask(t) : undefined} onDetail={() => setDetailTask(t)} onStart={() => startTask(t.id)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} groupName={group?.name} />;
+                    })}
+                  </View>
+                )}
+
+                {/* ── Cykliczne ── */}
+                {recurringFutureTasks.length > 0 && (
+                  <View style={{ marginTop: 12 }}>
+                    <TouchableOpacity style={styles.accordionHeader} onPress={() => setRecurringOpen((p) => !p)} activeOpacity={0.8}>
+                      <View style={styles.accordionLeft}>
+                        <View style={[styles.sectionDot, { backgroundColor: theme.colors.green }]} />
+                        <Text style={[styles.sectionLabel, { color: theme.colors.green }]}>Cykliczne</Text>
+                        <View style={[styles.todayBadge, { backgroundColor: theme.colors.greenLight }]}>
+                          <Text style={[styles.todayBadgeText, { color: theme.colors.green }]}>POWTARZAJĄCE</Text>
+                        </View>
+                        <Text style={styles.sectionCount}>{recurringFutureTasks.length}</Text>
+                      </View>
+                      <Ionicons name={recurringOpen ? 'chevron-up' : 'chevron-down'} size={18} color={theme.colors.green} />
+                    </TouchableOpacity>
+                    {recurringOpen && recurringFutureTasks.map((t) => {
+                      const emp = employees.find((e) => e.id === t.assigned_to);
+                      const name = emp ? `${emp.first_name} ${emp.last_name}` : undefined;
+                      const group = t.target_group_id ? groups.find((g: any) => g.id === t.target_group_id) : undefined;
+                      return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={canApprove ? () => deleteTask(t.id) : undefined} onEdit={canApprove ? () => openEditTask(t) : undefined} onDetail={() => setDetailTask(t)} onStart={() => startTask(t.id)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} groupName={group?.name} />;
+                    })}
+                  </View>
+                )}
+              </>
+            );
+          })()}
+
+          {/* Do zrobienia – non-'all' tabs use simple flat list */}
+          {activeTab !== 'all' && (() => {
             const { groups: dateGroups, sortedKeys } = groupTasksByDate(doZrobienia);
             if (sortedKeys.length === 0) return null;
             return (
@@ -773,23 +921,11 @@ export default function TasksScreen() {
                   return (
                     <View key={dateKey} style={idx > 0 || wTrakcie.length > 0 ? { marginTop: 12 } : {}}>
                       <View style={styles.sectionRow}>
-                        <View style={[styles.sectionDot, { backgroundColor: isToday ? theme.colors.error : isPast ? theme.colors.error : isTomorrow ? theme.colors.orange : theme.colors.textMuted }]} />
+                        <View style={[styles.sectionDot, { backgroundColor: isPast ? theme.colors.error : isToday ? theme.colors.error : isTomorrow ? theme.colors.orange : theme.colors.textMuted }]} />
                         <Text style={[styles.sectionLabel, (isToday || isPast) && { color: theme.colors.error, fontWeight: '700' }]}>{label}</Text>
-                        {isToday && (
-                          <View style={styles.todayBadge}>
-                            <Text style={styles.todayBadgeText}>NA DZIŚ</Text>
-                          </View>
-                        )}
-                        {isPast && (
-                          <View style={[styles.todayBadge, { backgroundColor: theme.colors.errorLight }]}>
-                            <Text style={[styles.todayBadgeText, { color: theme.colors.error }]}>ZALEGŁE</Text>
-                          </View>
-                        )}
-                        {isTomorrow && (
-                          <View style={[styles.todayBadge, { backgroundColor: theme.colors.orangeLight }]}>
-                            <Text style={[styles.todayBadgeText, { color: theme.colors.orange }]}>JUTRO</Text>
-                          </View>
-                        )}
+                        {isToday && <View style={styles.todayBadge}><Text style={styles.todayBadgeText}>NA DZIŚ</Text></View>}
+                        {isPast && <View style={[styles.todayBadge, { backgroundColor: theme.colors.errorLight }]}><Text style={[styles.todayBadgeText, { color: theme.colors.error }]}>ZALEGŁE</Text></View>}
+                        {isTomorrow && <View style={[styles.todayBadge, { backgroundColor: theme.colors.orangeLight }]}><Text style={[styles.todayBadgeText, { color: theme.colors.orange }]}>JUTRO</Text></View>}
                         <Text style={styles.sectionCount}>{dateTasks.length}</Text>
                       </View>
                       {dateTasks.map((t) => {
@@ -1646,6 +1782,12 @@ const styles = StyleSheet.create({
   filterToggleTextActive: { color: '#fff' },
   todayBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: theme.colors.error, marginLeft: 6 },
   todayBadgeText: { fontSize: 10, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
+  accordionHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: theme.colors.card, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
+    ...theme.shadows.card,
+  },
+  accordionLeft: { flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1, flexWrap: 'wrap' },
 });
 
 const mStyles = StyleSheet.create({
