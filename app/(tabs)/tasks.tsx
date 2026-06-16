@@ -299,6 +299,7 @@ export default function TasksScreen() {
   const [recurrenceTime, setRecurrenceTime] = useState('10:00');
 
   // Accordion collapse state for future task sections
+  const [noDateOpen, setNoDateOpen] = useState(false);
   const [thisWeekOpen, setThisWeekOpen] = useState(false);
   const [nextWeekOpen, setNextWeekOpen] = useState(false);
   const [laterOpen, setLaterOpen] = useState(false);
@@ -578,8 +579,14 @@ export default function TasksScreen() {
   const zamkniete = filtered.filter((t) => t.completed);
 
   // Time-bucket splits (only for 'all' tab, non-completed tasks)
+  // Immediate = dated ≤2 days OR urgent no-date
   const immediateDoZrobienia = doZrobienia.filter((t) =>
-    !t.scheduled_date || t.scheduled_date <= day2
+    (t.scheduled_date && t.scheduled_date <= day2) ||
+    (!t.scheduled_date && t.priority === 'wysoki')
+  );
+  // No-date non-urgent tasks = separate collapsed bucket
+  const noDateTasks = doZrobienia.filter((t) =>
+    !t.scheduled_date && t.priority !== 'wysoki'
   );
   const thisWeekTasks = doZrobienia.filter((t) =>
     t.scheduled_date && t.scheduled_date > day2 && t.scheduled_date <= day7 && !t.is_recurring
@@ -780,7 +787,7 @@ export default function TasksScreen() {
           {/* Do zrobienia – immediate tasks grouped by date (≤2 days) */}
           {activeTab === 'all' && (() => {
             const { groups: dateGroups, sortedKeys } = groupTasksByDate(immediateDoZrobienia);
-            if (sortedKeys.length === 0 && thisWeekTasks.length === 0 && nextWeekTasks.length === 0 && laterTasks.length === 0 && recurringFutureTasks.length === 0) return null;
+            if (sortedKeys.length === 0 && noDateTasks.length === 0 && thisWeekTasks.length === 0 && nextWeekTasks.length === 0 && laterTasks.length === 0 && recurringFutureTasks.length === 0) return null;
             return (
               <>
                 {sortedKeys.map((dateKey, idx) => {
@@ -793,12 +800,13 @@ export default function TasksScreen() {
                   return (
                     <View key={dateKey} style={idx > 0 || wTrakcie.length > 0 ? { marginTop: 12 } : {}}>
                       <View style={styles.sectionRow}>
-                        <View style={[styles.sectionDot, { backgroundColor: isPast ? theme.colors.error : isToday ? theme.colors.error : isTomorrow ? theme.colors.orange : theme.colors.textMuted }]} />
-                        <Text style={[styles.sectionLabel, (isToday || isPast) && { color: theme.colors.error, fontWeight: '700' }]}>{label}</Text>
+                        <View style={[styles.sectionDot, { backgroundColor: isPast ? theme.colors.error : isToday ? theme.colors.error : isTomorrow ? theme.colors.orange : dateKey === 'no-date' ? theme.colors.error : theme.colors.textMuted }]} />
+                        <Text style={[styles.sectionLabel, (isToday || isPast || dateKey === 'no-date') && { color: theme.colors.error, fontWeight: '700' }]}>{label}</Text>
                         {isToday && <View style={styles.todayBadge}><Text style={styles.todayBadgeText}>NA DZIŚ</Text></View>}
                         {isPast && <View style={[styles.todayBadge, { backgroundColor: theme.colors.errorLight }]}><Text style={[styles.todayBadgeText, { color: theme.colors.error }]}>ZALEGŁE</Text></View>}
                         {isTomorrow && <View style={[styles.todayBadge, { backgroundColor: theme.colors.orangeLight }]}><Text style={[styles.todayBadgeText, { color: theme.colors.orange }]}>JUTRO</Text></View>}
                         {isDay2 && !isTomorrow && <View style={[styles.todayBadge, { backgroundColor: '#FEF3C7' }]}><Text style={[styles.todayBadgeText, { color: '#D97706' }]}>POJUTRZE</Text></View>}
+                        {dateKey === 'no-date' && <View style={[styles.todayBadge, { backgroundColor: theme.colors.errorLight }]}><Text style={[styles.todayBadgeText, { color: theme.colors.error }]}>PILNE</Text></View>}
                         <Text style={styles.sectionCount}>{dateTasks.length}</Text>
                       </View>
                       {dateTasks.map((t) => {
@@ -810,6 +818,29 @@ export default function TasksScreen() {
                     </View>
                   );
                 })}
+
+                {/* ── Bez daty (non-urgent) ── */}
+                {noDateTasks.length > 0 && (
+                  <View style={{ marginTop: 12 }}>
+                    <TouchableOpacity style={styles.accordionHeader} onPress={() => setNoDateOpen((p) => !p)} activeOpacity={0.8}>
+                      <View style={styles.accordionLeft}>
+                        <View style={[styles.sectionDot, { backgroundColor: theme.colors.textMuted }]} />
+                        <Text style={styles.sectionLabel}>Bez daty</Text>
+                        <View style={[styles.todayBadge, { backgroundColor: theme.colors.surface }]}>
+                          <Text style={[styles.todayBadgeText, { color: theme.colors.textSecondary }]}>BEZ TERMINU</Text>
+                        </View>
+                        <Text style={styles.sectionCount}>{noDateTasks.length}</Text>
+                      </View>
+                      <Ionicons name={noDateOpen ? 'chevron-up' : 'chevron-down'} size={18} color={theme.colors.textMuted} />
+                    </TouchableOpacity>
+                    {noDateOpen && noDateTasks.map((t) => {
+                      const emp = employees.find((e) => e.id === t.assigned_to);
+                      const name = emp ? `${emp.first_name} ${emp.last_name}` : undefined;
+                      const group = t.target_group_id ? groups.find((g: any) => g.id === t.target_group_id) : undefined;
+                      return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={canApprove ? () => deleteTask(t.id) : undefined} onEdit={canApprove ? () => openEditTask(t) : undefined} onDetail={() => setDetailTask(t)} onStart={() => startTask(t.id)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} groupName={group?.name} />;
+                    })}
+                  </View>
+                )}
 
                 {/* ── Ten tydzień (3-7 dni) ── */}
                 {thisWeekTasks.length > 0 && (
