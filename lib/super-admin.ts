@@ -212,6 +212,7 @@ export async function createPromoCode(
     .from('promo_codes')
     .insert({
       code: code.toUpperCase(),
+      type: 'referral',
       discount_percent: discountPercent,
       valid_from: validFrom,
       valid_until: validUntil,
