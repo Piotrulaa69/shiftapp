@@ -140,12 +140,12 @@ function buildLoginPortal(showPw: boolean, loading: boolean, err: string) {
       </div>
 
       <button class="al-sub" data-action="login" ${loading ? 'disabled' : ''}>${loading ? 'Logowanie…' : 'Zaloguj się'}</button>
-      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:20px;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:20px;">
+        <button data-action="register" type="button" style="width:100%;height:50px;background:#EFF6FF;border:2px solid #2563EB;border-radius:12px;color:#2563EB;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;">🔑 Mam kod aktywacyjny</button>
         <div style="display:flex;align-items:center;gap:6px;">
-          <span style="font-size:14px;color:#64748b;">Nie masz konta?</span>
-          <button data-action="register-restaurant" type="button" style="background:none;border:none;color:#2563EB;font-size:14px;font-weight:600;cursor:pointer;padding:0;">Zarejestruj restaurację</button>
+          <span style="font-size:13px;color:#64748b;">Jesteś właścicielem restauracji?</span>
+          <button data-action="register-restaurant" type="button" style="background:none;border:none;color:#2563EB;font-size:13px;font-weight:600;cursor:pointer;padding:0;">Zarejestruj →</button>
         </div>
-        <button data-action="register" type="button" style="background:none;border:none;color:#64748b;font-size:13px;cursor:pointer;padding:0;">Mam kod aktywacyjny →</button>
       </div>
       <button data-action="help" type="button" style="margin-top:20px;width:100%;padding:14px 16px;background:#F0F9FF;border-radius:12px;border:1px solid #BAE6FD;display:flex;align-items:center;gap:10px;cursor:pointer;">
         <div style="width:36px;height:36px;border-radius:10px;background:#DBEAFE;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
@@ -352,10 +352,18 @@ export default function LoginScreen() {
             <TouchableOpacity style={mob.btn} onPress={handleLogin} disabled={localLoading} activeOpacity={0.88}>
               {localLoading ? <ActivityIndicator color="#fff" /> : <Text style={mob.btnTxt}>Zaloguj się</Text>}
             </TouchableOpacity>
-            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 20 }}>
-              <Text style={{ fontSize: 14, color: '#64748b' }}>Nie masz konta?</Text>
+            <TouchableOpacity
+              style={{ marginTop: 16, height: 50, borderRadius: 12, borderWidth: 2, borderColor: '#2563EB', backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}
+              onPress={() => router.push('/join' as any)}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="key-outline" size={18} color="#2563EB" />
+              <Text style={{ fontSize: 15, fontWeight: '700', color: '#2563EB' }}>Mam kod aktywacyjny</Text>
+            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 12 }}>
+              <Text style={{ fontSize: 13, color: '#64748b' }}>Jesteś właścicielem?</Text>
               <TouchableOpacity onPress={() => router.push('/register' as any)}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#0084FF' }}>Zarejestruj restaurację</Text>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#2563EB' }}>Zarejestruj restaurację →</Text>
               </TouchableOpacity>
             </View>
 

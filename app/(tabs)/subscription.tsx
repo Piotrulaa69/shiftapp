@@ -32,7 +32,7 @@ export default function SubscriptionScreen() {
     setLoading(true);
     console.log('Querying subscriptions_api for restaurant:', restaurant.id);
     const { data, error } = await supabase
-      .from('subscriptions_api')
+      .from('subscriptions')
       .select('*')
       .eq('restaurant_id', restaurant.id)
       .order('created_at', { ascending: false })

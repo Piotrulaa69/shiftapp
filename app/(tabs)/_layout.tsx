@@ -29,6 +29,7 @@ const TAB_CONFIG: Record<string, { label: string; icon: string }> = {
   admin: { label: 'Zarządzanie', icon: 'settings' },
   documents: { label: 'Dokumenty', icon: 'folder-open' },
   'work-hub': { label: 'Zarządzanie', icon: 'settings' },
+  chat: { label: 'Chat', icon: 'chatbubbles' },
   // hidden tabs — keep for routing compatibility
   'schedule-ai': { label: 'Grafik AI', icon: 'sparkles' },
   'documents-ai': { label: 'Dokumenty AI', icon: 'document-text' },
@@ -46,6 +47,10 @@ const NAV_ITEMS_BASE = [
 const NAV_ITEMS_ADMIN_EXTRA: { key: string; route: any }[] = [
   { key: 'documents', route: '/documents' },
   { key: 'work-hub', route: '/work-hub' },
+];
+
+const NAV_ITEMS_CHAT: { key: string; route: any }[] = [
+  { key: 'chat', route: '/chat' },
 ];
 
 /* ─────────────── NOTIFICATION BELL ─────────────── */
@@ -101,8 +106,8 @@ function Sidebar() {
   const pathname = usePathname();
   const { logout, isOwner, isManager, restaurant, user } = useAuth();
   const NAV_ITEMS = (isOwner || isManager)
-    ? [...NAV_ITEMS_BASE, ...NAV_ITEMS_ADMIN_EXTRA]
-    : NAV_ITEMS_BASE;
+    ? [...NAV_ITEMS_BASE, ...NAV_ITEMS_ADMIN_EXTRA, ...NAV_ITEMS_CHAT]
+    : [...NAV_ITEMS_BASE, ...NAV_ITEMS_CHAT];
 
   return (
     <View style={sideStyles.sidebar}>
@@ -287,10 +292,12 @@ function MobileTabBar({ state, navigation }: BottomTabBarProps) {
     { icon: 'calendar-outline', label: 'Nowa zmiana', onPress: () => router.push('/schedule-editor' as any) },
     { icon: 'megaphone-outline', label: 'Nowe ogłoszenie', onPress: () => router.push('/(tabs)/announcements?new=true' as any) },
     { icon: 'list-outline', label: 'Nowe zadanie', onPress: () => router.push('/(tabs)/tasks?new=true' as any) },
+    { icon: 'chatbubbles-outline', label: 'Chat', onPress: () => router.push('/chat' as any) },
     { icon: 'folder-open-outline', label: 'Dokumenty', onPress: () => router.push('/documents' as any) },
   ];
 
   const employeeActions: FabAction[] = [
+    { icon: 'chatbubbles-outline', label: 'Chat', onPress: () => router.push('/chat' as any) },
     { icon: 'calendar-outline', label: 'Dostępność', onPress: () => router.push('/(tabs)/schedule' as any) },
     { icon: 'document-text-outline', label: 'Wniosek', onPress: () => router.push('/(tabs)/leave-requests' as any) },
     { icon: 'finger-print-outline', label: 'Zgłoszenie', onPress: () => router.push('/absence-request' as any) },

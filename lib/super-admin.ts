@@ -338,6 +338,31 @@ export async function upsertSubscription(sub: Subscription): Promise<boolean> {
   return true;
 }
 
+export async function deleteRestaurant(restaurantId: string): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.from('restaurants').delete().eq('id', restaurantId);
+  if (error) { console.error('deleteRestaurant', error); return { success: false, error: error.message }; }
+  return { success: true };
+}
+
+export async function disableRestaurantAccounts(restaurantId: string, disabled: boolean): Promise<boolean> {
+  const { error } = await supabase.from('profiles')
+    .update({ is_active: !disabled })
+    .eq('restaurant_id', restaurantId)
+    .neq('role', 'owner');
+  if (error) { console.error('disableRestaurantAccounts', error); return false; }
+  return true;
+}
+
+export async function markSubscriptionPaid(restaurantId: string): Promise<boolean> {
+  const today = new Date().toISOString().split('T')[0];
+  const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const { error } = await supabase.from('subscriptions')
+    .update({ status: 'active', last_payment_date: today, next_payment_date: nextMonth })
+    .eq('restaurant_id', restaurantId);
+  if (error) { console.error('markSubscriptionPaid', error); return false; }
+  return true;
+}
+
 export async function getSubscriptionsOverview(): Promise<{
   total: number; active: number; trial: number; overdue: number; cancelled: number;
   monthly_revenue: number;

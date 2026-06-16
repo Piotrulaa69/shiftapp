@@ -19,7 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileHeader from '../../components/MobileHeader';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
-import { assignEmployeeToGroup, createEmployeeGroup, createQuizQuestion, createTraining, deleteEmployeeGroup, deleteQuizQuestion, deleteTraining, generateInvitation, getAbsences, getEmployeeGroupsWithMembers, getEmployees, getInvitations, getLeaveRequests, getQuizQuestions, getTrainings, removeEmployee, removeEmployeeFromGroup, reviewAbsence, reviewLeaveRequestWithNotes, updateEmployeeGroup, updateRestaurant, updateTraining } from '../../lib/db';
+import { assignEmployeeToGroup, createEmployeeGroup, createQuizQuestion, createTraining, deleteEmployeeGroup, deleteQuizQuestion, deleteTraining, generateInvitation, getAbsences, getEmployeeGroupsWithMembers, getEmployeeLeaveQuota, getEmployees, getInvitations, getLeaveRequests, getQuizQuestions, getTrainings, removeEmployee, removeEmployeeFromGroup, reviewAbsence, reviewLeaveRequestWithNotes, setEmployeeLeaveQuota, updateEmployeeGroup, updateEmployeeRole, updateProfile, updateRestaurant, updateTraining } from '../../lib/db';
 import type { DbAbsence, DbEmployeeGroup, DbInvitation, DbLeaveRequest, DbProfile, DbTraining } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
@@ -448,9 +448,12 @@ export default function AdminScreen() {
                     setEmpPhone(emp.phone || '');
                     setEmpJobTitle(emp.job_title || 'Kelner');
                     setEmpRole(emp.role === 'manager' ? 'manager' : 'employee');
-                    setEmpLeaveDays('20'); // Default, would fetch from API
+                    // Load real leave quota from DB
+                    getEmployeeLeaveQuota(emp.id, new Date().getFullYear()).then((quota) => {
+                      setEmpLeaveDays(quota ? String(quota.total_days) : '20');
+                    });
                     setEmpLeaveTypeSettings([
-                      { type: 'annual', enabled: true, days: '20' },
+                      { type: 'annual', enabled: true, days: emp.job_title ? '20' : '20' },
                       { type: 'sick', enabled: true, days: '' },
                       { type: 'unpaid', enabled: true, days: '' },
                     ]);
@@ -1293,7 +1296,20 @@ export default function AdminScreen() {
                 style={s.saveBtn}
                 onPress={async () => {
                   if (!editingEmployee) return;
-                  // TODO: Save leave quota and type settings via API
+                  // Save profile fields
+                  await updateProfile(editingEmployee.id, {
+                    first_name: empFirstName.trim(),
+                    last_name: empLastName.trim(),
+                    job_title: empJobTitle.trim(),
+                    phone: empPhone.trim(),
+                  });
+                  // Save role if changed
+                  if ((editingEmployee.role === 'manager' ? 'manager' : 'employee') !== empRole) {
+                    await updateEmployeeRole(editingEmployee.id, empRole);
+                  }
+                  // Save leave quota
+                  const totalDays = parseInt(empLeaveDays) || 0;
+                  await setEmployeeLeaveQuota(editingEmployee.id, new Date().getFullYear(), { total_days: totalDays });
                   setShowEmployeeModal(false);
                   refresh();
                 }}

@@ -7,7 +7,7 @@ import MobileHeader from '../../components/MobileHeader';
 import { TasksSkeleton } from '../../components/Skeleton';
 import TimePickerRow from '../../components/TimePickerRow';
 import { useAuth } from '../../context/AuthContext';
-import { createTask, approveTask as dbApproveTask, deleteTask as dbDeleteTask, rejectTask as dbRejectTask, toggleTask as dbToggleTask, getEmployeeGroupsWithMembers, getEmployees, getMyGroupIds, getTasks, submitTaskForApproval } from '../../lib/db';
+import { createTask, approveTask as dbApproveTask, deleteTask as dbDeleteTask, rejectTask as dbRejectTask, toggleTask as dbToggleTask, getEmployeeGroupsWithMembers, getEmployees, getMyGroupIds, getTasks, submitTaskForApproval, updateTask } from '../../lib/db';
 import type { DbProfile, DbTask } from '../../lib/supabase';
 import { supabase } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
@@ -35,10 +35,11 @@ const TABS_EMPLOYEE: { key: string; label: string }[] = [
 
 const TAB_APPROVAL = { key: 'czeka_na_zatwierdzenie', label: 'Do zatwierdzenia' };
 
-function TaskCard({ task, onToggle, onDelete, onDetail, onStart, onFinish, assigneeName, groupName }: {
+function TaskCard({ task, onToggle, onDelete, onEdit, onDetail, onStart, onFinish, assigneeName, groupName }: {
   task: DbTask;
   onToggle: () => void;
   onDelete?: () => void;
+  onEdit?: () => void;
   onDetail?: () => void;
   onStart?: () => void;
   onFinish?: () => void;
@@ -156,6 +157,11 @@ function TaskCard({ task, onToggle, onDelete, onDetail, onStart, onFinish, assig
           <View style={[tStyles.checkbox, task.completed && tStyles.checkboxDone]}>
             {task.completed && <Ionicons name="checkmark" size={12} color={theme.colors.white} />}
           </View>
+          {onEdit && (
+            <TouchableOpacity onPress={(e) => { e.stopPropagation?.(); onEdit(); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ marginRight: 2 }}>
+              <Ionicons name="create-outline" size={16} color={theme.colors.primary} />
+            </TouchableOpacity>
+          )}
           {onDelete && (
             <TouchableOpacity onPress={(e) => { e.stopPropagation?.(); onDelete(); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Ionicons name="trash-outline" size={16} color={theme.colors.error} />
@@ -247,6 +253,7 @@ export default function TasksScreen() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<string>('all');
   const [showModal, setShowModal] = useState(false);
+  const [editingTask, setEditingTask] = useState<DbTask | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [detailTask, setDetailTask] = useState<DbTask | null>(null);
   const [showMineOnly, setShowMineOnly] = useState(false);
@@ -432,10 +439,42 @@ export default function TasksScreen() {
     await dbDeleteTask(id);
   };
 
+  const resetForm = () => {
+    setEditingTask(null);
+    setModalStep(1);
+    setNewTitle(''); setNewDesc(''); setNewTime('08:00'); setNewPriority('normalny'); setNewDuration('30'); setNewConfirm(null); setNewAssignedTo('ALL'); setNewAssignedGroup(null);
+    setCfgValueItems([]); setCfgCheckItems([]); setCfgPrompt('');
+    setIsRecurring(false); setRecurrencePattern('daily'); setRecurrenceEndDate(''); setSelectedDays([]);
+    setPoints('');
+    setTaskDate(''); setShowCustomDate(false); setCustomDateInput(''); setShowDatePicker(false);
+    setRecurrenceTime('10:00'); setRecurrenceEndNoLimit(true);
+  };
+
+  const openEditTask = (task: DbTask) => {
+    setEditingTask(task);
+    setNewTitle(task.title);
+    setNewDesc(task.description ?? '');
+    setNewTime(task.assigned_time ?? '08:00');
+    setNewPriority(task.priority as 'wysoki' | 'normalny' | 'niski');
+    setNewDuration(String(task.duration_min ?? 30));
+    setNewConfirm(task.confirmation_type ?? null);
+    setNewAssignedTo(task.assigned_to ?? 'ALL');
+    setNewAssignedGroup(task.target_group_id ?? null);
+    setPoints(String(task.points ?? 0));
+    setTaskDate(task.scheduled_date ?? '');
+    setShowCustomDate(!!task.scheduled_date);
+    setIsRecurring(task.is_recurring ?? false);
+    setRecurrencePattern(task.recurrence_pattern ?? 'daily');
+    setSelectedDays(task.recurrence_days ?? []);
+    setRecurrenceEndDate('');
+    setShowDatePicker(false);
+    setModalStep(1);
+    setShowModal(true);
+  };
+
   const handleCreate = async () => {
     if (!newTitle.trim()) return;
     setSaving(true);
-    // Allow group-only assignment - if group is selected, assigned_to can be null
     const assignTo = newAssignedTo === 'ALL' ? null : (newAssignedTo || null);
     let confirmationConfig: any = null;
     if (newConfirm === 'values' && cfgValueItems.length > 0) {
@@ -449,7 +488,7 @@ export default function TasksScreen() {
       ? (selectedDays.length > 0 ? selectedDays : [1])
       : null;
 
-    const created = await createTask(rid, {
+    const taskFields = {
       title: newTitle.trim(),
       description: newDesc.trim(),
       assigned_to: assignTo,
@@ -465,22 +504,32 @@ export default function TasksScreen() {
       recurrence_end_date: isRecurring && recurrenceEndDate ? recurrenceEndDate : null,
       points: canApprove && points ? parseInt(points) || 0 : 0,
       target_group_id: newAssignedGroup,
-    });
-    if (created) {
-      setTasks((prev) => [...prev, created]);
+    };
+
+    if (editingTask) {
+      // Edit mode
+      const updated = await updateTask(editingTask.id, taskFields);
+      if (updated) {
+        setTasks((prev) => prev.map((t) => t.id === editingTask.id ? updated : t));
+      } else {
+        Alert.alert('Błąd zapisu', 'Nie udało się zaktualizować zadania.');
+      }
+      setSaving(false);
+      if (!updated) return;
     } else {
-      Alert.alert('Błąd zapisu', 'Nie udało się dodać zadania. Sprawdź konsolę po szczegóły.');
+      // Create mode
+      const created = await createTask(rid, taskFields);
+      if (created) {
+        setTasks((prev) => [...prev, created]);
+      } else {
+        Alert.alert('Błąd zapisu', 'Nie udało się dodać zadania. Sprawdź konsolę po szczegóły.');
+      }
+      setSaving(false);
+      if (!created) return;
     }
-    setSaving(false);
-    if (!created) return;
+
     setShowModal(false);
-    setModalStep(1);
-    setNewTitle(''); setNewDesc(''); setNewTime('08:00'); setNewPriority('normalny'); setNewDuration('30'); setNewConfirm(null); setNewAssignedTo(''); setNewAssignedGroup(null);
-    setCfgValueItems([]); setCfgCheckItems([]); setCfgPrompt('');
-    setIsRecurring(false); setRecurrencePattern('daily'); setRecurrenceEndDate(''); setSelectedDays([]);
-    setPoints('');
-    setTaskDate(''); setShowCustomDate(false); setCustomDateInput(''); setShowDatePicker(false);
-    setRecurrenceTime('10:00'); setRecurrenceEndNoLimit(true);
+    resetForm();
   };
 
   if (loading) return (
@@ -494,11 +543,20 @@ export default function TasksScreen() {
   const progress = totalCount > 0 ? completedCount / totalCount : 0;
   const todoCount = tasks.filter((t) => !t.completed).length;
 
+  // Date window: employees see only tasks for today and tomorrow (or tasks with no date)
+  const today = todayStr();
+  const tomorrow = offsetDate(1);
+  const isInDateWindow = (t: DbTask) => {
+    if (!t.scheduled_date) return true; // tasks without a date always visible
+    return t.scheduled_date <= tomorrow; // today, yesterday (overdue), or tomorrow
+  };
+
   // Filter tasks: employees see tasks assigned to them OR to their groups
   const empFiltered = !canApprove
-    ? showMineOnly
-      ? tasks.filter((t) => t.assigned_to === user?.id || (t.target_group_id && myGroupIds.includes(t.target_group_id)))
-      : tasks.filter((t) => t.assigned_to === user?.id || (t.target_group_id && myGroupIds.includes(t.target_group_id)))
+    ? tasks.filter((t) =>
+        isInDateWindow(t) &&
+        (t.assigned_to === user?.id || (t.target_group_id && myGroupIds.includes(t.target_group_id)))
+      )
     : selectedEmployeeId
     ? tasks.filter((t) => t.assigned_to === selectedEmployeeId)
     : tasks;
@@ -695,14 +753,14 @@ export default function TasksScreen() {
                 const emp = employees.find((e) => e.id === t.assigned_to);
                 const name = emp ? `${emp.first_name} ${emp.last_name}` : undefined;
                 const group = t.target_group_id ? groups.find((g) => g.id === t.target_group_id) : undefined;
-                return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} onFinish={() => finishTask(t.id)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} groupName={group?.name} />;
+                return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={canApprove ? () => deleteTask(t.id) : undefined} onEdit={canApprove ? () => openEditTask(t) : undefined} onDetail={() => setDetailTask(t)} onFinish={() => finishTask(t.id)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} groupName={group?.name} />;
               })}
             </>
           )}
 
           {/* Do zrobienia - grouped by date */}
           {(() => {
-            const { groups: dateGroups, sortedKeys, today, tomorrow } = groupTasksByDate(doZrobienia);
+            const { groups: dateGroups, sortedKeys } = groupTasksByDate(doZrobienia);
             if (sortedKeys.length === 0) return null;
             return (
               <>
@@ -710,19 +768,35 @@ export default function TasksScreen() {
                   const dateTasks = dateGroups[dateKey];
                   const isToday = dateKey === today;
                   const isTomorrow = dateKey === tomorrow;
+                  const isPast = dateKey !== 'no-date' && dateKey < today;
                   const label = getDateLabel(dateKey, today, tomorrow);
                   return (
                     <View key={dateKey} style={idx > 0 || wTrakcie.length > 0 ? { marginTop: 12 } : {}}>
                       <View style={styles.sectionRow}>
-                        <View style={[styles.sectionDot, { backgroundColor: isToday ? theme.colors.error : isTomorrow ? theme.colors.orange : theme.colors.textMuted }]} />
-                        <Text style={[styles.sectionLabel, isToday && { color: theme.colors.error, fontWeight: '700' }]}>{label}</Text>
+                        <View style={[styles.sectionDot, { backgroundColor: isToday ? theme.colors.error : isPast ? theme.colors.error : isTomorrow ? theme.colors.orange : theme.colors.textMuted }]} />
+                        <Text style={[styles.sectionLabel, (isToday || isPast) && { color: theme.colors.error, fontWeight: '700' }]}>{label}</Text>
+                        {isToday && (
+                          <View style={styles.todayBadge}>
+                            <Text style={styles.todayBadgeText}>NA DZIŚ</Text>
+                          </View>
+                        )}
+                        {isPast && (
+                          <View style={[styles.todayBadge, { backgroundColor: theme.colors.errorLight }]}>
+                            <Text style={[styles.todayBadgeText, { color: theme.colors.error }]}>ZALEGŁE</Text>
+                          </View>
+                        )}
+                        {isTomorrow && (
+                          <View style={[styles.todayBadge, { backgroundColor: theme.colors.orangeLight }]}>
+                            <Text style={[styles.todayBadgeText, { color: theme.colors.orange }]}>JUTRO</Text>
+                          </View>
+                        )}
                         <Text style={styles.sectionCount}>{dateTasks.length}</Text>
                       </View>
                       {dateTasks.map((t) => {
                         const emp = employees.find((e) => e.id === t.assigned_to);
                         const name = emp ? `${emp.first_name} ${emp.last_name}` : undefined;
                         const group = t.target_group_id ? groups.find((g: any) => g.id === t.target_group_id) : undefined;
-                        return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} onStart={() => startTask(t.id)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} groupName={group?.name} />;
+                        return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={canApprove ? () => deleteTask(t.id) : undefined} onEdit={canApprove ? () => openEditTask(t) : undefined} onDetail={() => setDetailTask(t)} onStart={() => startTask(t.id)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} groupName={group?.name} />;
                       })}
                     </View>
                   );
@@ -742,7 +816,7 @@ export default function TasksScreen() {
                 const emp = employees.find((e) => e.id === t.assigned_to);
                 const name = emp ? `${emp.first_name} ${emp.last_name}` : undefined;
                 const group = t.target_group_id ? groups.find((g) => g.id === t.target_group_id) : undefined;
-                return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={isOwner ? () => deleteTask(t.id) : undefined} onDetail={() => setDetailTask(t)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} groupName={group?.name} />;
+                return <TaskCard key={t.id} task={t} onToggle={() => toggleTask(t.id)} onDelete={canApprove ? () => deleteTask(t.id) : undefined} onEdit={canApprove ? () => openEditTask(t) : undefined} onDetail={() => setDetailTask(t)} assigneeName={canApprove && !selectedEmployeeId ? name : undefined} groupName={group?.name} />;
               })}
             </>
           )}
@@ -815,8 +889,8 @@ export default function TasksScreen() {
             {modalStep === 1 && (
               <>
                 <View style={mStyles.header}>
-                  <Text style={mStyles.headerTitle}>Nowe zadanie</Text>
-                  <TouchableOpacity onPress={() => setShowModal(false)}>
+                  <Text style={mStyles.headerTitle}>{editingTask ? 'Edytuj zadanie' : 'Nowe zadanie'}</Text>
+                  <TouchableOpacity onPress={() => { setShowModal(false); resetForm(); }}>
                     <Ionicons name="close" size={24} color={theme.colors.text} />
                   </TouchableOpacity>
                 </View>
@@ -1570,6 +1644,8 @@ const styles = StyleSheet.create({
   filterToggleActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primary },
   filterToggleText: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary },
   filterToggleTextActive: { color: '#fff' },
+  todayBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: theme.colors.error, marginLeft: 6 },
+  todayBadgeText: { fontSize: 10, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
 });
 
 const mStyles = StyleSheet.create({

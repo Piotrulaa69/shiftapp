@@ -9,13 +9,18 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import {
+    createPromoCode,
     createRestaurantWithInvite,
+    deleteRestaurant,
+    disableRestaurantAccounts,
     getAllRestaurantsWithStats,
     getPromoCodes,
     getRecentActivity,
     getSubscriptions,
     getSubscriptionsOverview,
     getSystemStats,
+    markSubscriptionPaid,
+    togglePromoCode,
     upsertSubscription,
     type PromoCode,
     type RestaurantWithStats,
@@ -40,14 +45,13 @@ const STATUS_CFG: Record<SubscriptionStatus, { label: string; color: string; bg:
   paused:    { label: 'Wstrzym.',  color: '#0891B2', bg: '#E0F2FE' },
 };
 
-type NavItem = 'dashboard' | 'restaurants' | 'subscriptions' | 'users' | 'activity' | 'settings';
+type NavItem = 'dashboard' | 'restaurants' | 'subscriptions' | 'users' | 'settings';
 
 const NAV: { key: NavItem; icon: string; label: string }[] = [
   { key: 'dashboard',     icon: 'grid',          label: 'Panel główny'  },
   { key: 'restaurants',   icon: 'storefront',    label: 'Restauracje'   },
   { key: 'subscriptions', icon: 'card',          label: 'Subskrypcje'   },
   { key: 'users',         icon: 'people',        label: 'Użytkownicy'   },
-  { key: 'activity',      icon: 'pulse',         label: 'Aktywność'     },
   { key: 'settings',      icon: 'settings',      label: 'Ustawienia'    },
 ];
 
@@ -75,7 +79,6 @@ function MobileFab({ nav, setNav }: { nav: NavItem; setNav: (n: NavItem) => void
     { icon: 'storefront-outline', label: 'Restauracje', key: 'restaurants' as NavItem },
     { icon: 'card-outline', label: 'Subskrypcje', key: 'subscriptions' as NavItem },
     { icon: 'people-outline', label: 'Użytkownicy', key: 'users' as NavItem },
-    { icon: 'pulse-outline', label: 'Aktywność', key: 'activity' as NavItem },
     { icon: 'settings-outline', label: 'Ustawienia', key: 'settings' as NavItem },
   ];
 
@@ -230,8 +233,7 @@ export default function SuperAdminDashboard() {
       case 'restaurants':   return <RestaurantsTab restaurants={filtered} search={search} setSearch={setSearch} onAdd={() => setShowCreate(true)} onSelectRestaurant={setSelectedRestaurant} />;
       case 'subscriptions': return <SubscriptionsTab subscriptions={subscriptions} overview={subOverview} restaurants={restaurants} onRefresh={loadAll} />;
       case 'users':         return <UsersTab restaurants={restaurants} />;
-      case 'activity':      return <ActivityTab activity={activity} />;
-      case 'settings':      return <SettingsTab />;
+      case 'settings':      return <SettingsTab promoCodes={promoCodes} onRefresh={loadAll} userId={user?.id ?? ''} />;
     }
   };
 
@@ -746,8 +748,6 @@ function RestaurantDetailModal({ visible, restaurant, onClose, onRefresh }: {
 }) {
   const { enterRestaurantMode } = useAuth();
   const router = useRouter();
-  const [entering, setEntering] = useState(false);
-
   const handleEnter = async () => {
     if (!restaurant) return;
     setEntering(true);
@@ -761,9 +761,45 @@ function RestaurantDetailModal({ visible, restaurant, onClose, onRefresh }: {
     }
   };
 
+  const [entering, setEntering] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
   if (!restaurant) return null;
 
   const plan = PLAN_CFG[restaurant.plan as keyof typeof PLAN_CFG] ?? PLAN_CFG.basic;
+
+  const handleMarkPaid = async () => {
+    setActionLoading('paid');
+    await markSubscriptionPaid(restaurant.id);
+    setActionLoading(null);
+    onRefresh();
+    Alert.alert('Gotowe', 'Subskrypcja oznaczona jako opłacona (aktywna).');
+  };
+
+  const handleDisable = () => {
+    Alert.alert('Wyłącz konto', 'Wyłączyć dostęp pracownikom tej restauracji?', [
+      { text: 'Anuluj', style: 'cancel' },
+      { text: 'Wyłącz', style: 'destructive', onPress: async () => {
+        setActionLoading('disable');
+        await disableRestaurantAccounts(restaurant.id, true);
+        setActionLoading(null);
+        Alert.alert('Gotowe', 'Dostęp pracowników został wyłączony.');
+      }},
+    ]);
+  };
+
+  const handleDelete = () => {
+    Alert.alert('Usuń restaurację', `Na pewno usunąć "${restaurant.name}"? Tej operacji nie można cofnąć.`, [
+      { text: 'Anuluj', style: 'cancel' },
+      { text: 'Usuń', style: 'destructive', onPress: async () => {
+        setActionLoading('delete');
+        const result = await deleteRestaurant(restaurant.id);
+        setActionLoading(null);
+        if (result.success) { onClose(); onRefresh(); }
+        else Alert.alert('Błąd', result.error ?? 'Nie udało się usunąć restauracji.');
+      }},
+    ]);
+  };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -833,13 +869,40 @@ function RestaurantDetailModal({ visible, restaurant, onClose, onRefresh }: {
               <TouchableOpacity
                 style={[s.createBtn, { backgroundColor: '#2563EB', gap: 10 }]}
                 onPress={handleEnter}
-                disabled={entering}
+                disabled={entering || !!actionLoading}
                 activeOpacity={0.85}
               >
                 {entering
                   ? <ActivityIndicator size="small" color="#fff" />
                   : <Ionicons name="shield-checkmark-outline" size={18} color="#fff" />}
                 <Text style={s.createBtnText}>{entering ? 'Wczytywanie...' : `Wejdź jako wsparcie → ${restaurant.name}`}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.createBtn, { backgroundColor: '#059669', gap: 10, marginTop: 8 }]}
+                onPress={handleMarkPaid}
+                disabled={!!actionLoading}
+                activeOpacity={0.85}
+              >
+                {actionLoading === 'paid' ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />}
+                <Text style={s.createBtnText}>Oznacz jako opłacone</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.createBtn, { backgroundColor: '#D97706', gap: 10, marginTop: 8 }]}
+                onPress={handleDisable}
+                disabled={!!actionLoading}
+                activeOpacity={0.85}
+              >
+                {actionLoading === 'disable' ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="ban-outline" size={18} color="#fff" />}
+                <Text style={s.createBtnText}>Wyłącz dostęp pracownikom</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.createBtn, { backgroundColor: '#DC2626', gap: 10, marginTop: 8 }]}
+                onPress={handleDelete}
+                disabled={!!actionLoading}
+                activeOpacity={0.85}
+              >
+                {actionLoading === 'delete' ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="trash-outline" size={18} color="#fff" />}
+                <Text style={s.createBtnText}>Usuń restaurację</Text>
               </TouchableOpacity>
               <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 6, textAlign: 'center' }}>
                 Przejdziesz do dashboardu tej restauracji. Widoczny będzie pomarańczowy pasek wsparcia.
@@ -853,20 +916,34 @@ function RestaurantDetailModal({ visible, restaurant, onClose, onRefresh }: {
 }
 
 // ── TAB: Settings ───────────────────────────────────────
-function SettingsTab() {
+function SettingsTab({ promoCodes, onRefresh, userId }: { promoCodes: PromoCode[]; onRefresh: () => void; userId: string }) {
   const [showPromoModal, setShowPromoModal] = useState(false);
   const [promoCode, setPromoCode] = useState('');
   const [promoDiscount, setPromoDiscount] = useState('10');
   const [promoMaxUses, setPromoMaxUses] = useState('');
-  const [promoType, setPromoType] = useState<'referral' | 'marketing' | 'partner'>('referral');
+  const [promoValidUntil, setPromoValidUntil] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleCreatePromo = async () => {
-    if (!promoCode.trim()) return;
+    if (!promoCode.trim()) { Alert.alert('Błąd', 'Wpisz kod'); return; }
     setLoading(true);
-    // TODO: Implement promo code creation via Supabase
+    const today = new Date().toISOString().split('T')[0];
+    const result = await createPromoCode(
+      promoCode.trim().toUpperCase(),
+      parseInt(promoDiscount) || 10,
+      today,
+      promoValidUntil.trim() || null,
+      promoMaxUses ? parseInt(promoMaxUses) : null,
+      userId
+    );
     setLoading(false);
-    Alert.alert('Info', 'Funkcja tworzenia kodów promocyjnych wymaga implementacji');
+    if (result) {
+      setShowPromoModal(false);
+      setPromoCode(''); setPromoDiscount('10'); setPromoMaxUses(''); setPromoValidUntil('');
+      onRefresh();
+    } else {
+      Alert.alert('Błąd', 'Nie udało się utworzyć kodu');
+    }
   };
 
   return (
@@ -887,12 +964,33 @@ function SettingsTab() {
 
       <View style={s.section}>
         <View style={s.sectionHeader}>
-          <Text style={s.sectionTitle}>Kody promocyjne</Text>
-          <TouchableOpacity onPress={() => setShowPromoModal(true)} activeOpacity={0.7}><Text style={s.sectionLink}>Nowy kod →</Text></TouchableOpacity>
+          <Text style={s.sectionTitle}>Kody promocyjne / polecające</Text>
+          <TouchableOpacity onPress={() => setShowPromoModal(true)} activeOpacity={0.7}><Text style={s.sectionLink}>+ Nowy kod</Text></TouchableOpacity>
         </View>
-        <Text style={{ fontSize: 12, color: theme.colors.textMuted, textAlign: 'center', padding: 20 }}>
-          Brak aktywnych kodów promocyjnych
-        </Text>
+        {promoCodes.length === 0 ? (
+          <Text style={{ fontSize: 12, color: theme.colors.textMuted, textAlign: 'center', padding: 20 }}>Brak kodów</Text>
+        ) : (
+          promoCodes.map((pc) => (
+            <View key={pc.id} style={[s.restRow, { gap: 8 }]}>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: '#7C3AED', letterSpacing: 1 }}>{pc.code}</Text>
+                  <View style={{ backgroundColor: pc.is_active ? '#D1FAE5' : '#F3F4F6', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 }}>
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: pc.is_active ? '#059669' : '#6B7280' }}>{pc.is_active ? 'Aktywny' : 'Wyłączony'}</Text>
+                  </View>
+                </View>
+                <Text style={s.restMeta}>{pc.discount_percent}% rabatu · {pc.used_count ?? 0}/{pc.max_uses ?? '∞'} użyć</Text>
+              </View>
+              <TouchableOpacity
+                onPress={async () => { await togglePromoCode(pc.id!, !pc.is_active); onRefresh(); }}
+                style={{ padding: 8 }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name={pc.is_active ? 'toggle' : 'toggle-outline'} size={28} color={pc.is_active ? '#059669' : '#6B7280'} />
+              </TouchableOpacity>
+            </View>
+          ))
+        )}
       </View>
 
       <View style={{ backgroundColor: '#FEF3C7', borderRadius: 12, padding: 14 }}>
@@ -906,7 +1004,7 @@ function SettingsTab() {
           3. Wykonaj w SQL Editor:{'\n\n'}
           {'  '}INSERT INTO profiles (id, is_super_admin, first_name, last_name,{'\n'}
           {'  '}role, job_title, avatar_color) VALUES{'\n'}
-          {'  '}('&lt;UUID&gt;', true, 'ShiftApp', 'Team', 'owner', 'Super Admin', '#7C3AED');
+          {'  '}{'(\'<UUID>\', true, \'ShiftApp\', \'Team\', \'owner\', \'Super Admin\', \'#7C3AED\');'}
         </Text>
       </View>
 
@@ -919,24 +1017,15 @@ function SettingsTab() {
               <TouchableOpacity onPress={() => setShowPromoModal(false)} activeOpacity={0.7}><Ionicons name="close" size={22} color={theme.colors.textMuted} /></TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={s.formLabel}>Kod</Text>
+              <Text style={s.formLabel}>Kod (zostanie zamieniony na wielkie litery)</Text>
               <View style={[s.inputRow, { marginBottom: 14 }]}>
                 <Ionicons name="pricetag" size={16} color={theme.colors.textMuted} />
-                <TextInput style={s.formInput} value={promoCode} onChangeText={setPromoCode} placeholder="np. SUMMER2024" placeholderTextColor={theme.colors.textMuted} autoCapitalize="characters" />
-              </View>
-
-              <Text style={s.formLabel}>Typ</Text>
-              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
-                {(['referral', 'marketing', 'partner'] as const).map(t => (
-                  <TouchableOpacity key={t} style={[s.filterChip, promoType === t && s.filterChipActive]} onPress={() => setPromoType(t)} activeOpacity={0.7}>
-                    <Text style={[s.filterText, promoType === t && s.filterTextActive]}>{t === 'referral' ? 'Polecenie' : t === 'marketing' ? 'Marketing' : 'Partner'}</Text>
-                  </TouchableOpacity>
-                ))}
+                <TextInput style={s.formInput} value={promoCode} onChangeText={setPromoCode} placeholder="np. LATO2026" placeholderTextColor={theme.colors.textMuted} autoCapitalize="characters" />
               </View>
 
               <Text style={s.formLabel}>Rabat (%)</Text>
               <View style={[s.inputRow, { marginBottom: 14 }]}>
-                <Ionicons name="pricetag" size={16} color={theme.colors.textMuted} />
+                <Ionicons name="pricetag-outline" size={16} color={theme.colors.textMuted} />
                 <TextInput style={s.formInput} value={promoDiscount} keyboardType="numeric" onChangeText={setPromoDiscount} placeholder="10" placeholderTextColor={theme.colors.textMuted} />
               </View>
 
@@ -944,6 +1033,12 @@ function SettingsTab() {
               <View style={[s.inputRow, { marginBottom: 14 }]}>
                 <Ionicons name="people" size={16} color={theme.colors.textMuted} />
                 <TextInput style={s.formInput} value={promoMaxUses} keyboardType="numeric" onChangeText={setPromoMaxUses} placeholder="np. 100" placeholderTextColor={theme.colors.textMuted} />
+              </View>
+
+              <Text style={s.formLabel}>Ważny do (YYYY-MM-DD, opcjonalne)</Text>
+              <View style={[s.inputRow, { marginBottom: 20 }]}>
+                <Ionicons name="calendar-outline" size={16} color={theme.colors.textMuted} />
+                <TextInput style={s.formInput} value={promoValidUntil} onChangeText={setPromoValidUntil} placeholder="np. 2026-12-31" placeholderTextColor={theme.colors.textMuted} />
               </View>
 
               <TouchableOpacity style={[s.createBtn, loading && { opacity: 0.6 }]} onPress={handleCreatePromo} disabled={loading} activeOpacity={0.85}>

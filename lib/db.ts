@@ -167,6 +167,36 @@ export async function deleteTask(taskId: string): Promise<boolean> {
   return !error;
 }
 
+export async function updateTask(
+  taskId: string,
+  fields: {
+    title?: string;
+    description?: string;
+    assigned_to?: string | null;
+    assigned_time?: string;
+    scheduled_date?: string | null;
+    priority?: 'wysoki' | 'normalny' | 'niski';
+    duration_min?: number;
+    confirmation_type?: 'photo' | 'values' | 'description' | null;
+    confirmation_config?: any;
+    is_recurring?: boolean;
+    recurrence_pattern?: 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom' | null;
+    recurrence_days?: number[] | null;
+    recurrence_end_date?: string | null;
+    target_group_id?: string | null;
+    points?: number;
+  }
+): Promise<DbTask | null> {
+  const { data, error } = await supabase
+    .from('tasks')
+    .update(fields)
+    .eq('id', taskId)
+    .select()
+    .single();
+  if (error) { console.error('updateTask', error); return null; }
+  return data as DbTask;
+}
+
 // ─── Trainings ────────────────────────────────────────────────────────────────
 
 export async function getTrainings(restaurantId: string): Promise<DbTraining[]> {
@@ -1128,6 +1158,12 @@ export async function upsertNotifPrefs(userId: string, prefs: Record<string, str
 }
 
 // ─── Update profile ────────────────────────────────────────────────────────────
+
+export async function updateEmployeeRole(userId: string, role: 'employee' | 'manager'): Promise<boolean> {
+  const { error } = await supabase.from('profiles').update({ role }).eq('id', userId);
+  if (error) { console.error('updateEmployeeRole', error); return false; }
+  return true;
+}
 
 export async function updateProfile(
   userId: string,
