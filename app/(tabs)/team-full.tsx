@@ -5,7 +5,7 @@ import { ActivityIndicator, Clipboard, Modal, Platform, ScrollView, Share, Style
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
-import { generateInvitation, getEmployees, getPointsForEmployee, updateProfile } from '../../lib/db';
+import { generateInvitation, getEmployees, getPointsForEmployee, updateEmployeeRole, updateProfile } from '../../lib/db';
 import type { DbProfile } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
@@ -42,6 +42,7 @@ export default function TeamFullScreen() {
   const [editMaxMonthly, setEditMaxMonthly] = useState('');
   const [editActive, setEditActive] = useState(true);
   const [editHourlyRate, setEditHourlyRate] = useState('');
+  const [editRole, setEditRole] = useState<'employee' | 'manager'>('employee');
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -71,6 +72,7 @@ export default function TeamFullScreen() {
     setEditMaxMonthly(emp.max_hours_monthly?.toString() || '');
     setEditActive(emp.is_active !== false);
     setEditHourlyRate((emp as any).hourly_rate != null ? String((emp as any).hourly_rate) : '');
+    setEditRole(emp.role === 'manager' ? 'manager' : 'employee');
     const pointsLedger = await getPointsForEmployee(rid, emp.id);
     const totalPoints = pointsLedger.reduce((sum, p) => sum + (p.points || 0), 0);
     setEmpPoints(totalPoints);
@@ -79,17 +81,22 @@ export default function TeamFullScreen() {
   const saveEmployee = async () => {
     if (!selectedEmp) return;
     setSaving(true);
-    const success = await updateProfile(selectedEmp.id, {
-      job_title: editJobTitle,
-      phone: editPhone,
-      employment_type: editEmpType,
-      min_hours_weekly: editMinWeekly ? parseInt(editMinWeekly) : null,
-      max_hours_weekly: editMaxWeekly ? parseInt(editMaxWeekly) : null,
-      min_hours_monthly: editMinMonthly ? parseInt(editMinMonthly) : null,
-      max_hours_monthly: editMaxMonthly ? parseInt(editMaxMonthly) : null,
-      is_active: editActive,
-      hourly_rate: editHourlyRate ? parseFloat(editHourlyRate) : null,
-    });
+    const [success] = await Promise.all([
+      updateProfile(selectedEmp.id, {
+        job_title: editJobTitle,
+        phone: editPhone,
+        employment_type: editEmpType,
+        min_hours_weekly: editMinWeekly ? parseInt(editMinWeekly) : null,
+        max_hours_weekly: editMaxWeekly ? parseInt(editMaxWeekly) : null,
+        min_hours_monthly: editMinMonthly ? parseInt(editMinMonthly) : null,
+        max_hours_monthly: editMaxMonthly ? parseInt(editMaxMonthly) : null,
+        is_active: editActive,
+        hourly_rate: editHourlyRate ? parseFloat(editHourlyRate) : null,
+      }),
+      selectedEmp.role !== 'owner' && editRole !== (selectedEmp.role === 'manager' ? 'manager' : 'employee')
+        ? updateEmployeeRole(selectedEmp.id, editRole)
+        : Promise.resolve(true),
+    ]);
     setSaving(false);
     if (success) {
       setEditing(false);
@@ -359,7 +366,26 @@ export default function TeamFullScreen() {
                     <TextInput style={mStyles.input} value={editMaxMonthly} onChangeText={setEditMaxMonthly} placeholder="np. 160" placeholderTextColor={theme.colors.textMuted} keyboardType="number-pad" />
                     <Text style={mStyles.fieldLabel}>Stawka godzinowa (zł/h)</Text>
                     <TextInput style={mStyles.input} value={editHourlyRate} onChangeText={setEditHourlyRate} placeholder="np. 25.00" placeholderTextColor={theme.colors.textMuted} keyboardType="decimal-pad" />
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 }}>
+                    {selectedEmp?.role !== 'owner' && (
+                      <>
+                        <Text style={mStyles.fieldLabel}>Rola</Text>
+                        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                          {(['employee', 'manager'] as const).map((r) => (
+                            <TouchableOpacity key={r} style={[mStyles.chip, editRole === r && mStyles.chipActive]} onPress={() => setEditRole(r)} activeOpacity={0.7}>
+                              <Ionicons name={r === 'manager' ? 'shield-outline' : 'person-outline'} size={14} color={editRole === r ? theme.colors.primary : theme.colors.textMuted} />
+                              <Text style={[mStyles.chipText, editRole === r && mStyles.chipTextActive]}>{r === 'manager' ? 'Manager' : 'Pracownik'}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                        {editRole === 'manager' && (
+                          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', backgroundColor: '#EFF6FF', borderRadius: 10, padding: 10, marginBottom: 12 }}>
+                            <Ionicons name="information-circle-outline" size={16} color={theme.colors.primary} />
+                            <Text style={{ fontSize: 12, color: theme.colors.primary, flex: 1, lineHeight: 18 }}>Manager ma dostęp do zarządzania grafikiem, zadaniami i zespołem.</Text>
+                          </View>
+                        )}
+                      </>
+                    )}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 }}>
                       <TouchableOpacity onPress={() => setEditActive(!editActive)} style={[mStyles.toggle, editActive ? mStyles.toggleOn : mStyles.toggleOff]}>
                         <View style={[mStyles.toggleDot, editActive && mStyles.toggleDotOn]} />
                       </TouchableOpacity>
@@ -399,6 +425,14 @@ export default function TeamFullScreen() {
                     <View style={mStyles.fieldRow}>
                       <Text style={mStyles.fieldLabel}>Stawka godzinowa</Text>
                       <Text style={mStyles.fieldValue}>{(selectedEmp as any)?.hourly_rate != null ? `${(selectedEmp as any).hourly_rate} zł/h` : 'Nie ustawiono'}</Text>
+                    </View>
+                    <View style={mStyles.fieldRow}>
+                      <Text style={mStyles.fieldLabel}>Rola</Text>
+                      <View style={[mStyles.statusBadge, { backgroundColor: selectedEmp?.role === 'manager' ? theme.colors.primaryLight : theme.colors.surface }]}>
+                        <Text style={[mStyles.statusText, { color: selectedEmp?.role === 'manager' ? theme.colors.primary : theme.colors.textSecondary }]}>
+                          {ROLE_LABELS[selectedEmp?.role ?? ''] ?? selectedEmp?.role}
+                        </Text>
+                      </View>
                     </View>
                     <View style={mStyles.fieldRow}>
                       <Text style={mStyles.fieldLabel}>Status</Text>
