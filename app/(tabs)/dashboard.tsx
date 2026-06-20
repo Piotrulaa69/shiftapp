@@ -552,7 +552,7 @@ export default function DashboardScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.supportTitle}>Potrzebujesz pomocy?</Text>
-            <Text style={styles.supportSub}>Zadzwoń: <Text style={{ fontWeight: '800' }}>+48 123 456 789</Text> · Pon–Pt 8–18</Text>
+            <Text style={styles.supportSub}>Zadzwoń: <Text style={{ fontWeight: '800' }}>884 184 352</Text> · Pon–Pt 8–18</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color="#0284C7" />
         </TouchableOpacity>

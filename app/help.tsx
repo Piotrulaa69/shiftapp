@@ -92,7 +92,7 @@ export default function HelpScreen() {
               <Ionicons name="call-outline" size={22} color="#2563EB" />
             </View>
             <Text style={s.contactCardTitle}>Telefon</Text>
-            <Text style={s.contactCardValue}>+48 123 456 789</Text>
+            <Text style={s.contactCardValue}>884 184 352</Text>
             <Text style={s.contactCardSub}>{CONTACT_HOURS}</Text>
           </View>
 
@@ -139,7 +139,7 @@ export default function HelpScreen() {
             Napisz do nas na adres{' '}
             <Text style={s.bottomCtaLink}>pomoc@shiftapp.pl</Text>
             {' '}lub zadzwoń na{' '}
-            <Text style={s.bottomCtaLink}>+48 123 456 789</Text>.
+            <Text style={s.bottomCtaLink}>884 184 352</Text>.
             Nasz zespół odpowie najszybciej jak to możliwe.
           </Text>
         </View>
