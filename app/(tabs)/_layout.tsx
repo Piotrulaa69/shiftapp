@@ -158,6 +158,10 @@ function Sidebar() {
           </TouchableOpacity>
           <NotificationBell />
         </View>
+        <TouchableOpacity style={sideStyles.sideActionBtn} onPress={() => router.push('/help' as any)} activeOpacity={0.7}>
+          <Ionicons name="headset-outline" size={18} color={theme.colors.primary} />
+          <Text style={sideStyles.sideActionText}>Pomoc i kontakt</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={sideStyles.logoutBtn} onPress={logout} activeOpacity={0.7}>
           <Ionicons name="log-out-outline" size={18} color={theme.colors.textMuted} />
           <Text style={sideStyles.logoutText}>Wyloguj</Text>
@@ -294,6 +298,7 @@ function MobileTabBar({ state, navigation }: BottomTabBarProps) {
     { icon: 'list-outline', label: 'Nowe zadanie', onPress: () => router.push('/(tabs)/tasks?new=true' as any) },
     { icon: 'chatbubbles-outline', label: 'Chat', onPress: () => router.push('/chat' as any) },
     { icon: 'folder-open-outline', label: 'Dokumenty', onPress: () => router.push('/documents' as any) },
+    { icon: 'headset-outline', label: 'Pomoc i kontakt', onPress: () => router.push('/help' as any) },
   ];
 
   const employeeActions: FabAction[] = [
@@ -302,6 +307,7 @@ function MobileTabBar({ state, navigation }: BottomTabBarProps) {
     { icon: 'document-text-outline', label: 'Wniosek', onPress: () => router.push('/(tabs)/leave-requests' as any) },
     { icon: 'finger-print-outline', label: 'Zgłoszenie', onPress: () => router.push('/absence-request' as any) },
     { icon: 'folder-open-outline', label: 'Dokumenty', onPress: () => router.push('/documents' as any) },
+    { icon: 'headset-outline', label: 'Pomoc i kontakt', onPress: () => router.push('/help' as any) },
   ];
 
   const actions = isAdmin ? adminActions : employeeActions;

@@ -545,6 +545,18 @@ export default function DashboardScreen() {
           </>
         )}
 
+        {/* Support banner */}
+        <TouchableOpacity style={styles.supportBanner} onPress={() => router.push('/help' as any)} activeOpacity={0.85}>
+          <View style={styles.supportIconBox}>
+            <Ionicons name="headset-outline" size={20} color="#0284C7" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.supportTitle}>Potrzebujesz pomocy?</Text>
+            <Text style={styles.supportSub}>Zadzwoń: <Text style={{ fontWeight: '800' }}>+48 123 456 789</Text> · Pon–Pt 8–18</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color="#0284C7" />
+        </TouchableOpacity>
+
         {!isDesktop && (
           <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
             <Ionicons name="log-out-outline" size={16} color={theme.colors.textMuted} />
@@ -648,4 +660,19 @@ const styles = StyleSheet.create({
 
   logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 24, gap: 6 },
   logoutText: { fontSize: 13, color: theme.colors.textMuted },
+
+  supportBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#F0F9FF', borderRadius: 14,
+    borderWidth: 1, borderColor: '#BAE6FD',
+    padding: 14, marginTop: 16, marginBottom: 4,
+  },
+  supportIconBox: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: '#E0F2FE',
+    alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  },
+  supportTitle: { fontSize: 13, fontWeight: '700', color: '#0369A1', marginBottom: 2 },
+  supportSub: { fontSize: 12, color: '#0284C7' },
 });

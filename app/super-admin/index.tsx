@@ -967,6 +967,15 @@ function SettingsTab({ promoCodes, onRefresh, userId }: { promoCodes: PromoCode[
           <Text style={s.sectionTitle}>Kody promocyjne / polecające</Text>
           <TouchableOpacity onPress={() => setShowPromoModal(true)} activeOpacity={0.7}><Text style={s.sectionLink}>+ Nowy kod</Text></TouchableOpacity>
         </View>
+        <View style={{ backgroundColor: '#F5F3FF', borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#DDD6FE' }}>
+          <Text style={{ fontSize: 12, fontWeight: '700', color: '#7C3AED', marginBottom: 4 }}>Jak działa program polecający?</Text>
+          <Text style={{ fontSize: 12, color: '#6D28D9', lineHeight: 18 }}>
+            1. Tworzysz kod (np. PARTNER20) z % zniżki i opcjonalnym limitem użyć / datą ważności.{'\n'}
+            2. Osoba rejestrująca nową restaurację wpisuje kod w formularzu rejestracji.{'\n'}
+            3. Kod automatycznie aplikuje rabat na subskrypcję i zwiększa licznik użyć.{'\n'}
+            4. Możesz w dowolnym momencie dezaktywować kod przełącznikiem.
+          </Text>
+        </View>
         {promoCodes.length === 0 ? (
           <Text style={{ fontSize: 12, color: theme.colors.textMuted, textAlign: 'center', padding: 20 }}>Brak kodów</Text>
         ) : (

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { createLeaveRequest, deleteLeaveRequest, ensureDefaultLeaveTypes, getEmployees, getLeaveRequests, reviewLeaveRequest, updateLeaveRequest } from '../../lib/db';
+import { createLeaveRequest, deleteLeaveRequest, ensureDefaultLeaveTypes, getEmployeeLeaveQuota, getEmployees, getLeaveRequests, reviewLeaveRequest, updateLeaveRequest } from '../../lib/db';
 import type { DbLeaveRequest, DbLeaveType, DbProfile } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
@@ -113,6 +113,7 @@ export default function LeaveRequestsScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
 
+  const [myLeaveQuotaDays, setMyLeaveQuotaDays] = useState<number | null>(null);
   const [requests, setRequests] = useState<DbLeaveRequest[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<DbLeaveType[]>([]); // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _ = useMemo(() => null, []);
@@ -155,12 +156,14 @@ export default function LeaveRequestsScreen() {
   const load = useCallback(async () => {
     if (!rid || !user) return;
     setLoading(true);
-    const [reqs, types] = await Promise.all([
+    const [reqs, types, quota] = await Promise.all([
       getLeaveRequests(rid, user.id),
       ensureDefaultLeaveTypes(rid),
+      getEmployeeLeaveQuota(user.id, new Date().getFullYear()),
     ]);
     setRequests(reqs);
     setLeaveTypes(types);
+    setMyLeaveQuotaDays(quota ? quota.total_days : null);
     if (canManage) {
       const [allReqs, emps] = await Promise.all([getLeaveRequests(rid), getEmployees(rid)]);
       setTeamRequests(allReqs);
@@ -275,10 +278,12 @@ export default function LeaveRequestsScreen() {
           <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Wnioski urlopowe</Text>
-        <TouchableOpacity onPress={openCreate} style={styles.addBtn}>
-          <Ionicons name="add" size={20} color={theme.colors.white} />
-          <Text style={styles.addBtnText}>Nowy</Text>
-        </TouchableOpacity>
+        {(canManage || myLeaveQuotaDays === null || myLeaveQuotaDays > 0) && (
+          <TouchableOpacity onPress={openCreate} style={styles.addBtn}>
+            <Ionicons name="add" size={20} color={theme.colors.white} />
+            <Text style={styles.addBtnText}>Nowy</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {canManage && (
@@ -290,6 +295,16 @@ export default function LeaveRequestsScreen() {
               </Text>
             </TouchableOpacity>
           ))}
+        </View>
+      )}
+
+      {/* No quota banner for employees */}
+      {!canManage && myLeaveQuotaDays !== null && myLeaveQuotaDays === 0 && (
+        <View style={styles.noQuotaBanner}>
+          <Ionicons name="information-circle-outline" size={18} color="#92400E" />
+          <Text style={styles.noQuotaText}>
+            Nie masz przypisanych dni urlopowych. Skontaktuj się z managerem.
+          </Text>
         </View>
       )}
 
@@ -717,6 +732,13 @@ const styles = StyleSheet.create({
   filterActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
   filterText: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary },
   filterTextActive: { color: theme.colors.white },
+  noQuotaBanner: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    backgroundColor: '#FFFBEB', borderRadius: 12,
+    borderWidth: 1, borderColor: '#FDE68A',
+    padding: 12, marginHorizontal: 16, marginBottom: 8,
+  },
+  noQuotaText: { flex: 1, fontSize: 13, color: '#92400E', lineHeight: 19 },
 });
 
 const calSt = StyleSheet.create({

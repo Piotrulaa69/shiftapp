@@ -24,13 +24,8 @@ export default function SubscriptionScreen() {
   const loadedRestaurantId = useRef<string | null>(null);
 
   const loadSubscription = useCallback(async () => {
-    console.log('loadSubscription called, restaurant:', restaurant?.id);
-    if (!restaurant?.id) {
-      console.log('No restaurant id, returning');
-      return;
-    }
+    if (!restaurant?.id) return;
     setLoading(true);
-    console.log('Querying subscriptions_api for restaurant:', restaurant.id);
     const { data, error } = await supabase
       .from('subscriptions')
       .select('*')
@@ -38,20 +33,15 @@ export default function SubscriptionScreen() {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    console.log('Query result:', { data, error });
-    if (error) {
-      console.error('Error loading subscription:', error);
-    } else if (data) {
+    if (!error && data) {
       setSubscription(data);
     }
     setLoading(false);
-    console.log('Loading set to false');
   }, [restaurant?.id]);
 
   // Load subscription when restaurant.id changes
   useEffect(() => {
     if (restaurant?.id && restaurant.id !== loadedRestaurantId.current) {
-      console.log('Restaurant ID changed, loading subscription');
       loadedRestaurantId.current = restaurant.id;
       loadSubscription();
     }
