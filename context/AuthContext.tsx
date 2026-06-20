@@ -314,8 +314,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Nie udało się utworzyć profilu.' };
     }
 
-    // 4. Generate ref_code for the new restaurant
-    const newRefCode = 'REF-' + restData.id.substring(0, 8).toUpperCase();
+    // 4. Generate ref_code for the new restaurant (segments 1-4 + 10-13 of UUID, guaranteed unique per UUID)
+    const idStr = restData.id.replace(/-/g, '');
+    const newRefCode = 'REF-' + (idStr.substring(0, 4) + idStr.substring(8, 12)).toUpperCase();
     await supabase.from('restaurants').update({ ref_code: newRefCode }).eq('id', restData.id);
 
     // 5. Record referral if a valid refCode was provided

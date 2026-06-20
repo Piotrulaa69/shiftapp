@@ -6,10 +6,37 @@ ALTER TABLE public.restaurants
   ADD COLUMN IF NOT EXISTS ref_code TEXT UNIQUE,
   ADD COLUMN IF NOT EXISTS referred_by_restaurant_id UUID REFERENCES public.restaurants(id) ON DELETE SET NULL;
 
--- 2. Generate ref_code for all existing restaurants (REF- + first 8 chars of id uppercased)
-UPDATE public.restaurants
-SET ref_code = 'REF-' || UPPER(SUBSTRING(id::text, 1, 8))
-WHERE ref_code IS NULL;
+-- 2. Generate ref_code for all existing restaurants using unique random suffix
+-- Use positions 1-4 + 10-13 + 20-23 of UUID to get 12 unique chars across segments
+DO $$
+DECLARE
+  r RECORD;
+  new_code TEXT;
+  attempt INT;
+BEGIN
+  FOR r IN SELECT id FROM public.restaurants WHERE ref_code IS NULL LOOP
+    attempt := 0;
+    LOOP
+      -- Build code from different UUID segments to maximise uniqueness
+      new_code := 'REF-' || UPPER(
+        SUBSTRING(r.id::text, 1, 4) ||
+        SUBSTRING(r.id::text, 10, 4)
+      );
+      -- If collision, fall back to random
+      IF NOT EXISTS (SELECT 1 FROM public.restaurants WHERE ref_code = new_code) THEN
+        UPDATE public.restaurants SET ref_code = new_code WHERE id = r.id;
+        EXIT;
+      END IF;
+      -- Fallback: use random hex
+      new_code := 'REF-' || UPPER(SUBSTRING(MD5(r.id::text || attempt::text), 1, 8));
+      IF NOT EXISTS (SELECT 1 FROM public.restaurants WHERE ref_code = new_code) THEN
+        UPDATE public.restaurants SET ref_code = new_code WHERE id = r.id;
+        EXIT;
+      END IF;
+      attempt := attempt + 1;
+    END LOOP;
+  END LOOP;
+END $$;
 
 -- 3. Table to track referrals
 CREATE TABLE IF NOT EXISTS public.referrals (
