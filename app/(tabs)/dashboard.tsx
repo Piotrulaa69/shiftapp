@@ -111,7 +111,11 @@ export default function DashboardScreen() {
     return () => clearInterval(interval);
   }, [activeCI]);
 
-  const myTasks = isManager ? tasks : tasks.filter((t) => t.assigned_to === user?.id);
+  const allMyTasks = isManager
+    ? tasks
+    : tasks.filter((t) => t.assigned_to === user?.id);
+  // Dashboard counter: only today's tasks (scheduled_date = today or no scheduled_date)
+  const myTasks = allMyTasks.filter((t) => !t.scheduled_date || t.scheduled_date === today);
   const completedTasks = myTasks.filter((t) => t.completed || t.status === 'zatwierdzone');
   const pendingTasks = myTasks.filter((t) => !t.completed && t.status !== 'zatwierdzone').slice(0, 4);
   const progress = myTasks.length > 0 ? completedTasks.length / myTasks.length : 0;
