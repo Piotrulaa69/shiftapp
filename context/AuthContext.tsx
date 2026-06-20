@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { findRestaurantByRefCode, recordReferral } from '../lib/referral';
 import type { DbProfile, DbRestaurant } from '../lib/supabase';
 import { supabase } from '../lib/supabase';
 
@@ -54,6 +55,7 @@ type AuthContextType = {
     lastName: string;
     email: string;
     password: string;
+    refCode?: string;
   }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   refreshRestaurant: () => Promise<void>;
@@ -251,6 +253,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     lastName: string;
     email: string;
     password: string;
+    refCode?: string;
   }): Promise<{ success: boolean; error?: string }> => {
     _isRegistering = true;
     setIsLoading(true);
@@ -311,7 +314,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Nie udało się utworzyć profilu.' };
     }
 
-    // 4. Load user data
+    // 4. Generate ref_code for the new restaurant
+    const newRefCode = 'REF-' + restData.id.substring(0, 8).toUpperCase();
+    await supabase.from('restaurants').update({ ref_code: newRefCode }).eq('id', restData.id);
+
+    // 5. Record referral if a valid refCode was provided
+    if (data.refCode?.trim()) {
+      const referrer = await findRestaurantByRefCode(data.refCode.trim());
+      if (referrer && referrer.id !== restData.id) {
+        await recordReferral(referrer.id, restData.id);
+      }
+    }
+
+    // 6. Load user data
     _isRegistering = false;
     const result = await loadUserData(userId, data.email.trim());
     setIsLoading(false);

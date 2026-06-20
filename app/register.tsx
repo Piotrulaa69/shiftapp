@@ -119,6 +119,7 @@ function buildStep1(loading: boolean, err: string) {
         <div class="al-field"><label class="al-lbl">Nazwa restauracji *</label><input class="al-in" id="ar-name" type="text" placeholder="np. Trattoria Bella"/></div>
         <div class="al-field"><label class="al-lbl">Adres</label><input class="al-in" id="ar-addr" type="text" placeholder="np. ul. Marszałkowska 1, Warszawa"/></div>
         <div class="al-field"><label class="al-lbl">Telefon</label><input class="al-in" id="ar-phone" type="tel" placeholder="np. 500 600 700"/></div>
+        <div class="al-field"><label class="al-lbl">Kod polecający <span style="font-weight:400;color:#9CA3AF">(opcjonalnie)</span></label><input class="al-in" id="ar-ref" type="text" placeholder="np. REF-ABCD1234" style="text-transform:uppercase"/></div>
       </div>
 
       <button class="al-sub" data-action="next" ${loading ? 'disabled' : ''}>Dalej →</button>
@@ -211,6 +212,7 @@ export default function RegisterScreen() {
   const [restaurantName, setRestaurantName] = useState('');
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
+  const [refCode, setRefCode] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -249,7 +251,7 @@ export default function RegisterScreen() {
 
     let currentStep: 1 | 2 = 1;
     let showPw = false;
-    let savedStep1 = { name: '', addr: '', phone: '' };
+    let savedStep1 = { name: '', addr: '', phone: '', ref: '' };
 
     const render = (err = '') => {
       portal.innerHTML = currentStep === 1 ? buildStep1(false, err) : buildStep2(showPw, false, err);
@@ -281,8 +283,9 @@ export default function RegisterScreen() {
         const name = (portal.querySelector('#ar-name') as HTMLInputElement)?.value?.trim() || '';
         const addr = (portal.querySelector('#ar-addr') as HTMLInputElement)?.value?.trim() || '';
         const ph = (portal.querySelector('#ar-phone') as HTMLInputElement)?.value?.trim() || '';
+        const ref = (portal.querySelector('#ar-ref') as HTMLInputElement)?.value?.trim() || '';
         if (!name) { render('Podaj nazwę restauracji.'); return; }
-        savedStep1 = { name, addr, phone: ph };
+        savedStep1 = { name, addr, phone: ph, ref };
         currentStep = 2;
         render();
         return;
@@ -326,6 +329,7 @@ export default function RegisterScreen() {
           address: savedStep1.addr,
           phone: savedStep1.phone,
           firstName: fn, lastName: ln, email: em, password: pw,
+          refCode: savedStep1.ref || undefined,
         });
         if (result.success) {
           router.replace('/(tabs)/dashboard');
@@ -363,7 +367,7 @@ export default function RegisterScreen() {
     const handleRegister = async () => {
       if (!validateStep2()) return;
       setLoading(true);
-      const result = await registerRestaurant({ restaurantName, address, phone, firstName, lastName, email, password });
+      const result = await registerRestaurant({ restaurantName, address, phone, firstName, lastName, email, password, refCode: refCode.trim() || undefined });
       setLoading(false);
       if (result.success) { router.replace('/(tabs)/dashboard'); }
       else { showAlert('Błąd rejestracji', result.error ?? 'Spróbuj ponownie później.'); }
@@ -396,6 +400,8 @@ export default function RegisterScreen() {
                 <TextInput style={s.input} placeholder="np. ul. Marszałkowska 1, Warszawa" placeholderTextColor={theme.colors.textMuted} value={address} onChangeText={setAddress} />
                 <Text style={s.label}>Telefon</Text>
                 <TextInput style={s.input} placeholder="np. 500 600 700" placeholderTextColor={theme.colors.textMuted} value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+                <Text style={s.label}>Kod polecający <Text style={{ fontWeight: '400', color: theme.colors.textMuted }}>(opcjonalnie)</Text></Text>
+                <TextInput style={s.input} placeholder="np. REF-ABCD1234" placeholderTextColor={theme.colors.textMuted} value={refCode} onChangeText={(v) => setRefCode(v.toUpperCase())} autoCapitalize="characters" />
                 <TouchableOpacity style={s.primaryBtn} onPress={() => { if (validateStep1()) setStep(2); }} activeOpacity={0.85}>
                   <Text style={s.primaryBtnText}>Dalej</Text>
                   <Ionicons name="arrow-forward" size={18} color={theme.colors.white} />

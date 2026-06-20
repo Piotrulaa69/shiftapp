@@ -7,16 +7,18 @@ import {
     Modal,
     Platform,
     ScrollView,
+    Share,
     StyleSheet,
     Switch,
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { getNotifPrefs, upsertNotifPrefs } from '../lib/db';
+import { getReferralStats, type ReferralStats } from '../lib/referral';
 import { supabase } from '../lib/supabase';
 import { theme } from '../styles/theme';
 
@@ -27,6 +29,8 @@ export default function ProfileScreen() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showNotifModal, setShowNotifModal] = useState(false);
   const [showPersonalModal, setShowPersonalModal] = useState(false);
+  const [refStats, setRefStats] = useState<ReferralStats | null>(null);
+  const [codeCopied, setCodeCopied] = useState(false);
 
   // personal/payroll fields
   const [pPhone, setPPhone] = useState('');
@@ -78,6 +82,12 @@ export default function ProfileScreen() {
       });
     }
   }, [user?.id]);
+
+  useEffect(() => {
+    if (restaurant?.id && user?.role === 'owner') {
+      getReferralStats(restaurant.id).then(setRefStats);
+    }
+  }, [restaurant?.id, user?.role]);
 
   useEffect(() => {
     if (user?.id) {
@@ -212,6 +222,59 @@ export default function ProfileScreen() {
           <ActionRow icon="lock-closed-outline" label="Zmień hasło" onPress={() => setShowPasswordModal(true)} />
           <ActionRow icon="notifications-outline" label="Preferencje powiadomień" onPress={() => setShowNotifModal(true)} />
         </View>
+
+        {/* Referral section — owners only */}
+        {user.role === 'owner' && refStats?.refCode && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Program polecający</Text>
+            <View style={{ backgroundColor: '#F5F3FF', borderRadius: 12, padding: 14, marginBottom: 12 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#7C3AED', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Twój kod polecający</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={{ fontSize: 22, fontWeight: '800', color: '#7C3AED', letterSpacing: 2, flex: 1 }}>{refStats.refCode}</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (Platform.OS === 'web') {
+                      navigator.clipboard?.writeText(refStats.refCode!);
+                    } else {
+                      (require('react-native').Clipboard as any).setString(refStats.refCode!);
+                    }
+                    setCodeCopied(true);
+                    setTimeout(() => setCodeCopied(false), 2000);
+                  }}
+                  style={{ backgroundColor: codeCopied ? '#D1FAE5' : '#EDE9FE', borderRadius: 8, padding: 8 }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name={codeCopied ? 'checkmark' : 'copy-outline'} size={18} color={codeCopied ? '#059669' : '#7C3AED'} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => Share.share({ message: `Dołącz do ShiftApp używając mojego kodu polecającego: ${refStats.refCode}\nhttps://shiftapp.pl/register` })}
+                  style={{ backgroundColor: '#EDE9FE', borderRadius: 8, padding: 8 }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="share-social-outline" size={18} color="#7C3AED" />
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: theme.colors.surface, borderRadius: 10, padding: 12 }}>
+              <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: '#EDE9FE', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="people-outline" size={20} color="#7C3AED" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.text }}>
+                  {refStats.totalReferrals} {refStats.totalReferrals === 1 ? 'restauracja dołączyła' : 'restauracje dołączyły'} z Twojego kodu
+                </Text>
+                <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 2 }}>
+                  Rabaty naliczane ręcznie przez administrację
+                </Text>
+              </View>
+            </View>
+            {refStats.referredBy && (
+              <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 10 }}>
+                Zostałeś polecony przez: <Text style={{ fontWeight: '700' }}>{refStats.referredBy}</Text>
+              </Text>
+            )}
+          </View>
+        )}
 
         {/* Logout */}
         <View style={styles.section}>

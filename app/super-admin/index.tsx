@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
+import { getAllReferrals, markReferralDiscountApplied, type Referral } from '../../lib/referral';
 import {
     createPromoCode,
     createRestaurantWithInvite,
@@ -923,6 +924,18 @@ function SettingsTab({ promoCodes, onRefresh, userId }: { promoCodes: PromoCode[
   const [promoMaxUses, setPromoMaxUses] = useState('');
   const [promoValidUntil, setPromoValidUntil] = useState('');
   const [loading, setLoading] = useState(false);
+  const [referrals, setReferrals] = useState<(Referral & { referrer_name: string; referred_name: string })[]>([]);
+  const [refLoading, setRefLoading] = useState(false);
+
+  useEffect(() => {
+    setRefLoading(true);
+    getAllReferrals().then((data) => { setReferrals(data); setRefLoading(false); });
+  }, []);
+
+  const handleMarkDiscount = async (id: string, side: 'referrer' | 'referred' | 'both') => {
+    await markReferralDiscountApplied(id, side);
+    getAllReferrals().then(setReferrals);
+  };
 
   const handleCreatePromo = async () => {
     if (!promoCode.trim()) { Alert.alert('Błąd', 'Wpisz kod'); return; }
@@ -961,6 +974,55 @@ function SettingsTab({ promoCodes, onRefresh, userId }: { promoCodes: PromoCode[
           <Text style={s.settingValue}>{item.value}</Text>
         </View>
       ))}
+
+      {/* ── Referrals ── */}
+      <View style={s.section}>
+        <View style={s.sectionHeader}>
+          <Text style={s.sectionTitle}>Polecenia restauracji</Text>
+          <Text style={s.restMeta}>{referrals.length} łącznie</Text>
+        </View>
+        {refLoading ? (
+          <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginVertical: 16 }} />
+        ) : referrals.length === 0 ? (
+          <Text style={{ fontSize: 12, color: theme.colors.textMuted, textAlign: 'center', padding: 20 }}>Brak poleceń</Text>
+        ) : (
+          referrals.map((ref) => (
+            <View key={ref.id} style={[s.restRow, { flexDirection: 'column', gap: 8 }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons name="arrow-forward-circle" size={14} color="#7C3AED" />
+                <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.text, flex: 1 }}>
+                  {ref.referrer_name} → {ref.referred_name}
+                </Text>
+                <Text style={s.restMeta}>{ref.referred_at ? new Date(ref.referred_at).toLocaleDateString('pl-PL') : '—'}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                <TouchableOpacity
+                  onPress={() => handleMarkDiscount(ref.id, 'referrer')}
+                  disabled={ref.discount_applied_referrer}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: ref.discount_applied_referrer ? '#D1FAE5' : '#EDE9FE' }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name={ref.discount_applied_referrer ? 'checkmark-circle' : 'cash-outline'} size={13} color={ref.discount_applied_referrer ? '#059669' : '#7C3AED'} />
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: ref.discount_applied_referrer ? '#059669' : '#7C3AED' }}>
+                    {ref.discount_applied_referrer ? 'Rabat A zastosowany' : 'Zastosuj rabat dla A'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => handleMarkDiscount(ref.id, 'referred')}
+                  disabled={ref.discount_applied_referred}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: ref.discount_applied_referred ? '#D1FAE5' : '#EFF6FF' }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name={ref.discount_applied_referred ? 'checkmark-circle' : 'cash-outline'} size={13} color={ref.discount_applied_referred ? '#059669' : '#2563EB'} />
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: ref.discount_applied_referred ? '#059669' : '#2563EB' }}>
+                    {ref.discount_applied_referred ? 'Rabat B zastosowany' : 'Zastosuj rabat dla B'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))
+        )}
+      </View>
 
       <View style={s.section}>
         <View style={s.sectionHeader}>
