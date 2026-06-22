@@ -44,6 +44,8 @@ export default function ShiftDetailScreen() {
   const [absenceDesc, setAbsenceDesc] = useState('');
   const [elapsed, setElapsed] = useState('00:00:00');
   const [showPinModal, setShowPinModal] = useState(false);
+  const [showClockOutModal, setShowClockOutModal] = useState(false);
+  const [clockOutReason, setClockOutReason] = useState('');
   const [showQrScanner, setShowQrScanner] = useState(false);
   const [qrScanError, setQrScanError] = useState('');
   const [cameraPermission, setCameraPermission] = useState<{ granted: boolean } | null>(null);
@@ -156,23 +158,20 @@ export default function ShiftDetailScreen() {
     setClockLoading(false);
   };
 
-  const handleClockOut = async () => {
+  const handleClockOut = () => {
+    if (!activeCI || !shift) return;
+    setClockOutReason('');
+    setShowClockOutModal(true);
+  };
+
+  const doClockOut = async () => {
     if (!activeCI) return;
-    const doClockOut = async () => {
-      setClockLoading(true);
-      await clockOut(activeCI.id);
-      setActiveCI(null);
-      setClockLoading(false);
-      await loadData();
-    };
-    if (Platform.OS === 'web') {
-      if (confirm('Potwierdzasz zakończenie zmiany?')) doClockOut();
-    } else {
-      Alert.alert('Wymeldowanie', 'Potwierdzasz zakończenie zmiany?', [
-        { text: 'Anuluj', style: 'cancel' },
-        { text: 'Potwierdź', onPress: doClockOut },
-      ]);
-    }
+    setClockLoading(true);
+    setShowClockOutModal(false);
+    await clockOut(activeCI.id, clockOutReason.trim() || undefined);
+    setActiveCI(null);
+    setClockLoading(false);
+    await loadData();
   };
 
   const handleAbsence = async () => {
@@ -374,6 +373,78 @@ export default function ShiftDetailScreen() {
           error={qrScanError}
           onRetry={() => { setQrScanError(''); qrScannedRef.current = false; }}
         />
+      </Modal>
+
+      {/* Clock-out reason modal */}
+      <Modal visible={showClockOutModal} animationType="fade" transparent onRequestClose={() => setShowClockOutModal(false)}>
+        <View style={mStyles.overlay}>
+          <View style={mStyles.sheet}>
+            <View style={mStyles.mHeader}>
+              <Text style={mStyles.mTitle}>Zakończenie zmiany</Text>
+              <TouchableOpacity onPress={() => setShowClockOutModal(false)}><Ionicons name="close" size={24} color={theme.colors.text} /></TouchableOpacity>
+            </View>
+            <View style={mStyles.body}>
+              {(() => {
+                if (!shift || !activeCI) return null;
+                const scheduledEnd = new Date(`${shift.day}T${shift.end_time}`);
+                const now = new Date();
+                const diffMin = Math.round((now.getTime() - scheduledEnd.getTime()) / 60000);
+                const isEarly = diffMin < -1;
+                const isLate = diffMin > 1;
+                return (
+                  <>
+                    {isEarly && (
+                      <View style={{ backgroundColor: '#FEF3C7', borderRadius: 12, padding: 12, marginBottom: 16, flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+                        <Ionicons name="warning-outline" size={18} color="#D97706" />
+                        <Text style={{ flex: 1, fontSize: 13, color: '#92400E', lineHeight: 18 }}>
+                          Twoja zmiana powinna się zakończyć za {Math.abs(diffMin)} min. Czy na pewno chcesz wyjść wcześniej?
+                        </Text>
+                      </View>
+                    )}
+                    {isLate && (
+                      <View style={{ backgroundColor: '#FEE2E2', borderRadius: 12, padding: 12, marginBottom: 16, flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+                        <Ionicons name="time-outline" size={18} color="#DC2626" />
+                        <Text style={{ flex: 1, fontSize: 13, color: '#991B1B', lineHeight: 18 }}>
+                          Twoja zmiana powinna się zakończyć {Math.abs(diffMin)} min temu ({shift.end_time}). Opisz powód przedłużenia.
+                        </Text>
+                      </View>
+                    )}
+                    {(isEarly || isLate) && (
+                      <>
+                        <Text style={mStyles.label}>Powód {isEarly ? 'wyjścia przed czasem' : 'nadgodzin'}:</Text>
+                        <TextInput
+                          style={[mStyles.input, { minHeight: 70 }]}
+                          value={clockOutReason}
+                          onChangeText={setClockOutReason}
+                          placeholder={isEarly ? 'np. Goście wyszli wcześniej...' : 'np. Duże obłożenie, zostałem dłużej...'}
+                          placeholderTextColor={theme.colors.textMuted}
+                          multiline
+                          autoFocus
+                        />
+                      </>
+                    )}
+                    {!isEarly && !isLate && (
+                      <Text style={{ fontSize: 14, color: theme.colors.textMuted, textAlign: 'center', marginVertical: 16 }}>
+                        Zakończ zmianę zgodnie z harmonogramem ({shift.end_time}).
+                      </Text>
+                    )}
+                    <TouchableOpacity
+                      style={[mStyles.saveBtn, { backgroundColor: theme.colors.error }, (isEarly || isLate) && !clockOutReason.trim() && { opacity: 0.5 }]}
+                      onPress={doClockOut}
+                      disabled={clockLoading || ((isEarly || isLate) && !clockOutReason.trim())}
+                      activeOpacity={0.85}
+                    >
+                      {clockLoading
+                        ? <ActivityIndicator color="#fff" />
+                        : <Text style={mStyles.saveBtnText}>Potwierdź wymeldowanie</Text>
+                      }
+                    </TouchableOpacity>
+                  </>
+                );
+              })()}
+            </View>
+          </View>
+        </View>
       </Modal>
 
       {/* Absence Modal */}

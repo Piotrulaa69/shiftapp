@@ -380,10 +380,10 @@ export async function clockIn(
   return data as DbClockIn;
 }
 
-export async function clockOut(clockInId: string, note?: string): Promise<boolean> {
+export async function clockOut(clockInId: string, reason?: string): Promise<boolean> {
   const { error } = await supabase
     .from('clock_ins')
-    .update({ clock_out_at: new Date().toISOString(), status: 'completed', clock_out_note: note ?? null })
+    .update({ clock_out_at: new Date().toISOString(), status: 'completed', clock_out_note: reason ?? null, clock_out_reason: reason ?? null })
     .eq('id', clockInId);
   return !error;
 }

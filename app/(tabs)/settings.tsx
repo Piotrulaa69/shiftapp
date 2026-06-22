@@ -518,6 +518,25 @@ export default function SettingsScreen() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [groups, setGroups] = useState<DbEmployeeGroup[]>([]);
 
+  // ── Work time rules ──
+  type WTRules = {
+    early_arrival_mode: string; early_arrival_round_minutes: number;
+    late_arrival_mode: string; late_arrival_round_minutes: number; late_arrival_ask_reason: boolean;
+    early_departure_mode: string; early_departure_round_minutes: number; early_departure_ask_reason: boolean;
+    late_departure_mode: string; late_departure_round_minutes: number; late_departure_ask_reason: boolean;
+  };
+  const DEFAULT_WTR: WTRules = {
+    early_arrival_mode: 'actual', early_arrival_round_minutes: 5,
+    late_arrival_mode: 'actual', late_arrival_round_minutes: 5, late_arrival_ask_reason: false,
+    early_departure_mode: 'actual', early_departure_round_minutes: 5, early_departure_ask_reason: true,
+    late_departure_mode: 'actual', late_departure_round_minutes: 5, late_departure_ask_reason: true,
+  };
+  const [wtr, setWtr] = useState<WTRules>(DEFAULT_WTR);
+  const [wtrSaving, setWtrSaving] = useState(false);
+  const [wtrSaved, setWtrSaved] = useState(false);
+
+  const updateWtr = (key: keyof WTRules, val: any) => setWtr(prev => ({ ...prev, [key]: val }));
+
   useEffect(() => {
     if (restaurant) {
       setRName(restaurant.name || '');
@@ -533,6 +552,11 @@ export default function SettingsScreen() {
       setShiftTypes(st);
       setEmployees(emps);
       setGroups(gr);
+    });
+    import('../../lib/supabase').then(({ supabase }) => {
+      supabase.from('work_time_rules').select('*').eq('restaurant_id', rid).maybeSingle().then(({ data }) => {
+        if (data) setWtr(data as WTRules);
+      });
     });
   }, [rid]);
 
@@ -896,6 +920,70 @@ export default function SettingsScreen() {
                 placeholderTextColor={theme.colors.textMuted}
                 multiline
               />
+            </SectionCard>
+
+            {/* ── 7. Reguły czasu pracy ── */}
+            <SectionCard icon="timer-outline" color="#0891B2" bg="#ECFEFF" title="Reguły liczenia czasu pracy">
+              {([
+                { key: 'early_arrival', label: 'Przyjście wcześniej', hasReason: false },
+                { key: 'late_arrival', label: 'Spóźnienie', hasReason: true },
+                { key: 'early_departure', label: 'Wyjście przed czasem', hasReason: true },
+                { key: 'late_departure', label: 'Wyjście po czasie (nadgodziny)', hasReason: true },
+              ] as { key: string; label: string; hasReason: boolean }[]).map(({ key, label, hasReason }) => {
+                const modeKey = `${key}_mode` as keyof WTRules;
+                const roundKey = `${key}_round_minutes` as keyof WTRules;
+                const reasonKey = `${key}_ask_reason` as keyof WTRules;
+                const MODES = [
+                  { val: 'actual', lbl: 'Dokładna godzina' },
+                  { val: 'scheduled', lbl: 'Godzina z grafiku' },
+                  { val: 'round_up', lbl: 'Zaokrąglij w górę' },
+                  { val: 'round_down', lbl: 'Zaokrąglij w dół' },
+                ];
+                return (
+                  <View key={key} style={{ marginBottom: 18, paddingBottom: 18, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
+                    <Text style={[s.label, { fontSize: 13, fontWeight: '700', color: theme.colors.text, marginBottom: 10 }]}>{label}</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                      {MODES.map(({ val, lbl }) => (
+                        <TouchableOpacity
+                          key={val}
+                          onPress={() => updateWtr(modeKey, val)}
+                          style={[{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: wtr[modeKey] === val ? theme.colors.primary : theme.colors.border, backgroundColor: wtr[modeKey] === val ? theme.colors.primaryLight : theme.colors.surface }]}
+                          activeOpacity={0.75}
+                        >
+                          <Text style={{ fontSize: 12, color: wtr[modeKey] === val ? theme.colors.primary : theme.colors.text, fontWeight: wtr[modeKey] === val ? '700' : '400' }}>{lbl}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    {(wtr[modeKey] === 'round_up' || wtr[modeKey] === 'round_down') && (
+                      <NumericRow
+                        label="Zaokrąglaj do"
+                        value={wtr[roundKey] as number}
+                        onChange={(v) => updateWtr(roundKey, v)}
+                        unit="min" min={1} max={60}
+                      />
+                    )}
+                    {hasReason && (
+                      <ToggleRow
+                        label="Pytaj o powód"
+                        sub="Pracownik musi podać powód przy zameldowaniu/wymeldowaniu"
+                        value={wtr[reasonKey] as boolean}
+                        onChange={(v) => updateWtr(reasonKey, v)}
+                      />
+                    )}
+                  </View>
+                );
+              })}
+              <TouchableOpacity style={[s.saveBtn, wtrSaving && { opacity: 0.6 }]} onPress={async () => {
+                setWtrSaving(true);
+                const { supabase } = await import('../../lib/supabase');
+                const { error } = await supabase.from('work_time_rules').upsert({ restaurant_id: rid, ...wtr }, { onConflict: 'restaurant_id' });
+                setWtrSaving(false);
+                if (!error) { setWtrSaved(true); setTimeout(() => setWtrSaved(false), 2000); }
+              }} disabled={wtrSaving} activeOpacity={0.85}>
+                {wtrSaving ? <ActivityIndicator color={theme.colors.white} /> : wtrSaved
+                  ? <><Ionicons name="checkmark" size={18} color={theme.colors.white} /><Text style={s.saveBtnText}>Zapisano</Text></>
+                  : <><Ionicons name="save-outline" size={18} color={theme.colors.white} /><Text style={s.saveBtnText}>Zapisz reguły</Text></>}
+              </TouchableOpacity>
             </SectionCard>
 
             {/* Global save button */}

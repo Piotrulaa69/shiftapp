@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { getEmployees } from '../../lib/db';
@@ -101,6 +101,19 @@ export default function ReportsScreen() {
   const [expandedEmp, setExpandedEmp] = useState<string | null>(null);
   const [empShifts, setEmpShifts] = useState<Record<string, any[]>>({});
   const [loadingEmp, setLoadingEmp] = useState<string | null>(null);
+
+  // ── edit clock-in modal ──
+  const [editCI, setEditCI] = useState<any | null>(null);
+  const [editCIIn, setEditCIIn] = useState('');
+  const [editCIOut, setEditCIOut] = useState('');
+  const [editCISaving, setEditCISaving] = useState(false);
+
+  // ── add shift modal ──
+  const [addShiftEmp, setAddShiftEmp] = useState<DbProfile | null>(null);
+  const [addShiftDay, setAddShiftDay] = useState('');
+  const [addShiftStart, setAddShiftStart] = useState('');
+  const [addShiftEnd, setAddShiftEnd] = useState('');
+  const [addShiftSaving, setAddShiftSaving] = useState(false);
 
   // ── shifts ──
   const [shiftsData, setShiftsData] = useState<any[]>([]);
@@ -219,12 +232,67 @@ export default function ReportsScreen() {
   const toggleEmpExpand = async (empId: string) => {
     if (expandedEmp === empId) { setExpandedEmp(null); return; }
     setExpandedEmp(empId);
-    if (empShifts[empId]) return;
     setLoadingEmp(empId);
     const { from, to } = monthRange(month);
     const { data } = await supabase.from('shifts').select('*').eq('restaurant_id', rid).eq('employee_id', empId).gte('day', from).lte('day', to).order('day');
     setEmpShifts((prev) => ({ ...prev, [empId]: data ?? [] }));
     setLoadingEmp(null);
+  };
+
+  const reloadEmpShifts = async (empId: string) => {
+    const { from, to } = monthRange(month);
+    const { data } = await supabase.from('shifts').select('*').eq('restaurant_id', rid).eq('employee_id', empId).gte('day', from).lte('day', to).order('day');
+    setEmpShifts((prev) => ({ ...prev, [empId]: data ?? [] }));
+    loadHours(month);
+  };
+
+  const openEditCI = (ci: any) => {
+    setEditCI(ci);
+    const inD = new Date(ci.clock_in_at);
+    setEditCIIn(`${fmt2(inD.getHours())}:${fmt2(inD.getMinutes())}`);
+    if (ci.clock_out_at) {
+      const outD = new Date(ci.clock_out_at);
+      setEditCIOut(`${fmt2(outD.getHours())}:${fmt2(outD.getMinutes())}`);
+    } else setEditCIOut('');
+  };
+
+  const saveEditCI = async () => {
+    if (!editCI) return;
+    setEditCISaving(true);
+    const inBase = editCI.clock_in_at.slice(0, 10);
+    const newIn = `${inBase}T${editCIIn}:00`;
+    const newOut = editCIOut ? `${inBase}T${editCIOut}:00` : null;
+    await supabase.from('clock_ins').update({ clock_in_at: newIn, clock_out_at: newOut, status: newOut ? 'completed' : 'active' }).eq('id', editCI.id);
+    setEditCISaving(false);
+    setEditCI(null);
+    loadAttendance(month);
+  };
+
+  const deleteShift = async (shiftId: string, empId: string) => {
+    const confirm = Platform.OS === 'web' ? window.confirm('Usunąć tę zmianę?') : await new Promise<boolean>(r => Alert.alert('Usuń zmianę', 'Na pewno?', [{ text: 'Anuluj', onPress: () => r(false) }, { text: 'Usuń', style: 'destructive', onPress: () => r(true) }]));
+    if (!confirm) return;
+    await supabase.from('shifts').delete().eq('id', shiftId);
+    reloadEmpShifts(empId);
+  };
+
+  const saveAddShift = async () => {
+    if (!addShiftEmp || !addShiftDay || !addShiftStart || !addShiftEnd) return;
+    setAddShiftSaving(true);
+    const emp = addShiftEmp;
+    await supabase.from('shifts').insert({
+      restaurant_id: rid,
+      employee_id: emp.id,
+      employee_name: `${emp.first_name} ${emp.last_name}`,
+      job_title: emp.job_title ?? '',
+      day: addShiftDay,
+      start_time: addShiftStart,
+      end_time: addShiftEnd,
+      status: 'potwierdzona',
+      location: '',
+    });
+    setAddShiftSaving(false);
+    setAddShiftEmp(null);
+    reloadEmpShifts(emp.id);
   };
 
   // derived
@@ -324,10 +392,20 @@ export default function ReportsScreen() {
                                         <Text style={styles.shiftDuration}>{Math.floor(sh)}h {fmt2(sm % 60)}m</Text>
                                       </View>
                                       {earn && <Text style={styles.shiftEarnings}>{earn} zł</Text>}
+                                      <TouchableOpacity onPress={() => deleteShift(s.id, row.emp.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                        <Ionicons name="trash-outline" size={16} color={theme.colors.error} />
+                                      </TouchableOpacity>
                                     </View>
                                   );
                                 })
                             }
+                            <TouchableOpacity
+                              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, marginTop: 4 }}
+                              onPress={() => { setAddShiftEmp(row.emp); setAddShiftDay(''); setAddShiftStart(''); setAddShiftEnd(''); }}
+                            >
+                              <Ionicons name="add-circle-outline" size={18} color={theme.colors.primary} />
+                              <Text style={{ fontSize: 13, color: theme.colors.primary, fontWeight: '600' }}>Dodaj zmianę</Text>
+                            </TouchableOpacity>
                             {row.shiftsCount > 0 && (
                               <View style={styles.empSummaryRow}>
                                 <Text style={styles.empSummaryText}>Razem: <Text style={{ fontWeight: '700', color: theme.colors.text }}>{hrsStr}</Text></Text>
@@ -407,7 +485,7 @@ export default function ReportsScreen() {
                     const dd = fmt2(inTime.getDate());
                     const mm = fmt2(inTime.getMonth() + 1);
                     return (
-                      <View key={c.id} style={[styles.listRow, idx > 0 && styles.borderTop]}>
+                      <TouchableOpacity key={c.id} style={[styles.listRow, idx > 0 && styles.borderTop]} onPress={() => openEditCI(c)} activeOpacity={0.75}>
                         <View style={styles.shiftDateBox}>
                           <Text style={styles.shiftDay}>{dd}</Text>
                           <Text style={styles.shiftMon}>{MONTHS_SHORT[inTime.getMonth() + 1]}</Text>
@@ -421,13 +499,10 @@ export default function ReportsScreen() {
                             {outTime ? ` – ${fmt2(outTime.getHours())}:${fmt2(outTime.getMinutes())}` : ' → w trakcie'}
                             {durMin != null ? ` · ${Math.floor(durMin / 60)}h ${fmt2(durMin % 60)}m` : ''}
                           </Text>
+                          {c.clock_out_reason ? <Text style={[styles.listRowSub, { color: '#D97706', marginTop: 2 }]} numberOfLines={1}>💬 {c.clock_out_reason}</Text> : null}
                         </View>
-                        <View style={[styles.statusBadge, { backgroundColor: done ? theme.colors.greenLight : theme.colors.primaryLight }]}>
-                          <Text style={[styles.statusBadgeText, { color: done ? theme.colors.green : theme.colors.primary }]}>
-                            {done ? 'Zakończone' : 'Aktywne'}
-                          </Text>
-                        </View>
-                      </View>
+                        <Ionicons name="pencil-outline" size={15} color={theme.colors.textMuted} />
+                      </TouchableOpacity>
                     );
                   })}
                 </View>
@@ -481,6 +556,51 @@ export default function ReportsScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Edit clock-in modal */}
+      <Modal visible={!!editCI} animationType="fade" transparent onRequestClose={() => setEditCI(null)}>
+        <View style={eStyles.overlay}>
+          <View style={eStyles.sheet}>
+            <View style={eStyles.header}>
+              <Text style={eStyles.title}>Edytuj zameldowanie</Text>
+              <TouchableOpacity onPress={() => setEditCI(null)}><Ionicons name="close" size={22} color={theme.colors.text} /></TouchableOpacity>
+            </View>
+            <View style={eStyles.body}>
+              <Text style={eStyles.label}>Godzina przyjścia (HH:MM)</Text>
+              <TextInput style={eStyles.input} value={editCIIn} onChangeText={setEditCIIn} placeholder="np. 08:30" placeholderTextColor={theme.colors.textMuted} keyboardType="numeric" />
+              <Text style={eStyles.label}>Godzina wyjścia (HH:MM)</Text>
+              <TextInput style={eStyles.input} value={editCIOut} onChangeText={setEditCIOut} placeholder="np. 16:00 (puste = aktywne)" placeholderTextColor={theme.colors.textMuted} keyboardType="numeric" />
+              <TouchableOpacity style={eStyles.saveBtn} onPress={saveEditCI} disabled={editCISaving} activeOpacity={0.85}>
+                {editCISaving ? <ActivityIndicator color="#fff" /> : <Text style={eStyles.saveBtnText}>Zapisz zmiany</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add shift modal */}
+      <Modal visible={!!addShiftEmp} animationType="fade" transparent onRequestClose={() => setAddShiftEmp(null)}>
+        <View style={eStyles.overlay}>
+          <View style={eStyles.sheet}>
+            <View style={eStyles.header}>
+              <Text style={eStyles.title}>Dodaj zmianę — {addShiftEmp?.first_name} {addShiftEmp?.last_name}</Text>
+              <TouchableOpacity onPress={() => setAddShiftEmp(null)}><Ionicons name="close" size={22} color={theme.colors.text} /></TouchableOpacity>
+            </View>
+            <View style={eStyles.body}>
+              <Text style={eStyles.label}>Data (RRRR-MM-DD)</Text>
+              <TextInput style={eStyles.input} value={addShiftDay} onChangeText={setAddShiftDay} placeholder={`np. ${month}-15`} placeholderTextColor={theme.colors.textMuted} />
+              <Text style={eStyles.label}>Godzina rozpoczęcia (HH:MM)</Text>
+              <TextInput style={eStyles.input} value={addShiftStart} onChangeText={setAddShiftStart} placeholder="np. 09:00" placeholderTextColor={theme.colors.textMuted} keyboardType="numeric" />
+              <Text style={eStyles.label}>Godzina zakończenia (HH:MM)</Text>
+              <TextInput style={eStyles.input} value={addShiftEnd} onChangeText={setAddShiftEnd} placeholder="np. 17:00" placeholderTextColor={theme.colors.textMuted} keyboardType="numeric" />
+              <TouchableOpacity style={[eStyles.saveBtn, (!addShiftDay || !addShiftStart || !addShiftEnd) && { opacity: 0.5 }]} onPress={saveAddShift} disabled={addShiftSaving || !addShiftDay || !addShiftStart || !addShiftEnd} activeOpacity={0.85}>
+                {addShiftSaving ? <ActivityIndicator color="#fff" /> : <Text style={eStyles.saveBtnText}>Dodaj zmianę</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -559,4 +679,16 @@ const styles = StyleSheet.create({
 
   emptyState: { alignItems: 'center', paddingVertical: 40, gap: 10 },
   emptyText: { fontSize: 14, color: theme.colors.textMuted },
+});
+
+const eStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  sheet: { backgroundColor: theme.colors.card, borderRadius: 20, width: '100%', maxWidth: 440, overflow: 'hidden' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  title: { fontSize: 16, fontWeight: '700', color: theme.colors.text, flex: 1, marginRight: 8 },
+  body: { padding: 20, gap: 4 },
+  label: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary, marginTop: 10, marginBottom: 4 },
+  input: { backgroundColor: theme.colors.surface, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, padding: 12, fontSize: 14, color: theme.colors.text },
+  saveBtn: { backgroundColor: theme.colors.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 18 },
+  saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 });
