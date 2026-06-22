@@ -292,6 +292,7 @@ export default function TasksScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [pickerMonth, setPickerMonth] = useState(new Date().getMonth());
   const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
+  const [calendarWidth, setCalendarWidth] = useState(0);
 
   // Modal step: 1 = basic info, 2 = recurrence settings
   const [modalStep, setModalStep] = useState(1);
@@ -1257,49 +1258,88 @@ export default function TasksScreen() {
                   </View>
 
                   {/* Date Picker Calendar */}
-                  {showDatePicker && (
-                    <View style={mStyles.calendarContainer}>
-                      <View style={mStyles.calendarHeader}>
-                        <TouchableOpacity onPress={() => setPickerMonth(m => m === 0 ? (setPickerYear(y => y - 1), 11) : m - 1)}>
-                          <Ionicons name="chevron-back" size={20} color={theme.colors.text} />
+                  {showDatePicker && (() => {
+                    const cellSize = calendarWidth > 0 ? Math.floor(calendarWidth / 7) : 40;
+                    return (
+                      <View style={mStyles.calendarContainer}>
+                        {/* Month nav */}
+                        <View style={mStyles.calendarHeader}>
+                          <TouchableOpacity
+                            style={mStyles.calendarNavBtn}
+                            onPress={() => {
+                              if (pickerMonth === 0) { setPickerYear(y => y - 1); setPickerMonth(11); }
+                              else setPickerMonth(m => m - 1);
+                            }}
+                          >
+                            <Ionicons name="chevron-back" size={20} color={theme.colors.text} />
+                          </TouchableOpacity>
+                          <Text style={mStyles.calendarTitle}>{MONTH_NAMES[pickerMonth]} {pickerYear}</Text>
+                          <TouchableOpacity
+                            style={mStyles.calendarNavBtn}
+                            onPress={() => {
+                              if (pickerMonth === 11) { setPickerYear(y => y + 1); setPickerMonth(0); }
+                              else setPickerMonth(m => m + 1);
+                            }}
+                          >
+                            <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+                          </TouchableOpacity>
+                        </View>
+
+                        {/* Measure grid width */}
+                        <View
+                          onLayout={e => setCalendarWidth(e.nativeEvent.layout.width)}
+                        >
+                          {/* Day headers */}
+                          <View style={{ flexDirection: 'row' }}>
+                            {DAY_NAMES_SHORT.map(d => (
+                              <View key={d} style={{ width: cellSize, alignItems: 'center', paddingVertical: 6 }}>
+                                <Text style={{ fontSize: 11, fontWeight: '700', color: theme.colors.textMuted }}>{d}</Text>
+                              </View>
+                            ))}
+                          </View>
+
+                          {/* Day grid */}
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                            {getDaysInMonth(pickerYear, pickerMonth).map((day, idx) => {
+                              const dateStr = day !== null
+                                ? `${pickerYear}-${String(pickerMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                                : '';
+                              const isSelected = dateStr === taskDate;
+                              const isToday = dateStr === todayStr();
+                              const circleSize = Math.max(cellSize - 8, 28);
+                              return (
+                                <TouchableOpacity
+                                  key={idx}
+                                  style={{ width: cellSize, height: cellSize, alignItems: 'center', justifyContent: 'center' }}
+                                  onPress={() => day !== null && selectPickerDate(day)}
+                                  disabled={day === null}
+                                  activeOpacity={0.7}
+                                >
+                                  {day !== null && (
+                                    <View style={[
+                                      { width: circleSize, height: circleSize, borderRadius: circleSize / 2, alignItems: 'center', justifyContent: 'center' },
+                                      isSelected && { backgroundColor: theme.colors.primary },
+                                      isToday && !isSelected && { borderWidth: 1.5, borderColor: theme.colors.primary },
+                                    ]}>
+                                      <Text style={[
+                                        { fontSize: 13, fontWeight: '500', color: theme.colors.text },
+                                        isToday && !isSelected && { color: theme.colors.primary, fontWeight: '700' },
+                                        isSelected && { color: '#fff', fontWeight: '700' },
+                                      ]}>{day}</Text>
+                                    </View>
+                                  )}
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                        </View>
+
+                        <TouchableOpacity style={mStyles.calendarCloseBtn} onPress={() => setShowDatePicker(false)}>
+                          <Text style={mStyles.calendarCloseText}>Zamknij</Text>
                         </TouchableOpacity>
-                        <Text style={mStyles.calendarTitle}>{MONTH_NAMES[pickerMonth]} {pickerYear}</Text>
-                        <TouchableOpacity onPress={() => setPickerMonth(m => m === 11 ? (setPickerYear(y => y + 1), 0) : m + 1)}>
-                          <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
-                        </TouchableOpacity>
                       </View>
-                      <View style={mStyles.calendarWeekDays}>
-                        {DAY_NAMES_SHORT.map(d => <Text key={d} style={mStyles.calendarWeekDay}>{d}</Text>)}
-                      </View>
-                      <View style={mStyles.calendarGrid}>
-                        {getDaysInMonth(pickerYear, pickerMonth).map((day, idx) => {
-                          const dateStr = day !== null ? `${pickerYear}-${String(pickerMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
-                          const isSelected = dateStr === taskDate;
-                          const isToday = dateStr === todayStr();
-                          return (
-                            <TouchableOpacity
-                              key={idx}
-                              style={mStyles.calendarDay}
-                              onPress={() => day !== null && selectPickerDate(day)}
-                              disabled={day === null}
-                              activeOpacity={0.7}
-                            >
-                              {day !== null && (
-                                <Text style={[
-                                  mStyles.calendarDayText,
-                                  isToday && !isSelected && { color: theme.colors.primary, fontWeight: '700' },
-                                  isSelected && mStyles.calendarDayTextSelected
-                                ]}>{day}</Text>
-                              )}
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                      <TouchableOpacity style={mStyles.calendarCloseBtn} onPress={() => setShowDatePicker(false)}>
-                        <Text style={mStyles.calendarCloseText}>Zamknij</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
+                    );
+                  })()}
                   {!!taskDate && !showCustomDate && (
                     <View style={mStyles.dateInfoBadge}>
                       <Ionicons name="calendar" size={13} color={theme.colors.primary} />
@@ -1947,6 +1987,7 @@ const mStyles = StyleSheet.create({
   // Calendar picker styles
   calendarContainer: { backgroundColor: theme.colors.surface, borderRadius: 16, padding: 16, marginTop: 8, marginBottom: 8 },
   calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, paddingHorizontal: 4 },
+  calendarNavBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: theme.colors.card, alignItems: 'center', justifyContent: 'center' },
   calendarTitle: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
   calendarWeekDays: { flexDirection: 'row', marginBottom: 4 },
   calendarWeekDay: { width: '14.28%' as any, fontSize: 11, fontWeight: '700', color: theme.colors.textMuted, textAlign: 'center', paddingVertical: 6 },
