@@ -46,13 +46,12 @@ const STATUS_CFG: Record<SubscriptionStatus, { label: string; color: string; bg:
   paused:    { label: 'Wstrzym.',  color: '#0891B2', bg: '#E0F2FE' },
 };
 
-type NavItem = 'dashboard' | 'restaurants' | 'subscriptions' | 'users' | 'settings';
+type NavItem = 'dashboard' | 'restaurants' | 'subscriptions' | 'settings';
 
 const NAV: { key: NavItem; icon: string; label: string }[] = [
   { key: 'dashboard',     icon: 'grid',          label: 'Panel główny'  },
   { key: 'restaurants',   icon: 'storefront',    label: 'Restauracje'   },
   { key: 'subscriptions', icon: 'card',          label: 'Subskrypcje'   },
-  { key: 'users',         icon: 'people',        label: 'Użytkownicy'   },
   { key: 'settings',      icon: 'settings',      label: 'Ustawienia'    },
 ];
 
@@ -79,7 +78,6 @@ function MobileFab({ nav, setNav }: { nav: NavItem; setNav: (n: NavItem) => void
   const actions = [
     { icon: 'storefront-outline', label: 'Restauracje', key: 'restaurants' as NavItem },
     { icon: 'card-outline', label: 'Subskrypcje', key: 'subscriptions' as NavItem },
-    { icon: 'people-outline', label: 'Użytkownicy', key: 'users' as NavItem },
     { icon: 'settings-outline', label: 'Ustawienia', key: 'settings' as NavItem },
   ];
 
@@ -233,7 +231,6 @@ export default function SuperAdminDashboard() {
       case 'dashboard':     return <DashboardTab stats={stats} restaurants={restaurants} activity={activity} subOverview={subOverview} setNav={setNav} />;
       case 'restaurants':   return <RestaurantsTab restaurants={filtered} search={search} setSearch={setSearch} onAdd={() => setShowCreate(true)} onSelectRestaurant={setSelectedRestaurant} onRefresh={loadAll} />;
       case 'subscriptions': return <SubscriptionsTab subscriptions={subscriptions} overview={subOverview} restaurants={restaurants} onRefresh={loadAll} />;
-      case 'users':         return <UsersTab restaurants={restaurants} />;
       case 'settings':      return <SettingsTab promoCodes={promoCodes} onRefresh={loadAll} userId={user?.id ?? ''} />;
     }
   };
@@ -545,18 +542,6 @@ function RestaurantRow({ r, expanded = false, onPress, onDelete, deleting }: { r
           <View style={s.restStatItem}><Ionicons name="people-outline" size={13} color={theme.colors.textMuted} /><Text style={s.restStatText}>{r.employee_count}</Text></View>
           <View style={s.restStatItem}><Ionicons name="list-outline" size={13} color={theme.colors.textMuted} /><Text style={s.restStatText}>{r.task_count}</Text></View>
         </View>
-        {onDelete && (
-          <TouchableOpacity
-            style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: '#FEE2E2', alignItems: 'center', justifyContent: 'center' }}
-            onPress={(e) => { e.stopPropagation?.(); onDelete(); }}
-            activeOpacity={0.7}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            {deleting
-              ? <ActivityIndicator size="small" color="#DC2626" />
-              : <Ionicons name="trash-outline" size={15} color="#DC2626" />}
-          </TouchableOpacity>
-        )}
       </View>
     </TouchableOpacity>
   );
