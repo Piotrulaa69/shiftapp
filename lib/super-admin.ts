@@ -331,11 +331,20 @@ export async function getSubscriptions(): Promise<(Subscription & { restaurant_n
   }));
 }
 
+// Maps plan text value to plan_id UUID in the plans table
+const PLAN_ID_MAP: Record<string, string> = {
+  basic:      'c26cd388-780b-41c7-86cd-b86cf233ae11',
+  premium:    '38224e02-3ce3-4e3e-b0b8-ba921fe7064d',
+  pro:        '38224e02-3ce3-4e3e-b0b8-ba921fe7064d',
+  enterprise: '38224e02-3ce3-4e3e-b0b8-ba921fe7064d',
+};
+
 export async function upsertSubscription(sub: Subscription & { restaurant_name?: string }): Promise<boolean> {
   // Strip computed/joined fields that don't exist as columns
   const { restaurant_name, restaurants, ...rest } = sub as any;
   const fields: any = {
     plan: rest.plan,
+    plan_id: PLAN_ID_MAP[rest.plan] ?? PLAN_ID_MAP['basic'],
     status: rest.status,
     billing_period: rest.billing_period,
     amount: rest.amount,
