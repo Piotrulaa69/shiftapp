@@ -63,7 +63,21 @@ export default function ShiftDetailScreen() {
     }
     if (resolvedShift) {
       setShift(resolvedShift);
-      const ci = await getActiveClockIn(resolvedShift.id);
+      let ci = await getActiveClockIn(resolvedShift.id);
+      if (!ci && user) {
+        // Fallback: search by employee_id for today in case shift_id mismatch
+        const today = new Date().toISOString().slice(0, 10);
+        const { data: fallbackCI } = await supabase
+          .from('clock_ins')
+          .select('*')
+          .eq('employee_id', user.id)
+          .in('status', ['active', 'pending'])
+          .gte('clock_in_at', today + 'T00:00:00')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        ci = fallbackCI as typeof ci;
+      }
       setActiveCI(ci);
     }
     setLoading(false);

@@ -393,7 +393,9 @@ export async function getActiveClockIn(shiftId: string): Promise<DbClockIn | nul
     .from('clock_ins')
     .select('*')
     .eq('shift_id', shiftId)
-    .eq('status', 'active')
+    .in('status', ['active', 'pending'])
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (error) { console.error('getActiveClockIn', error); return null; }
   return data as DbClockIn | null;
