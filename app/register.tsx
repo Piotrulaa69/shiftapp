@@ -94,7 +94,7 @@ function buildStep1(loading: boolean, err: string) {
   <div class="al-left">
     <div class="al-noise"></div>
     <div class="al-lc">
-      <div class="al-brand"><div class="al-mark">S</div><span>ShiftApp</span></div>
+      <div class="al-brand"><img src="/images/białe.png" alt="ShiftApp" style="height:52px;width:auto;object-fit:contain" /></div>
       <div class="al-heading">
         <h1>Zarejestruj restaurację</h1>
         <p>Stwórz konto i zacznij zarządzać zespołem w kilka minut.</p>
@@ -144,7 +144,7 @@ function buildStep2(showPw: boolean, loading: boolean, err: string) {
   <div class="al-left">
     <div class="al-noise"></div>
     <div class="al-lc">
-      <div class="al-brand"><div class="al-mark">S</div><span>ShiftApp</span></div>
+      <div class="al-brand"><img src="/images/białe.png" alt="ShiftApp" style="height:52px;width:auto;object-fit:contain" /></div>
       <div class="al-heading">
         <h1>Zarejestruj restaurację</h1>
         <p>Stwórz konto i zacznij zarządzać zespołem w kilka minut.</p>
