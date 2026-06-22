@@ -316,27 +316,20 @@ export async function createRestaurantWithInvite(
 // ── Subscriptions ─────────────────────────────────────
 
 export async function getSubscriptions(): Promise<(Subscription & { restaurant_name: string })[]> {
-  const { data, error } = await supabase
-    .from('subscriptions')
-    .select('*, restaurants(name)')
-    .order('created_at', { ascending: false });
+  const [{ data: subs, error }, { data: rests }] = await Promise.all([
+    supabase.from('subscriptions').select('*').order('created_at', { ascending: false }),
+    supabase.from('restaurants').select('id, name'),
+  ]);
 
-  if (error) {
-    console.error('getSubscriptions error:', error.message, error.code);
-    // Fallback: try without join
-    const { data: data2, error: error2 } = await supabase
-      .from('subscriptions')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error2 || !data2) return [];
-    return data2.map((s: any) => ({ ...s, restaurant_name: '—' }));
-  }
+  if (error) { console.error('getSubscriptions error:', error.message); }
+  if (!subs) return [];
 
-  if (!data) return [];
+  const nameMap: Record<string, string> = {};
+  (rests ?? []).forEach((r: any) => { nameMap[r.id] = r.name; });
 
-  return data.map((s: any) => ({
+  return subs.map((s: any) => ({
     ...s,
-    restaurant_name: s.restaurants?.name ?? '—',
+    restaurant_name: nameMap[s.restaurant_id] ?? '—',
   }));
 }
 
