@@ -1708,6 +1708,8 @@ export async function kioskLoginByPin(restaurantId: string, pin: string): Promis
 
 export async function getOrCreateQrToken(restaurantId: string): Promise<string | null> {
   const now = new Date().toISOString();
+
+  // 1. Return existing valid token
   const { data: existing } = await supabase
     .from('qr_session_tokens')
     .select('token, expires_at')
@@ -1719,7 +1721,16 @@ export async function getOrCreateQrToken(restaurantId: string): Promise<string |
     .maybeSingle();
   if (existing?.token) return existing.token;
 
-  const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  // 2. Expire any stale unused token (blocks the unique index)
+  await supabase
+    .from('qr_session_tokens')
+    .update({ used_at: now })
+    .eq('restaurant_id', restaurantId)
+    .is('used_at', null)
+    .lt('expires_at', now);
+
+  // 3. Insert fresh token
+  const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from('qr_session_tokens')
