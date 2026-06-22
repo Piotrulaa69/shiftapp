@@ -7,9 +7,9 @@ import type { DbProfile } from '../lib/supabase';
 import { theme } from '../styles/theme';
 
 const QR_REFRESH_MS = 15 * 60 * 1000;
-const PIN_DIGITS = 4;
+const SUCCESS_RETURN_MS = 4000;
 
-type KioskMode = 'choose' | 'pin' | 'qr_list';
+type KioskMode = 'choose' | 'pin' | 'qr';
 
 export default function KioskScreen() {
   const { rid } = useLocalSearchParams<{ rid: string }>();
@@ -18,50 +18,80 @@ export default function KioskScreen() {
   const [pinError, setPinError] = useState('');
   const [loading, setLoading] = useState(false);
   const [loggedIn, setLoggedIn] = useState<DbProfile | null>(null);
+  const [prevMode, setPrevMode] = useState<KioskMode>('qr');
+  const [countdown, setCountdown] = useState(Math.ceil(SUCCESS_RETURN_MS / 1000));
   const [employees, setEmployees] = useState<DbProfile[]>([]);
   const [qrToken, setQrToken] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
   const [qrTimeLeft, setQrTimeLeft] = useState(QR_REFRESH_MS / 1000);
-  const qrTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const qrRefreshRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const qrTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const qrAutoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const returnRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cdRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (!rid) return;
     getKioskEmployees(rid).then(setEmployees);
   }, [rid]);
 
+  // ── QR token management ──────────────────────────────
   const refreshQrToken = async () => {
     if (!rid) return;
     setQrLoading(true);
-    setQrTimeLeft(QR_REFRESH_MS / 1000);
     const token = await getOrCreateQrToken(rid);
     setQrToken(token);
     setQrLoading(false);
-    if (qrTimerRef.current) clearInterval(qrTimerRef.current);
-    if (qrRefreshRef.current) clearTimeout(qrRefreshRef.current);
-    qrTimerRef.current = setInterval(() => {
+    setQrTimeLeft(QR_REFRESH_MS / 1000);
+    if (qrTickRef.current) clearInterval(qrTickRef.current);
+    if (qrAutoRef.current) clearTimeout(qrAutoRef.current);
+    qrTickRef.current = setInterval(() => {
       setQrTimeLeft(prev => {
-        if (prev <= 1) { clearInterval(qrTimerRef.current!); return 0; }
+        if (prev <= 1) { clearInterval(qrTickRef.current!); return 0; }
         return prev - 1;
       });
     }, 1000);
-    qrRefreshRef.current = setTimeout(() => { refreshQrToken(); }, QR_REFRESH_MS);
+    qrAutoRef.current = setTimeout(() => refreshQrToken(), QR_REFRESH_MS);
   };
 
   useEffect(() => {
-    if (mode === 'qr_list') { refreshQrToken(); }
+    if (mode === 'qr') refreshQrToken();
     return () => {
-      if (qrTimerRef.current) clearInterval(qrTimerRef.current);
-      if (qrRefreshRef.current) clearTimeout(qrRefreshRef.current);
+      if (qrTickRef.current) clearInterval(qrTickRef.current);
+      if (qrAutoRef.current) clearTimeout(qrAutoRef.current);
     };
   }, [mode]);
 
+  // ── Success auto-return ──────────────────────────────
+  const showSuccess = (emp: DbProfile, returnTo: KioskMode) => {
+    setLoggedIn(emp);
+    setPrevMode(returnTo);
+    setCountdown(Math.ceil(SUCCESS_RETURN_MS / 1000));
+    if (cdRef.current) clearInterval(cdRef.current);
+    if (returnRef.current) clearTimeout(returnRef.current);
+    cdRef.current = setInterval(() => setCountdown(c => Math.max(0, c - 1)), 1000);
+    returnRef.current = setTimeout(() => {
+      clearInterval(cdRef.current!);
+      setLoggedIn(null);
+      setMode(returnTo);
+      setPin('');
+      setPinError('');
+    }, SUCCESS_RETURN_MS);
+  };
+
+  useEffect(() => () => {
+    if (cdRef.current) clearInterval(cdRef.current);
+    if (returnRef.current) clearTimeout(returnRef.current);
+  }, []);
+
+  // ── PIN logic ────────────────────────────────────────
   const handlePinDigit = (d: string) => {
-    if (pin.length >= 6) return;
+    if (loading) return;
+    if (d === '⌫') { setPin(p => p.slice(0, -1)); setPinError(''); return; }
     const next = pin + d;
+    if (next.length > 6) return;
     setPin(next);
     setPinError('');
-    if (next.length >= PIN_DIGITS) { attemptPinLogin(next); }
+    if (next.length >= 4) attemptPinLogin(next);
   };
 
   const attemptPinLogin = async (p: string) => {
@@ -70,24 +100,17 @@ export default function KioskScreen() {
     const emp = await kioskLoginByPin(rid, p);
     setLoading(false);
     if (emp) {
-      setLoggedIn(emp);
-      setPin('');
+      showSuccess(emp, 'pin');
     } else {
       setPinError('Nieprawidłowy PIN. Spróbuj ponownie.');
       setTimeout(() => { setPin(''); setPinError(''); }, 1500);
     }
   };
 
-  const handleQrEmployeeSelect = async (emp: DbProfile) => {
-    setLoggedIn(emp);
+  // ── QR employee select ───────────────────────────────
+  const handleQrSelect = async (emp: DbProfile) => {
+    showSuccess(emp, 'qr');
     await refreshQrToken();
-  };
-
-  const handleLogout = () => {
-    setLoggedIn(null);
-    setMode('choose');
-    setPin('');
-    setPinError('');
   };
 
   if (!rid) {
@@ -98,26 +121,25 @@ export default function KioskScreen() {
     );
   }
 
+  // ── SUCCESS SCREEN ───────────────────────────────────
   if (loggedIn) {
     return (
       <View style={s.successScreen}>
-        <View style={[s.avatarBig, { backgroundColor: loggedIn.avatar_color ?? theme.colors.primary }]}>
-          <Text style={s.avatarBigText}>{loggedIn.first_name[0]}{loggedIn.last_name[0]}</Text>
+        <View style={s.successCheckCircle}>
+          <Ionicons name="checkmark" size={52} color="#fff" />
         </View>
-        <Text style={s.successName}>{loggedIn.first_name} {loggedIn.last_name}</Text>
+        <Text style={s.successHeadline}>
+          {loggedIn.first_name} {loggedIn.last_name}, zalogowałeś się!
+        </Text>
         <Text style={s.successJob}>{loggedIn.job_title}</Text>
-        <View style={s.successBadge}>
-          <Ionicons name="checkmark-circle" size={22} color="#059669" />
-          <Text style={s.successBadgeText}>Zalogowano pomyślnie</Text>
+        <View style={s.successCountdown}>
+          <Text style={s.successCountdownText}>Powrót za {countdown}s</Text>
         </View>
-        <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-          <Ionicons name="arrow-back-outline" size={18} color={theme.colors.text} />
-          <Text style={s.logoutBtnText}>Powrót do kiosku</Text>
-        </TouchableOpacity>
       </View>
     );
   }
 
+  // ── CHOOSE SCREEN ────────────────────────────────────
   if (mode === 'choose') {
     return (
       <View style={s.chooseScreen}>
@@ -131,7 +153,7 @@ export default function KioskScreen() {
             <Text style={s.chooseCardTitle}>PIN</Text>
             <Text style={s.chooseCardSub}>Wpisz swój indywidualny PIN</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={s.chooseCard} onPress={() => setMode('qr_list')} activeOpacity={0.85}>
+          <TouchableOpacity style={s.chooseCard} onPress={() => setMode('qr')} activeOpacity={0.85}>
             <View style={[s.chooseIcon, { backgroundColor: '#F0FDF4' }]}>
               <Ionicons name="qr-code" size={36} color="#059669" />
             </View>
@@ -143,6 +165,7 @@ export default function KioskScreen() {
     );
   }
 
+  // ── PIN SCREEN ───────────────────────────────────────
   if (mode === 'pin') {
     return (
       <View style={s.pinScreen}>
@@ -159,17 +182,17 @@ export default function KioskScreen() {
           ))}
         </View>
         {!!pinError && <Text style={s.pinError}>{pinError}</Text>}
-        {loading && <ActivityIndicator color={theme.colors.primary} style={{ marginVertical: 12 }} />}
+        {loading && <ActivityIndicator color={theme.colors.primary} style={{ marginVertical: 8 }} />}
         <View style={s.numpad}>
           {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((d, i) => (
             <TouchableOpacity
               key={i}
-              style={[s.numKey, d === '' && { opacity: 0 }]}
-              onPress={() => { if (d === '⌫') { setPin(p => p.slice(0,-1)); setPinError(''); } else if (d) { handlePinDigit(d); } }}
+              style={[s.numKey, d === '' && { opacity: 0, pointerEvents: 'none' } as any]}
+              onPress={() => handlePinDigit(d)}
               activeOpacity={0.7}
-              disabled={d === '' || loading}
+              disabled={loading}
             >
-              <Text style={s.numKeyText}>{d}</Text>
+              <Text style={d === '⌫' ? s.numKeyDel : s.numKeyText}>{d}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -177,42 +200,54 @@ export default function KioskScreen() {
     );
   }
 
-  if (mode === 'qr_list') {
-    const minutes = Math.floor(qrTimeLeft / 60);
-    const seconds = qrTimeLeft % 60;
+  // ── QR SCREEN ────────────────────────────────────────
+  if (mode === 'qr') {
+    const mins = Math.floor(qrTimeLeft / 60);
+    const secs = qrTimeLeft % 60;
     const qrValue = qrToken ? `reztro://kiosk?token=${qrToken}&rid=${rid}` : 'loading';
+    const qrEmployees = employees.filter(e => e.login_method === 'qr');
+
     return (
-      <ScrollView contentContainerStyle={s.qrScreen}>
-        <TouchableOpacity style={s.backBtn} onPress={() => { setMode('choose'); }} activeOpacity={0.7}>
+      <ScrollView contentContainerStyle={s.qrScreen} showsVerticalScrollIndicator={false}>
+        <TouchableOpacity style={s.backBtn} onPress={() => setMode('choose')} activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={20} color={theme.colors.textMuted} />
           <Text style={s.backBtnText}>Wróć</Text>
         </TouchableOpacity>
+
+        {/* QR Code display */}
         <View style={s.qrSection}>
           <Text style={s.qrTitle}>Kod QR restauracji</Text>
-          <Text style={s.qrSub}>Wywieś ten kod na ścianie — pracownicy skanują go aparatem</Text>
+          <Text style={s.qrSub}>Wywieś ten ekran na ścianie — pracownicy skanują ten kod</Text>
           <View style={s.qrBox}>
             {qrLoading || !qrToken
               ? <ActivityIndicator color={theme.colors.primary} size="large" />
-              : <Image source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrValue)}` }} style={{ width: 200, height: 200, borderRadius: 8 }} />}
+              : <Image
+                  source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=10&data=${encodeURIComponent(qrValue)}` }}
+                  style={{ width: 220, height: 220, borderRadius: 8 }}
+                />
+            }
           </View>
-          <View style={s.qrTimer}>
+          <View style={s.qrTimerRow}>
             <Ionicons name="time-outline" size={14} color={theme.colors.textMuted} />
             <Text style={s.qrTimerText}>
-              Odświeży się za {minutes}:{String(seconds).padStart(2,'0')}
+              Odświeży się automatycznie za {mins}:{String(secs).padStart(2, '0')}
             </Text>
-            <TouchableOpacity onPress={refreshQrToken} activeOpacity={0.7} style={{ marginLeft: 8 }}>
+            <TouchableOpacity onPress={refreshQrToken} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Ionicons name="refresh-outline" size={16} color={theme.colors.primary} />
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Employee list for QR users */}
         <View style={s.divider}>
           <View style={s.dividerLine} />
-          <Text style={s.dividerText}>lub wybierz pracownika z listy</Text>
+          <Text style={s.dividerText}>lub wybierz pracownika poniżej</Text>
           <View style={s.dividerLine} />
         </View>
+
         <View style={s.empList}>
-          {employees.filter(e => e.login_method === 'qr').map((emp) => (
-            <TouchableOpacity key={emp.id} style={s.empCard} onPress={() => handleQrEmployeeSelect(emp)} activeOpacity={0.8}>
+          {qrEmployees.map((emp) => (
+            <TouchableOpacity key={emp.id} style={s.empCard} onPress={() => handleQrSelect(emp)} activeOpacity={0.8}>
               <View style={[s.empAvatar, { backgroundColor: emp.avatar_color ?? theme.colors.primary }]}>
                 <Text style={s.empAvatarText}>{emp.first_name[0]}{emp.last_name[0]}</Text>
               </View>
@@ -223,8 +258,8 @@ export default function KioskScreen() {
               <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
             </TouchableOpacity>
           ))}
-          {employees.filter(e => e.login_method === 'qr').length === 0 && (
-            <Text style={s.emptyText}>Brak pracowników z metodą logowania QR</Text>
+          {qrEmployees.length === 0 && (
+            <Text style={s.emptyText}>Brak pracowników z metodą logowania QR.{'\n'}Ustaw metodę QR w panelu admina.</Text>
           )}
         </View>
       </ScrollView>
@@ -238,6 +273,7 @@ const s = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.background },
   errorText: { fontSize: 14, color: theme.colors.textMuted, textAlign: 'center', padding: 24 },
 
+  // Choose
   chooseScreen: { flex: 1, backgroundColor: theme.colors.background, alignItems: 'center', justifyContent: 'center', padding: 32 },
   kioskTitle: { fontSize: 28, fontWeight: '800', color: theme.colors.text, marginBottom: 6 },
   kioskSub: { fontSize: 15, color: theme.colors.textMuted, marginBottom: 40 },
@@ -247,44 +283,45 @@ const s = StyleSheet.create({
   chooseCardTitle: { fontSize: 18, fontWeight: '800', color: theme.colors.text },
   chooseCardSub: { fontSize: 12, color: theme.colors.textMuted, textAlign: 'center' },
 
+  // PIN
   pinScreen: { flex: 1, backgroundColor: theme.colors.background, alignItems: 'center', justifyContent: 'center', padding: 32 },
   pinTitle: { fontSize: 24, fontWeight: '800', color: theme.colors.text, marginBottom: 6 },
   pinSub: { fontSize: 14, color: theme.colors.textMuted, marginBottom: 24 },
-  pinDots: { flexDirection: 'row', gap: 12, marginBottom: 12 },
-  pinDot: { width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: theme.colors.border, backgroundColor: 'transparent' },
+  pinDots: { flexDirection: 'row', gap: 12, marginBottom: 8 },
+  pinDot: { width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: theme.colors.border, backgroundColor: 'transparent' },
   pinDotFilled: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
-  pinError: { fontSize: 13, color: '#DC2626', marginBottom: 8, textAlign: 'center' },
-  numpad: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, width: 260, marginTop: 16 },
-  numKey: { width: 72, height: 72, borderRadius: 16, backgroundColor: theme.colors.card, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  numKeyText: { fontSize: 24, fontWeight: '700', color: theme.colors.text },
+  pinError: { fontSize: 13, color: '#DC2626', marginBottom: 4, textAlign: 'center' },
+  numpad: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, width: 270, marginTop: 20, justifyContent: 'center' },
+  numKey: { width: 74, height: 74, borderRadius: 18, backgroundColor: theme.colors.card, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  numKeyText: { fontSize: 26, fontWeight: '700', color: theme.colors.text },
+  numKeyDel: { fontSize: 22, fontWeight: '600', color: theme.colors.textMuted },
   backBtn: { position: 'absolute', top: 56, left: 24, flexDirection: 'row', alignItems: 'center', gap: 6, zIndex: 10 },
   backBtnText: { fontSize: 14, color: theme.colors.textMuted, fontWeight: '600' },
 
-  qrScreen: { backgroundColor: theme.colors.background, padding: 24, paddingTop: 72, alignItems: 'center', gap: 24 },
-  qrSection: { alignItems: 'center', width: '100%', gap: 8 },
-  qrTitle: { fontSize: 20, fontWeight: '800', color: theme.colors.text },
-  qrSub: { fontSize: 13, color: theme.colors.textMuted, textAlign: 'center' },
-  qrBox: { width: 240, height: 240, backgroundColor: '#fff', borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 3, marginTop: 8 },
-  qrTimer: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+  // QR
+  qrScreen: { backgroundColor: theme.colors.background, padding: 24, paddingTop: 80, alignItems: 'center', gap: 24, minHeight: '100%' } as any,
+  qrSection: { alignItems: 'center', width: '100%', gap: 10 },
+  qrTitle: { fontSize: 22, fontWeight: '800', color: theme.colors.text },
+  qrSub: { fontSize: 13, color: theme.colors.textMuted, textAlign: 'center', lineHeight: 18 },
+  qrBox: { width: 256, height: 256, backgroundColor: '#fff', borderRadius: 20, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 4, marginTop: 8 },
+  qrTimerRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
   qrTimerText: { fontSize: 12, color: theme.colors.textMuted },
   divider: { flexDirection: 'row', alignItems: 'center', gap: 10, width: '100%' },
   dividerLine: { flex: 1, height: 1, backgroundColor: theme.colors.border },
-  dividerText: { fontSize: 12, color: theme.colors.textMuted, whiteSpace: 'nowrap' } as any,
-  empList: { width: '100%', gap: 10 },
-  empCard: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: theme.colors.card, borderRadius: 14, padding: 14, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  empAvatar: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  empAvatarText: { fontSize: 16, fontWeight: '800', color: '#fff' },
+  dividerText: { fontSize: 12, color: theme.colors.textMuted } as any,
+  empList: { width: '100%', gap: 10, paddingBottom: 32 },
+  empCard: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: theme.colors.card, borderRadius: 16, padding: 14, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  empAvatar: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  empAvatarText: { fontSize: 17, fontWeight: '800', color: '#fff' },
   empName: { fontSize: 15, fontWeight: '700', color: theme.colors.text },
   empJob: { fontSize: 12, color: theme.colors.textMuted, marginTop: 2 },
-  emptyText: { textAlign: 'center', color: theme.colors.textMuted, fontSize: 13, padding: 16 },
+  emptyText: { textAlign: 'center', color: theme.colors.textMuted, fontSize: 13, padding: 16, lineHeight: 20 },
 
-  successScreen: { flex: 1, backgroundColor: theme.colors.background, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },
-  avatarBig: { width: 100, height: 100, borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  avatarBigText: { fontSize: 36, fontWeight: '900', color: '#fff' },
-  successName: { fontSize: 28, fontWeight: '800', color: theme.colors.text },
-  successJob: { fontSize: 16, color: theme.colors.textMuted },
-  successBadge: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#D1FAE5', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, marginTop: 8 },
-  successBadgeText: { fontSize: 15, fontWeight: '700', color: '#059669' },
-  logoutBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 24, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: theme.colors.surface, borderRadius: 12 },
-  logoutBtnText: { fontSize: 14, fontWeight: '600', color: theme.colors.text },
+  // Success
+  successScreen: { flex: 1, backgroundColor: '#059669', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 40 },
+  successCheckCircle: { width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  successHeadline: { fontSize: 30, fontWeight: '900', color: '#fff', textAlign: 'center', lineHeight: 38 },
+  successJob: { fontSize: 17, color: 'rgba(255,255,255,0.75)', marginTop: -4 },
+  successCountdown: { marginTop: 24, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20 },
+  successCountdownText: { fontSize: 14, color: 'rgba(255,255,255,0.9)', fontWeight: '600' },
 });

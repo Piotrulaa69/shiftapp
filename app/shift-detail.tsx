@@ -294,7 +294,7 @@ export default function ShiftDetailScreen() {
             </View>
             <View style={mStyles.body}>
               <Text style={{ fontSize: 13, color: theme.colors.textSecondary, textAlign: 'center', marginBottom: 16 }}>
-                Wpisz PIN zmiany lub zamelduj się ręcznie
+                Wpisz PIN zmiany, aby się zameldować
               </Text>
               <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'center', marginBottom: 12 }}>
                 {[0, 1, 2, 3].map((i) => (
@@ -320,9 +320,6 @@ export default function ShiftDetailScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-              <TouchableOpacity style={[mStyles.saveBtn, { backgroundColor: theme.colors.surface }]} onPress={handleManualClockIn} disabled={clockLoading} activeOpacity={0.8}>
-                <Text style={[mStyles.saveBtnText, { color: theme.colors.textSecondary }]}>Zamelduj ręcznie (bez PIN)</Text>
-              </TouchableOpacity>
             </View>
           </View>
         </View>
