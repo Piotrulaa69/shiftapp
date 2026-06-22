@@ -264,7 +264,7 @@ export default function TasksScreen() {
   const [newPriority, setNewPriority] = useState<'wysoki' | 'normalny' | 'niski'>('normalny');
   const [newDuration, setNewDuration] = useState('30');
   const [newConfirm, setNewConfirm] = useState<'photo' | 'values' | 'description' | null>(null);
-  const [newAssignedTo, setNewAssignedTo] = useState<string>('ALL');
+  const [newAssignedTo, setNewAssignedTo] = useState<string[]>([]);
   const [newAssignedGroup, setNewAssignedGroup] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [approvalDetailTask, setApprovalDetailTask] = useState<DbTask | null>(null);
@@ -449,7 +449,7 @@ export default function TasksScreen() {
   const resetForm = () => {
     setEditingTask(null);
     setModalStep(1);
-    setNewTitle(''); setNewDesc(''); setNewTime('08:00'); setNewPriority('normalny'); setNewDuration('30'); setNewConfirm(null); setNewAssignedTo('ALL'); setNewAssignedGroup(null);
+    setNewTitle(''); setNewDesc(''); setNewTime('08:00'); setNewPriority('normalny'); setNewDuration('30'); setNewConfirm(null); setNewAssignedTo([]); setNewAssignedGroup(null);
     setCfgValueItems([]); setCfgCheckItems([]); setCfgPrompt('');
     setIsRecurring(false); setRecurrencePattern('daily'); setRecurrenceEndDate(''); setSelectedDays([]);
     setPoints('');
@@ -465,7 +465,7 @@ export default function TasksScreen() {
     setNewPriority(task.priority as 'wysoki' | 'normalny' | 'niski');
     setNewDuration(String(task.duration_min ?? 30));
     setNewConfirm(task.confirmation_type ?? null);
-    setNewAssignedTo(task.assigned_to ?? 'ALL');
+    setNewAssignedTo(task.assigned_to ? [task.assigned_to] : []);
     setNewAssignedGroup(task.target_group_id ?? null);
     setPoints(String(task.points ?? 0));
     setTaskDate(task.scheduled_date ?? '');
@@ -482,7 +482,6 @@ export default function TasksScreen() {
   const handleCreate = async () => {
     if (!newTitle.trim()) return;
     setSaving(true);
-    const assignTo = newAssignedTo === 'ALL' ? null : (newAssignedTo || null);
     let confirmationConfig: any = null;
     if (newConfirm === 'values' && cfgValueItems.length > 0) {
       confirmationConfig = { items: cfgValueItems.map(i => ({ id: i.id, name: i.name, unit: i.unit, min: parseFloat(i.min) || 0, max: parseFloat(i.max) || 100 })) };
@@ -495,10 +494,9 @@ export default function TasksScreen() {
       ? (selectedDays.length > 0 ? selectedDays : [1])
       : null;
 
-    const taskFields = {
+    const baseFields = {
       title: newTitle.trim(),
       description: newDesc.trim(),
-      assigned_to: assignTo,
       assigned_time: newTime,
       scheduled_date: taskDate || null,
       priority: newPriority,
@@ -514,8 +512,8 @@ export default function TasksScreen() {
     };
 
     if (editingTask) {
-      // Edit mode
-      const updated = await updateTask(editingTask.id, taskFields);
+      const assignTo = newAssignedTo.length === 1 ? newAssignedTo[0] : (newAssignedTo.length === 0 ? null : editingTask.assigned_to);
+      const updated = await updateTask(editingTask.id, { ...baseFields, assigned_to: assignTo });
       if (updated) {
         setTasks((prev) => prev.map((t) => t.id === editingTask.id ? updated : t));
       } else {
@@ -524,15 +522,19 @@ export default function TasksScreen() {
       setSaving(false);
       if (!updated) return;
     } else {
-      // Create mode
-      const created = await createTask(rid, taskFields);
-      if (created) {
-        setTasks((prev) => [...prev, created]);
+      // Create mode — one task per selected person (or one unassigned if nobody selected)
+      const targets = newAssignedTo.length > 0 ? newAssignedTo : [null];
+      const results = await Promise.all(
+        targets.map((personId) => createTask(rid, { ...baseFields, assigned_to: personId }))
+      );
+      const created = results.filter(Boolean) as NonNullable<typeof results[0]>[];
+      if (created.length > 0) {
+        setTasks((prev) => [...prev, ...created]);
       } else {
-        Alert.alert('Błąd zapisu', 'Nie udało się dodać zadania. Sprawdź konsolę po szczegóły.');
+        Alert.alert('Błąd zapisu', 'Nie udało się dodać zadania.');
       }
       setSaving(false);
-      if (!created) return;
+      if (created.length === 0) return;
     }
 
     setShowModal(false);
@@ -1064,46 +1066,87 @@ export default function TasksScreen() {
 
                 <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={mStyles.body}>
 
-                  {/* Assignee */}
+                  {/* Assignee — multi-select */}
                   {canApprove && employees.length > 0 && (
                     <>
-                      <Text style={mStyles.label}>Przypisz do *</Text>
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
-                        <TouchableOpacity key="all" style={[mStyles.empChipModal, newAssignedTo === 'ALL' && mStyles.empChipModalActive]} onPress={() => setNewAssignedTo('ALL')} activeOpacity={0.75}>
-                          <View style={[mStyles.empAvatarSmall, { backgroundColor: newAssignedTo === 'ALL' ? theme.colors.primary : theme.colors.textMuted }]}><Text style={mStyles.empAvatarSmallText}>Ws</Text></View>
-                          <Text style={[mStyles.empChipModalText, newAssignedTo === 'ALL' && mStyles.empChipModalTextActive]}>Wszyscy</Text>
-                        </TouchableOpacity>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <Text style={mStyles.label}>Przypisz do</Text>
+                        {newAssignedTo.length > 0 && (
+                          <TouchableOpacity onPress={() => setNewAssignedTo([])} activeOpacity={0.7}>
+                            <Text style={{ fontSize: 12, color: theme.colors.primary, fontWeight: '600' }}>
+                              {newAssignedTo.length === employees.length ? 'Wszyscy zaznaczeni · odznacz' : `${newAssignedTo.length} zaznaczon${newAssignedTo.length === 1 ? 'a' : 'ych'} · wyczyść`}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+
+                      {/* Group quick-select chips */}
+                      {groups.length > 0 && (
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }} contentContainerStyle={{ gap: 6, paddingVertical: 2 }}>
+                          {groups.map((g) => {
+                            const memberIds = employees.filter(e => (e as any).groups?.includes(g.id) || myGroupIds.includes(g.id)).map(e => e.id);
+                            const groupEmpIds = employees
+                              .filter(e => {
+                                return (e as any).group_id === g.id || g.members?.includes(e.id);
+                              })
+                              .map(e => e.id);
+                            const allSelected = groupEmpIds.length > 0 && groupEmpIds.every(id => newAssignedTo.includes(id));
+                            return (
+                              <TouchableOpacity
+                                key={g.id}
+                                style={[mStyles.empChipModal, allSelected && mStyles.empChipModalActive, { borderStyle: 'dashed' }]}
+                                onPress={() => {
+                                  if (groupEmpIds.length === 0) return;
+                                  if (allSelected) {
+                                    setNewAssignedTo(prev => prev.filter(id => !groupEmpIds.includes(id)));
+                                  } else {
+                                    setNewAssignedTo(prev => Array.from(new Set([...prev, ...groupEmpIds])));
+                                  }
+                                }}
+                                activeOpacity={0.75}
+                              >
+                                <View style={[mStyles.empAvatarSmall, { backgroundColor: allSelected ? g.color : theme.colors.border }]}>
+                                  <Text style={mStyles.empAvatarSmallText}>{g.name.substring(0, 2).toUpperCase()}</Text>
+                                </View>
+                                <Text style={[mStyles.empChipModalText, allSelected && mStyles.empChipModalTextActive]} numberOfLines={1}>{g.name}</Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+                      )}
+
+                      {/* Individual employee chips — wrap */}
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
                         {employees.map((e) => {
-                          const active = newAssignedTo === e.id;
+                          const active = newAssignedTo.includes(e.id);
                           const initials = `${e.first_name?.[0] ?? ''}${e.last_name?.[0] ?? ''}`.toUpperCase();
                           return (
-                            <TouchableOpacity key={e.id} style={[mStyles.empChipModal, active && mStyles.empChipModalActive]} onPress={() => setNewAssignedTo(e.id)} activeOpacity={0.75}>
-                              <View style={[mStyles.empAvatarSmall, { backgroundColor: active ? theme.colors.primary : (e.avatar_color ?? theme.colors.primary) }]}><Text style={mStyles.empAvatarSmallText}>{initials}</Text></View>
-                              <Text style={[mStyles.empChipModalText, active && mStyles.empChipModalTextActive]} numberOfLines={1}>{e.first_name} {e.last_name}</Text>
+                            <TouchableOpacity
+                              key={e.id}
+                              style={[mStyles.empChipModal, active && mStyles.empChipModalActive]}
+                              onPress={() => setNewAssignedTo(prev =>
+                                prev.includes(e.id) ? prev.filter(id => id !== e.id) : [...prev, e.id]
+                              )}
+                              activeOpacity={0.75}
+                            >
+                              <View style={[mStyles.empAvatarSmall, { backgroundColor: active ? theme.colors.primary : (e.avatar_color ?? theme.colors.primary) }]}>
+                                <Text style={mStyles.empAvatarSmallText}>{initials}</Text>
+                              </View>
+                              <Text style={[mStyles.empChipModalText, active && mStyles.empChipModalTextActive]} numberOfLines={1}>
+                                {e.first_name} {e.last_name}
+                              </Text>
+                              {active && <Ionicons name="checkmark-circle" size={14} color={theme.colors.primary} />}
                             </TouchableOpacity>
                           );
                         })}
-                      </ScrollView>
-                    </>
-                  )}
-                  {canApprove && groups.length > 0 && (
-                    <>
-                      <Text style={mStyles.label}>Lub przypisz do grupy</Text>
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
-                        <TouchableOpacity key="none" style={[mStyles.empChipModal, newAssignedGroup === null && mStyles.empChipModalActive]} onPress={() => setNewAssignedGroup(null)} activeOpacity={0.75}>
-                          <View style={[mStyles.empAvatarSmall, { backgroundColor: newAssignedGroup === null ? theme.colors.textMuted : theme.colors.border }]}><Text style={mStyles.empAvatarSmallText}>--</Text></View>
-                          <Text style={[mStyles.empChipModalText, newAssignedGroup === null && mStyles.empChipModalTextActive]}>Brak</Text>
-                        </TouchableOpacity>
-                        {groups.map((g) => {
-                          const active = newAssignedGroup === g.id;
-                          return (
-                            <TouchableOpacity key={g.id} style={[mStyles.empChipModal, active && mStyles.empChipModalActive]} onPress={() => setNewAssignedGroup(g.id)} activeOpacity={0.75}>
-                              <View style={[mStyles.empAvatarSmall, { backgroundColor: active ? g.color : theme.colors.border }]}><Text style={mStyles.empAvatarSmallText}>{g.name.substring(0, 2).toUpperCase()}</Text></View>
-                              <Text style={[mStyles.empChipModalText, active && mStyles.empChipModalTextActive]} numberOfLines={1}>{g.name}</Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </ScrollView>
+                      </View>
+
+                      {newAssignedTo.length === 0 && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8, backgroundColor: '#FFF7ED', borderRadius: 8, padding: 8 }}>
+                          <Ionicons name="information-circle-outline" size={14} color="#D97706" />
+                          <Text style={{ fontSize: 12, color: '#D97706', fontWeight: '500' }}>Brak zaznaczonych — zadanie trafi do wszystkich</Text>
+                        </View>
+                      )}
                     </>
                   )}
 
@@ -1229,25 +1272,28 @@ export default function TasksScreen() {
                         {DAY_NAMES_SHORT.map(d => <Text key={d} style={mStyles.calendarWeekDay}>{d}</Text>)}
                       </View>
                       <View style={mStyles.calendarGrid}>
-                        {getDaysInMonth(pickerYear, pickerMonth).map((day, idx) => (
-                          <TouchableOpacity
-                            key={idx}
-                            style={[
-                              mStyles.calendarDay,
-                              day === null && mStyles.calendarDayEmpty,
-                              day !== null && `${pickerYear}-${String(pickerMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` === taskDate && mStyles.calendarDaySelected
-                            ]}
-                            onPress={() => day !== null && selectPickerDate(day)}
-                            disabled={day === null}
-                          >
-                            {day !== null && (
-                              <Text style={[
-                                mStyles.calendarDayText,
-                                `${pickerYear}-${String(pickerMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` === taskDate && mStyles.calendarDayTextSelected
-                              ]}>{day}</Text>
-                            )}
-                          </TouchableOpacity>
-                        ))}
+                        {getDaysInMonth(pickerYear, pickerMonth).map((day, idx) => {
+                          const dateStr = day !== null ? `${pickerYear}-${String(pickerMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
+                          const isSelected = dateStr === taskDate;
+                          const isToday = dateStr === todayStr();
+                          return (
+                            <TouchableOpacity
+                              key={idx}
+                              style={mStyles.calendarDay}
+                              onPress={() => day !== null && selectPickerDate(day)}
+                              disabled={day === null}
+                              activeOpacity={0.7}
+                            >
+                              {day !== null && (
+                                <Text style={[
+                                  mStyles.calendarDayText,
+                                  isToday && !isSelected && { color: theme.colors.primary, fontWeight: '700' },
+                                  isSelected && mStyles.calendarDayTextSelected
+                                ]}>{day}</Text>
+                              )}
+                            </TouchableOpacity>
+                          );
+                        })}
                       </View>
                       <TouchableOpacity style={mStyles.calendarCloseBtn} onPress={() => setShowDatePicker(false)}>
                         <Text style={mStyles.calendarCloseText}>Zamknij</Text>
@@ -1899,17 +1945,17 @@ const mStyles = StyleSheet.create({
   dayCircleTextActive: { color: '#fff' },
 
   // Calendar picker styles
-  calendarContainer: { backgroundColor: theme.colors.surface, borderRadius: 12, padding: 12, marginTop: 8, marginBottom: 8 },
-  calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingHorizontal: 8 },
+  calendarContainer: { backgroundColor: theme.colors.surface, borderRadius: 16, padding: 16, marginTop: 8, marginBottom: 8 },
+  calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, paddingHorizontal: 4 },
   calendarTitle: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
-  calendarWeekDays: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 8 },
-  calendarWeekDay: { fontSize: 12, fontWeight: '600', color: theme.colors.textMuted, width: 36, textAlign: 'center' },
-  calendarGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-around' },
-  calendarDay: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', margin: 2 },
+  calendarWeekDays: { flexDirection: 'row', marginBottom: 4 },
+  calendarWeekDay: { width: '14.28%' as any, fontSize: 11, fontWeight: '700', color: theme.colors.textMuted, textAlign: 'center', paddingVertical: 6 },
+  calendarGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  calendarDay: { width: '14.28%' as any, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', padding: 2 },
   calendarDayEmpty: { backgroundColor: 'transparent' },
-  calendarDaySelected: { backgroundColor: theme.colors.primary },
-  calendarDayText: { fontSize: 14, fontWeight: '500', color: theme.colors.text },
-  calendarDayTextSelected: { color: '#fff', fontWeight: '700' },
-  calendarCloseBtn: { alignSelf: 'center', marginTop: 12, paddingVertical: 8, paddingHorizontal: 20, backgroundColor: theme.colors.card, borderRadius: 8 },
-  calendarCloseText: { fontSize: 14, fontWeight: '600', color: theme.colors.primary },
+  calendarDaySelected: {},
+  calendarDayText: { fontSize: 13, fontWeight: '500', color: theme.colors.text, width: 34, height: 34, borderRadius: 17, textAlign: 'center', lineHeight: 34 },
+  calendarDayTextSelected: { color: '#fff', fontWeight: '700', backgroundColor: theme.colors.primary },
+  calendarCloseBtn: { alignSelf: 'center', marginTop: 14, paddingVertical: 8, paddingHorizontal: 24, backgroundColor: theme.colors.primaryLight, borderRadius: 10 },
+  calendarCloseText: { fontSize: 14, fontWeight: '700', color: theme.colors.primary },
 });
