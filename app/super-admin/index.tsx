@@ -594,7 +594,13 @@ function SubscriptionsTab({ subscriptions, overview, restaurants, onRefresh }: a
   const [newSaving, setNewSaving] = useState(false);
   const [restaurantSearch, setRestaurantSearch] = useState('');
 
-  const visible = filter === 'all' ? subscriptions : subscriptions.filter((s: any) => s.status === filter);
+  const visible = filter === 'all'
+    ? subscriptions
+    : filter === 'trial'
+      ? subscriptions.filter((s: any) => s.status === 'trial' || (s.plan === 'basic' && s.status !== 'cancelled' && s.status !== 'overdue'))
+      : filter === 'active'
+        ? subscriptions.filter((s: any) => s.status === 'active' && s.plan !== 'basic')
+        : subscriptions.filter((s: any) => s.status === filter);
 
   // Restaurants that don't yet have a subscription entry
   const existingRestaurantIds = new Set(subscriptions.map((s: any) => s.restaurant_id));
@@ -694,7 +700,8 @@ function SubscriptionsTab({ subscriptions, overview, restaurants, onRefresh }: a
       )}
 
       {visible.map((sub: Subscription & { restaurant_name: string }) => {
-        const cfg = STATUS_CFG[sub.status] ?? STATUS_CFG.active;
+        const effectiveStatus = (sub.plan === 'basic' && sub.status !== 'cancelled' && sub.status !== 'overdue') ? 'trial' : sub.status;
+        const cfg = STATUS_CFG[effectiveStatus] ?? STATUS_CFG.active;
         const daysLeft = daysUntil(sub.next_payment_date ?? sub.trial_ends_at);
         const isOverdue = sub.status === 'overdue';
         return (

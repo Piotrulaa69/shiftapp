@@ -416,14 +416,16 @@ export async function getSubscriptionsOverview(): Promise<{
   total: number; active: number; trial: number; overdue: number; cancelled: number;
   monthly_revenue: number;
 }> {
-  const { data } = await supabase.from('subscriptions').select('status, amount, billing_period');
+  const { data } = await supabase.from('subscriptions').select('status, plan, amount, billing_period');
   const all = data ?? [];
-  const monthly = all.filter((s: any) => s.billing_period === 'monthly' && s.status === 'active').reduce((sum: number, s: any) => sum + (s.amount ?? 0), 0);
-  const annual = all.filter((s: any) => s.billing_period === 'annual' && s.status === 'active').reduce((sum: number, s: any) => sum + (s.amount ?? 0) / 12, 0);
+  const isTrial = (s: any) => s.status === 'trial' || s.plan === 'basic';
+  const isActive = (s: any) => s.status === 'active' && s.plan !== 'basic';
+  const monthly = all.filter((s: any) => s.billing_period === 'monthly' && isActive(s)).reduce((sum: number, s: any) => sum + (s.amount ?? 0), 0);
+  const annual = all.filter((s: any) => s.billing_period === 'annual' && isActive(s)).reduce((sum: number, s: any) => sum + (s.amount ?? 0) / 12, 0);
   return {
     total: all.length,
-    active: all.filter((s: any) => s.status === 'active').length,
-    trial: all.filter((s: any) => s.status === 'trial').length,
+    active: all.filter(isActive).length,
+    trial: all.filter(isTrial).length,
     overdue: all.filter((s: any) => s.status === 'overdue').length,
     cancelled: all.filter((s: any) => s.status === 'cancelled').length,
     monthly_revenue: Math.round(monthly + annual),
