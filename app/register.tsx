@@ -77,8 +77,9 @@ const REG_CSS = `
 .al-back{width:100%;height:44px;background:transparent;color:#6B7280;border:1.5px solid #E5E7EB;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;}
 .al-back:hover{border-color:#D1D5DB;background:#F9FAFB;}
 
-.al-err{background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:12px 14px;font-size:13px;color:#DC2626;display:flex;align-items:center;gap:10px;font-weight:500;}
-.al-err svg{flex-shrink:0;}
+@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+.al-err{background:#FEF2F2;border:2px solid #FECACA;border-radius:12px;padding:14px 16px;font-size:13.5px;color:#DC2626;display:flex;align-items:flex-start;gap:10px;font-weight:600;animation:shake .4s ease;line-height:1.5;}
+.al-err svg{flex-shrink:0;margin-top:1px;}
 
 .al-footer{text-align:center;font-size:14px;color:#6B7280;}
 .al-fl{color:#2563EB;font-weight:600;background:none;border:none;cursor:pointer;font-family:inherit;font-size:14px;}

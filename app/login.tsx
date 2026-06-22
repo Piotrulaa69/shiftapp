@@ -95,8 +95,9 @@ const AUTH_CSS = `
 .al-fl{color:#2563EB;font-weight:600;background:none;border:none;cursor:pointer;font-family:inherit;font-size:14px;}
 .al-fl:hover{text-decoration:underline;}
 
-.al-err{background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:12px 14px;font-size:13px;color:#DC2626;display:flex;align-items:center;gap:10px;font-weight:500;}
-.al-err svg{flex-shrink:0;}
+@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+.al-err{background:#FEF2F2;border:2px solid #FECACA;border-radius:12px;padding:14px 16px;font-size:13.5px;color:#DC2626;display:flex;align-items:flex-start;gap:10px;font-weight:600;animation:shake .4s ease;line-height:1.5;}
+.al-err svg{flex-shrink:0;margin-top:1px;}
 `;
 
 const EYE_OPEN = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
@@ -296,12 +297,13 @@ export default function LoginScreen() {
         }
         setLocalLoading(true);
         portal.innerHTML = buildLoginPortal(showPassword, true, '');
-        const success = await login(emailVal, pwVal);
+        const result = await login(emailVal, pwVal);
         setLocalLoading(false);
-        if (success) {
+        if (result.success) {
           router.replace('/(tabs)/dashboard');
         } else {
-          portal.innerHTML = buildLoginPortal(showPassword, false, 'Nieprawidłowy e-mail lub hasło.');
+          const errMsg = result.error ?? 'Nieprawidłowy e-mail lub hasło.';
+          portal.innerHTML = buildLoginPortal(showPassword, false, errMsg);
           setTimeout(() => {
             const e = portal.querySelector('#al-email') as HTMLInputElement;
             const p = portal.querySelector('#al-pw') as HTMLInputElement;
@@ -325,12 +327,12 @@ export default function LoginScreen() {
         return;
       }
       setLocalLoading(true);
-      const success = await login(email, password);
+      const result = await login(email, password);
       setLocalLoading(false);
-      if (success) {
+      if (result.success) {
         router.replace('/(tabs)/dashboard');
       } else {
-        showAlert('Błąd logowania', 'Sprawdź swoje dane i spróbuj ponownie.');
+        showAlert('Błąd logowania', result.error ?? 'Sprawdź swoje dane i spróbuj ponownie.');
       }
     };
 

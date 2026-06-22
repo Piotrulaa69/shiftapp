@@ -42,7 +42,7 @@ type AuthContextType = {
   isImpersonating: boolean;
   impersonatedRestaurant: Restaurant | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   joinWithCode: (
     code: string,
     data: { firstName: string; lastName: string; email: string; password: string }
@@ -180,12 +180,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => { subscription.unsubscribe(); clearTimeout(fallback); };
   }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-    if (error) { setIsLoading(false); return false; }
+    if (error) {
+      setIsLoading(false);
+      const msg = (error.message ?? '').toLowerCase();
+      const friendly =
+        msg.includes('invalid login') || msg.includes('invalid credentials') ? 'Nieprawidłowy e-mail lub hasło. Sprawdź dane i spróbuj ponownie.' :
+        msg.includes('email not confirmed')                                   ? 'Konto nie zostało jeszcze potwierdzone. Sprawdź skrzynkę e-mail.' :
+        msg.includes('too many requests') || msg.includes('rate limit')       ? 'Zbyt wiele prób logowania. Odczekaj chwilę i spróbuj ponownie.' :
+        msg.includes('user not found')                                        ? 'Nie znaleziono konta z tym adresem e-mail.' :
+        msg.includes('network')                                               ? 'Błąd połączenia z internetem. Sprawdź sieć i spróbuj ponownie.' :
+        error.message ?? 'Wystąpił błąd. Spróbuj ponownie.';
+      return { success: false, error: friendly };
+    }
     // onAuthStateChange will handle setHasSession + loadUserData
-    return true;
+    return { success: true };
   };
 
   const joinWithCode = async (
