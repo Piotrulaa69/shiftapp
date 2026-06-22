@@ -386,7 +386,10 @@ export default function ShiftDetailScreen() {
             <View style={mStyles.body}>
               {(() => {
                 if (!shift || !activeCI) return null;
-                const scheduledEnd = new Date(`${shift.day}T${shift.end_time}`);
+                // Parse as local time by splitting manually — avoids UTC offset bugs
+                const [endH, endM] = shift.end_time.split(':').map(Number);
+                const [y, mo, d] = shift.day.split('-').map(Number);
+                const scheduledEnd = new Date(y, mo - 1, d, endH, endM, 0);
                 const now = new Date();
                 const diffMin = Math.round((now.getTime() - scheduledEnd.getTime()) / 60000);
                 const isEarly = diffMin < -1;
@@ -411,7 +414,7 @@ export default function ShiftDetailScreen() {
                     )}
                     {(isEarly || isLate) && (
                       <>
-                        <Text style={mStyles.label}>Powód {isEarly ? 'wyjścia przed czasem' : 'nadgodzin'}:</Text>
+                        <Text style={mStyles.label}>Powód {isEarly ? 'wyjścia przed czasem' : 'nadgodzin'} (opcjonalnie):</Text>
                         <TextInput
                           style={[mStyles.input, { minHeight: 70 }]}
                           value={clockOutReason}
@@ -419,7 +422,6 @@ export default function ShiftDetailScreen() {
                           placeholder={isEarly ? 'np. Goście wyszli wcześniej...' : 'np. Duże obłożenie, zostałem dłużej...'}
                           placeholderTextColor={theme.colors.textMuted}
                           multiline
-                          autoFocus
                         />
                       </>
                     )}
@@ -429,9 +431,9 @@ export default function ShiftDetailScreen() {
                       </Text>
                     )}
                     <TouchableOpacity
-                      style={[mStyles.saveBtn, { backgroundColor: theme.colors.error }, (isEarly || isLate) && !clockOutReason.trim() && { opacity: 0.5 }]}
+                      style={[mStyles.saveBtn, { backgroundColor: theme.colors.error }]}
                       onPress={doClockOut}
-                      disabled={clockLoading || ((isEarly || isLate) && !clockOutReason.trim())}
+                      disabled={clockLoading}
                       activeOpacity={0.85}
                     >
                       {clockLoading
