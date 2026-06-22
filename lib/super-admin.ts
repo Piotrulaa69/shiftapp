@@ -333,7 +333,7 @@ export async function getSubscriptions(): Promise<(Subscription & { restaurant_n
 
 export async function upsertSubscription(sub: Subscription & { restaurant_name?: string }): Promise<boolean> {
   // Strip computed/joined fields that don't exist as columns
-  const { restaurant_name, ...rest } = sub as any;
+  const { restaurant_name, restaurants, ...rest } = sub as any;
   const payload: any = {
     restaurant_id: rest.restaurant_id,
     plan: rest.plan,
@@ -352,7 +352,7 @@ export async function upsertSubscription(sub: Subscription & { restaurant_name?:
   const { error } = await supabase
     .from('subscriptions')
     .upsert(payload, { onConflict: 'restaurant_id' });
-  if (error) { console.error('upsertSubscription', error); return false; }
+  if (error) { console.error('upsertSubscription error:', error.message, error.code, error.details, error.hint, JSON.stringify(payload)); return false; }
   return true;
 }
 
