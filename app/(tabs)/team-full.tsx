@@ -5,7 +5,7 @@ import { ActivityIndicator, Clipboard, Modal, Platform, ScrollView, Share, Style
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
-import { generateInvitation, getEmployees, getPointsForEmployee, updateEmployeeRole, updateProfile } from '../../lib/db';
+import { generateInvitation, getEmployeeLeaveQuota, getEmployees, getPointsForEmployee, setEmployeeLeaveQuota, updateEmployeeRole, updateProfile } from '../../lib/db';
 import type { DbProfile } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
@@ -60,6 +60,11 @@ export default function TeamFullScreen() {
   const staff = employees.filter((e) => e.role === 'employee');
   const [empPoints, setEmpPoints] = useState(0);
 
+  // Leave quota state
+  const [leaveDays, setLeaveDays] = useState('');
+  const [leaveUsed, setLeaveUsed] = useState('');
+  const [leaveCarried, setLeaveCarried] = useState('');
+
   const openEmployeeEdit = async (emp: DbProfile) => {
     setSelectedEmp(emp);
     setEditing(false);
@@ -73,9 +78,15 @@ export default function TeamFullScreen() {
     setEditActive(emp.is_active !== false);
     setEditHourlyRate((emp as any).hourly_rate != null ? String((emp as any).hourly_rate) : '');
     setEditRole(emp.role === 'manager' ? 'manager' : 'employee');
-    const pointsLedger = await getPointsForEmployee(rid, emp.id);
+    const [pointsLedger, quota] = await Promise.all([
+      getPointsForEmployee(rid, emp.id),
+      getEmployeeLeaveQuota(emp.id, new Date().getFullYear()),
+    ]);
     const totalPoints = pointsLedger.reduce((sum, p) => sum + (p.points || 0), 0);
     setEmpPoints(totalPoints);
+    setLeaveDays(quota ? String(quota.total_days) : '20');
+    setLeaveUsed(quota ? String(quota.used_days) : '0');
+    setLeaveCarried(quota ? String(quota.carried_over_days) : '0');
   };
 
   const saveEmployee = async () => {
@@ -96,6 +107,11 @@ export default function TeamFullScreen() {
       selectedEmp.role !== 'owner' && editRole !== (selectedEmp.role === 'manager' ? 'manager' : 'employee')
         ? updateEmployeeRole(selectedEmp.id, editRole)
         : Promise.resolve(true),
+      setEmployeeLeaveQuota(selectedEmp.id, new Date().getFullYear(), {
+        total_days: parseInt(leaveDays) || 0,
+        used_days: parseInt(leaveUsed) || 0,
+        carried_over_days: parseInt(leaveCarried) || 0,
+      }),
     ]);
     setSaving(false);
     if (success) {
@@ -391,6 +407,38 @@ export default function TeamFullScreen() {
                       </TouchableOpacity>
                       <Text style={mStyles.toggleLabel}>Aktywny</Text>
                     </View>
+                    {/* Leave Quota */}
+                    <View style={{ marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: theme.colors.border }}>
+                      <Text style={[mStyles.fieldLabel, { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 12, color: theme.colors.textMuted }]}>Norma urlopowa ({new Date().getFullYear()})</Text>
+                      <Text style={mStyles.fieldLabel}>Pula dni urlopu (rocznie)</Text>
+                      <TextInput style={mStyles.input} value={leaveDays} onChangeText={setLeaveDays} keyboardType="numeric" placeholder="np. 26" placeholderTextColor={theme.colors.textMuted} />
+                      <Text style={[mStyles.fieldLabel, { marginTop: 10 }]}>Wykorzystane dni</Text>
+                      <TextInput style={mStyles.input} value={leaveUsed} onChangeText={setLeaveUsed} keyboardType="numeric" placeholder="np. 5" placeholderTextColor={theme.colors.textMuted} />
+                      <Text style={[mStyles.fieldLabel, { marginTop: 10 }]}>Dni przeniesione z poprzedniego roku</Text>
+                      <TextInput style={mStyles.input} value={leaveCarried} onChangeText={setLeaveCarried} keyboardType="numeric" placeholder="np. 0" placeholderTextColor={theme.colors.textMuted} />
+                      {(() => {
+                        const total = (parseInt(leaveDays) || 0) + (parseInt(leaveCarried) || 0);
+                        const used = parseInt(leaveUsed) || 0;
+                        const remaining = total - used;
+                        return (
+                          <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                            <View style={{ flex: 1, backgroundColor: '#EFF6FF', borderRadius: 10, padding: 10, alignItems: 'center' }}>
+                              <Text style={{ fontSize: 16, fontWeight: '800', color: theme.colors.primary }}>{total}</Text>
+                              <Text style={{ fontSize: 11, color: theme.colors.textMuted, marginTop: 2 }}>łącznie</Text>
+                            </View>
+                            <View style={{ flex: 1, backgroundColor: '#FEF9C3', borderRadius: 10, padding: 10, alignItems: 'center' }}>
+                              <Text style={{ fontSize: 16, fontWeight: '800', color: '#D97706' }}>{used}</Text>
+                              <Text style={{ fontSize: 11, color: theme.colors.textMuted, marginTop: 2 }}>wykorzystane</Text>
+                            </View>
+                            <View style={{ flex: 1, backgroundColor: remaining >= 0 ? '#F0FDF4' : '#FEF2F2', borderRadius: 10, padding: 10, alignItems: 'center' }}>
+                              <Text style={{ fontSize: 16, fontWeight: '800', color: remaining >= 0 ? '#059669' : '#DC2626' }}>{remaining}</Text>
+                              <Text style={{ fontSize: 11, color: theme.colors.textMuted, marginTop: 2 }}>pozostałe</Text>
+                            </View>
+                          </View>
+                        );
+                      })()}
+                    </View>
+
                     <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
                       <TouchableOpacity style={[mStyles.actionBtn, { backgroundColor: theme.colors.surface }]} onPress={() => setEditing(false)} activeOpacity={0.7}>
                         <Text style={[mStyles.actionBtnText, { color: theme.colors.text }]}>Anuluj</Text>
