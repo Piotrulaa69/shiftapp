@@ -35,7 +35,7 @@ const AUTH_CSS = `
 .al-left::after{content:'';position:absolute;bottom:-30%;right:-20%;width:70%;height:70%;background:radial-gradient(circle,rgba(37,99,235,.4) 0%,transparent 65%);filter:blur(70px);pointer-events:none;}
 .al-noise{position:absolute;inset:0;pointer-events:none;opacity:.18;mix-blend-mode:soft-light;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");background-size:200px 200px;border-radius:inherit;}
 .al-lc{position:relative;z-index:10;width:100%;max-width:320px;display:flex;flex-direction:column;gap:32px;}
-.al-brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:20px;letter-spacing:-.4px;color:white;}
+.al-brand{display:flex;align-items:center;justify-content:center;}
 .al-mark{width:32px;height:32px;border-radius:9px;background:rgba(255,255,255,.2);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:16px;box-shadow:inset 0 1px 2px rgba(255,255,255,.3);}
 .al-heading{display:flex;flex-direction:column;text-align:center;gap:10px;}
 .al-heading h1{font-size:38px;font-weight:600;letter-spacing:-.03em;color:white;line-height:1.1;}
@@ -111,7 +111,7 @@ function buildLoginPortal(showPw: boolean, loading: boolean, err: string) {
   <div class="al-left">
     <div class="al-noise"></div>
     <div class="al-lc">
-      <div class="al-brand"><img src="/images/białe.png" alt="ShiftApp" style="height:52px;width:auto;object-fit:contain" /></div>
+      <div class="al-brand"><img src="/images/białe.png" alt="ShiftApp" style="height:120px;width:auto;object-fit:contain" /></div>
       <div class="al-heading">
         <h1>Witaj z powrotem</h1>
         <p>Zaloguj się, aby zarządzać grafikiem, zespołem i rezerwacjami.</p>
