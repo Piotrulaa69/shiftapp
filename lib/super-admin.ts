@@ -331,10 +331,27 @@ export async function getSubscriptions(): Promise<(Subscription & { restaurant_n
   }));
 }
 
-export async function upsertSubscription(sub: Subscription): Promise<boolean> {
+export async function upsertSubscription(sub: Subscription & { restaurant_name?: string }): Promise<boolean> {
+  // Strip computed/joined fields that don't exist as columns
+  const { restaurant_name, ...rest } = sub as any;
+  const payload: any = {
+    restaurant_id: rest.restaurant_id,
+    plan: rest.plan,
+    status: rest.status,
+    billing_period: rest.billing_period,
+    amount: rest.amount,
+    currency: rest.currency ?? 'PLN',
+    notes: rest.notes ?? null,
+    next_payment_date: rest.next_payment_date ?? null,
+    trial_ends_at: rest.trial_ends_at ?? null,
+    last_payment_date: rest.last_payment_date ?? null,
+    current_period_start: rest.current_period_start ?? null,
+    current_period_end: rest.current_period_end ?? null,
+  };
+  if (rest.id) payload.id = rest.id;
   const { error } = await supabase
     .from('subscriptions')
-    .upsert({ ...sub, updated_at: new Date().toISOString() }, { onConflict: 'restaurant_id' });
+    .upsert(payload, { onConflict: 'restaurant_id' });
   if (error) { console.error('upsertSubscription', error); return false; }
   return true;
 }
