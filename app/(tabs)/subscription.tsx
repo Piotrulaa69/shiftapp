@@ -9,13 +9,14 @@ import { theme } from '../../styles/theme';
 
 const BASE_PRICE = 99;   // 99 zł za 5 pracowników
 const BASE_EMP   = 5;    // minimalna obsada
-const EXTRA_PRICE = 15;  // 15 zł za każdego dodatkowego
+const EXTRA_PRICE = 19;  // 19 zł za każdego dodatkowego
 
 export default function SubscriptionScreen() {
   const { restaurant } = useAuth();
   const router = useRouter();
   const params = useLocalSearchParams();
-  const [employeeCount, setEmployeeCount] = useState(5);
+  const [employeeCount, setEmployeeCount] = useState(BASE_EMP);
+  const [realEmpCount, setRealEmpCount] = useState(BASE_EMP);
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [subscription, setSubscription] = useState<any>(null);
@@ -32,17 +33,31 @@ export default function SubscriptionScreen() {
   const loadSubscription = useCallback(async () => {
     if (!restaurant?.id) return;
     setLoading(true);
-    const { data, error } = await supabase
-      .from('subscriptions')
-      .select('*')
-      .eq('restaurant_id', restaurant.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+
+    const [{ data, error }, { count: profileCount }] = await Promise.all([
+      supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('restaurant_id', restaurant.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('restaurant_id', restaurant.id)
+        .eq('is_super_admin', false),
+    ]);
+
+    const actualEmp = Math.max(BASE_EMP, profileCount ?? BASE_EMP);
+    setRealEmpCount(actualEmp);
+
     if (!error && data) {
       setSubscription(data);
-      const empCount = data.employee_count ?? BASE_EMP;
-      setEmployeeCount(Math.max(BASE_EMP, empCount));
+      // Always use real headcount — ignore stale employee_count in DB
+      setEmployeeCount(actualEmp);
+    } else {
+      setEmployeeCount(actualEmp);
     }
     setLoading(false);
   }, [restaurant?.id]);
@@ -131,8 +146,8 @@ export default function SubscriptionScreen() {
   const isActive = subscription?.status === 'active';
   const isTrial  = subscription?.status === 'trial';
   const isCancelled = subscription?.status === 'cancelled';
-  const currentEmp = subscription?.employee_count ?? BASE_EMP;
-  const currentAmount = subscription?.amount ?? calcPrice(currentEmp);
+  const currentEmp = realEmpCount; // always from actual profiles count
+  const currentAmount = calcPrice(currentEmp); // always auto-calculated
 
   const STATUS_CFG: Record<string, { label: string; color: string; bg: string }> = {
     active:    { label: 'Aktywna',    color: '#059669', bg: '#F0FDF4' },
@@ -184,12 +199,12 @@ export default function SubscriptionScreen() {
             {/* Details */}
             <View style={s.detailRow}>
               <Ionicons name="people-outline" size={16} color={theme.colors.textMuted} />
-              <Text style={s.detailText}>Liczba pracowników: <Text style={{ fontWeight: '700' }}>{currentEmp}</Text></Text>
+              <Text style={s.detailText}>Kont pracowników: <Text style={{ fontWeight: '700' }}>{currentEmp}</Text> <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>(wykryto automatycznie)</Text></Text>
             </View>
             <View style={s.detailRow}>
               <Ionicons name="cash-outline" size={16} color={theme.colors.textMuted} />
               <Text style={s.detailText}>
-                {BASE_EMP} pracowników × {BASE_PRICE} zł{currentEmp > BASE_EMP ? ` + ${currentEmp - BASE_EMP} × ${EXTRA_PRICE} zł` : ''}
+                {BASE_PRICE} zł (base){currentEmp > BASE_EMP ? ` + ${currentEmp - BASE_EMP} × ${EXTRA_PRICE} zł = ` : ' = '}<Text style={{ fontWeight: '700', color: theme.colors.primary }}>{currentAmount} zł</Text>
               </Text>
             </View>
             {subscription.next_payment_date && (
@@ -222,7 +237,7 @@ export default function SubscriptionScreen() {
               </View>
               <View style={s.pricingInfoSep}><Text style={{ color: theme.colors.textMuted, fontSize: 18 }}>+</Text></View>
               <View style={s.pricingInfoItem}>
-                <Text style={s.pricingInfoNum}>15 zł</Text>
+                <Text style={s.pricingInfoNum}>{EXTRA_PRICE} zł</Text>
                 <Text style={s.pricingInfoLabel}>każdy kolejny</Text>
               </View>
             </View>
@@ -289,7 +304,7 @@ export default function SubscriptionScreen() {
                 </View>
                 <View style={s.pricingInfoSep}><Text style={{ color: theme.colors.textMuted, fontSize: 18 }}>+</Text></View>
                 <View style={s.pricingInfoItem}>
-                  <Text style={[s.pricingInfoNum, { fontSize: 22 }]}>15 zł</Text>
+                  <Text style={[s.pricingInfoNum, { fontSize: 22 }]}>{EXTRA_PRICE} zł</Text>
                   <Text style={s.pricingInfoLabel}>każdy kolejny</Text>
                 </View>
               </View>
