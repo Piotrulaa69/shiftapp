@@ -109,6 +109,7 @@ export default function ReportsScreen() {
   const [empRows, setEmpRows] = useState<EmpHourRow[]>([]);
   const [expandedEmp, setExpandedEmp] = useState<string | null>(null);
   const [empShifts, setEmpShifts] = useState<Record<string, any[]>>({});
+  const [empClockIns, setEmpClockIns] = useState<Record<string, any[]>>({}); // empId -> clock_ins[]
   const [loadingEmp, setLoadingEmp] = useState<string | null>(null);
 
   // ── edit clock-in modal ──
@@ -243,15 +244,23 @@ export default function ReportsScreen() {
     setExpandedEmp(empId);
     setLoadingEmp(empId);
     const { from, to } = monthRange(month);
-    const { data } = await supabase.from('shifts').select('*').eq('restaurant_id', rid).eq('employee_id', empId).gte('day', from).lte('day', to).order('day');
-    setEmpShifts((prev) => ({ ...prev, [empId]: data ?? [] }));
+    const [{ data: shifts }, { data: cis }] = await Promise.all([
+      supabase.from('shifts').select('*').eq('restaurant_id', rid).eq('employee_id', empId).gte('day', from).lte('day', to).order('day'),
+      supabase.from('clock_ins').select('*').eq('restaurant_id', rid).eq('employee_id', empId).gte('clock_in_at', from + 'T00:00:00').lte('clock_in_at', to + 'T23:59:59'),
+    ]);
+    setEmpShifts((prev) => ({ ...prev, [empId]: shifts ?? [] }));
+    setEmpClockIns((prev) => ({ ...prev, [empId]: cis ?? [] }));
     setLoadingEmp(null);
   };
 
   const reloadEmpShifts = async (empId: string) => {
     const { from, to } = monthRange(month);
-    const { data } = await supabase.from('shifts').select('*').eq('restaurant_id', rid).eq('employee_id', empId).gte('day', from).lte('day', to).order('day');
-    setEmpShifts((prev) => ({ ...prev, [empId]: data ?? [] }));
+    const [{ data: shifts }, { data: cis }] = await Promise.all([
+      supabase.from('shifts').select('*').eq('restaurant_id', rid).eq('employee_id', empId).gte('day', from).lte('day', to).order('day'),
+      supabase.from('clock_ins').select('*').eq('restaurant_id', rid).eq('employee_id', empId).gte('clock_in_at', from + 'T00:00:00').lte('clock_in_at', to + 'T23:59:59'),
+    ]);
+    setEmpShifts((prev) => ({ ...prev, [empId]: shifts ?? [] }));
+    setEmpClockIns((prev) => ({ ...prev, [empId]: cis ?? [] }));
     loadHours(month);
   };
 
@@ -410,24 +419,73 @@ export default function ReportsScreen() {
                               : (empShifts[row.emp.id] ?? []).length === 0
                               ? <Text style={styles.noItemText}>Brak zmian w tym miesiącu</Text>
                               : (empShifts[row.emp.id] ?? []).map((s: any) => {
-                                  const sm = s.start_time && s.end_time ? shiftMinutes(s.start_time, s.end_time) : 0;
-                                  const sh = sm / 60;
-                                  const earn = rate != null ? (sh * rate).toFixed(2) : null;
+                                  const scheduledMin = s.start_time && s.end_time ? shiftMinutes(s.start_time, s.end_time) : 0;
+                                  // find matching clock_in for this shift
+                                  const ci = (empClockIns[row.emp.id] ?? []).find((c: any) => c.shift_id === s.id);
+                                  const realMin = ci?.clock_in_at && ci?.clock_out_at
+                                    ? Math.round((new Date(ci.clock_out_at).getTime() - new Date(ci.clock_in_at).getTime()) / 60000)
+                                    : null;
+                                  const billMin = realMin ?? scheduledMin;
+                                  const earn = rate != null ? ((billMin / 60) * rate).toFixed(2) : null;
+                                  const diffMin = realMin != null ? realMin - scheduledMin : null;
                                   const [, mm, dd] = (s.day ?? '').split('-');
+                                  const inT = ci?.clock_in_at ? new Date(ci.clock_in_at) : null;
+                                  const outT = ci?.clock_out_at ? new Date(ci.clock_out_at) : null;
                                   return (
-                                    <View key={s.id} style={styles.shiftRow}>
-                                      <View style={styles.shiftDateBox}>
-                                        <Text style={styles.shiftDay}>{dd}</Text>
-                                        <Text style={styles.shiftMon}>{MONTHS_SHORT[parseInt(mm)] ?? ''}</Text>
+                                    <View key={s.id} style={[styles.shiftRow, { flexDirection: 'column', gap: 6 }]}>
+                                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                        <View style={styles.shiftDateBox}>
+                                          <Text style={styles.shiftDay}>{dd}</Text>
+                                          <Text style={styles.shiftMon}>{MONTHS_SHORT[parseInt(mm)] ?? ''}</Text>
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                          <Text style={[styles.shiftTime, { color: theme.colors.textMuted, fontSize: 11 }]}>Plan: {s.start_time} – {s.end_time}</Text>
+                                          {ci && inT ? (
+                                            <Text style={[styles.shiftTime, { fontSize: 13 }]}>
+                                              Realne: {fmt2(inT.getHours())}:{fmt2(inT.getMinutes())}
+                                              {outT ? ` – ${fmt2(outT.getHours())}:${fmt2(outT.getMinutes())}` : ' → w trakcie'}
+                                            </Text>
+                                          ) : (
+                                            <Text style={[styles.shiftTime, { fontSize: 12, color: theme.colors.textMuted, fontStyle: 'italic' }]}>Brak zameldowania</Text>
+                                          )}
+                                        </View>
+                                        <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                                          {realMin != null ? (
+                                            <Text style={[styles.shiftDuration, { fontWeight: '700', color: theme.colors.text }]}>
+                                              {Math.floor(realMin / 60)}h {fmt2(realMin % 60)}m
+                                            </Text>
+                                          ) : (
+                                            <Text style={[styles.shiftDuration, { color: theme.colors.textMuted }]}>
+                                              {Math.floor(scheduledMin / 60)}h {fmt2(scheduledMin % 60)}m
+                                            </Text>
+                                          )}
+                                          {earn && <Text style={styles.shiftEarnings}>{earn} zł</Text>}
+                                        </View>
+                                        <TouchableOpacity onPress={() => deleteShift(s.id, row.emp.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ marginLeft: 4 }}>
+                                          <Ionicons name="trash-outline" size={16} color={theme.colors.error} />
+                                        </TouchableOpacity>
                                       </View>
-                                      <View style={{ flex: 1 }}>
-                                        <Text style={styles.shiftTime}>{s.start_time} – {s.end_time}</Text>
-                                        <Text style={styles.shiftDuration}>{Math.floor(sh)}h {fmt2(sm % 60)}m</Text>
-                                      </View>
-                                      {earn && <Text style={styles.shiftEarnings}>{earn} zł</Text>}
-                                      <TouchableOpacity onPress={() => deleteShift(s.id, row.emp.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                                        <Ionicons name="trash-outline" size={16} color={theme.colors.error} />
-                                      </TouchableOpacity>
+                                      {diffMin != null && Math.abs(diffMin) > 1 && (
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 44 }}>
+                                          <Ionicons
+                                            name={diffMin > 0 ? 'time-outline' : 'warning-outline'}
+                                            size={13}
+                                            color={diffMin > 0 ? theme.colors.green : '#D97706'}
+                                          />
+                                          <Text style={{ fontSize: 11, color: diffMin > 0 ? theme.colors.green : '#D97706' }}>
+                                            {diffMin > 0 ? `+${Math.floor(diffMin / 60)}h ${fmt2(diffMin % 60)}m nadgodzin` : `-${Math.floor(Math.abs(diffMin) / 60)}h ${fmt2(Math.abs(diffMin) % 60)}m wcześniej`}
+                                          </Text>
+                                          {(ci?.clock_out_note || ci?.clock_out_reason) && (
+                                            <Text style={{ fontSize: 11, color: theme.colors.textMuted }} numberOfLines={1}>· {ci.clock_out_reason || ci.clock_out_note}</Text>
+                                          )}
+                                        </View>
+                                      )}
+                                      {ci && !ci.clock_out_at && (
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 44 }}>
+                                          <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: theme.colors.green }} />
+                                          <Text style={{ fontSize: 11, color: theme.colors.green }}>Aktywna zmiana</Text>
+                                        </View>
+                                      )}
                                     </View>
                                   );
                                 })
