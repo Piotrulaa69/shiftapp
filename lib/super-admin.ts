@@ -51,25 +51,23 @@ export async function getAllRestaurantsWithStats(): Promise<RestaurantWithStats[
 
   if (error || !restaurants) return [];
 
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, restaurant_id, first_name, last_name, role, is_super_admin')
-    .eq('is_super_admin', false);
-
-  const { data: tasks } = await supabase
-    .from('tasks')
-    .select('id, restaurant_id');
+  const [{ data: profiles }, { data: tasks }, { data: subs }] = await Promise.all([
+    supabase.from('profiles').select('id, restaurant_id, first_name, last_name, role, is_super_admin').eq('is_super_admin', false),
+    supabase.from('tasks').select('id, restaurant_id'),
+    supabase.from('subscriptions').select('restaurant_id, plan, status'),
+  ]);
 
   return restaurants.map((r: any) => {
     const restProfiles = (profiles ?? []).filter((p: any) => p.restaurant_id === r.id);
     const restTasks = (tasks ?? []).filter((t: any) => t.restaurant_id === r.id);
     const owner = restProfiles.find((p: any) => p.role === 'owner');
+    const sub = (subs ?? []).find((s: any) => s.restaurant_id === r.id);
     return {
       id: r.id,
       name: r.name,
       address: r.address ?? '',
       phone: r.phone ?? '',
-      plan: r.plan ?? 'basic',
+      plan: sub?.plan ?? r.plan ?? 'basic',
       logo_color: r.logo_color ?? theme.primary,
       created_at: r.created_at,
       employee_count: restProfiles.length,
@@ -323,7 +321,18 @@ export async function getSubscriptions(): Promise<(Subscription & { restaurant_n
     .select('*, restaurants(name)')
     .order('created_at', { ascending: false });
 
-  if (error || !data) return [];
+  if (error) {
+    console.error('getSubscriptions error:', error.message, error.code);
+    // Fallback: try without join
+    const { data: data2, error: error2 } = await supabase
+      .from('subscriptions')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error2 || !data2) return [];
+    return data2.map((s: any) => ({ ...s, restaurant_name: '—' }));
+  }
+
+  if (!data) return [];
 
   return data.map((s: any) => ({
     ...s,
@@ -380,6 +389,8 @@ export async function upsertSubscription(sub: Subscription & { restaurant_name?:
   }
 
   if (error) { console.error('upsertSubscription error:', error.message, error.code, error.details); return false; }
+  // Also sync plan to restaurants table so restaurant list stays accurate
+  await supabase.from('restaurants').update({ plan: rest.plan }).eq('id', rest.restaurant_id);
   return true;
 }
 
