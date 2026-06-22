@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCameraPermissions } from 'expo-camera';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -16,6 +15,7 @@ import {
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import QrScanner from '../components/QrScanner';
 import { useAuth } from '../context/AuthContext';
 import { clockIn, clockInWithPin, clockOut, getActiveClockIn, getTodayShift, validateAndConsumeQrToken } from '../lib/db';
 import type { DbClockIn, DbShift } from '../lib/supabase';
@@ -46,7 +46,7 @@ export default function ShiftDetailScreen() {
   const [showPinModal, setShowPinModal] = useState(false);
   const [showQrScanner, setShowQrScanner] = useState(false);
   const [qrScanError, setQrScanError] = useState('');
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [cameraPermission, setCameraPermission] = useState<{ granted: boolean } | null>(null);
   const qrScannedRef = useRef(false);
   const [pin, setPin] = useState('');
   const [pinError, setPinError] = useState('');
@@ -96,10 +96,6 @@ export default function ShiftDetailScreen() {
     if (!shift || !user) return;
     const { data: profile } = await supabase.from('profiles').select('login_method').eq('id', user.id).maybeSingle();
     if (profile?.login_method === 'qr') {
-      if (!cameraPermission?.granted) {
-        const result = await requestCameraPermission();
-        if (!result.granted) return;
-      }
       qrScannedRef.current = false;
       setQrScanError('');
       setShowQrScanner(true);
@@ -110,7 +106,7 @@ export default function ShiftDetailScreen() {
     setShowPinModal(true);
   };
 
-  const handleQrScanned = async ({ data }: { data: string }) => {
+  const handleQrScanned = async (data: string) => {
     if (qrScannedRef.current || !shift || !user) return;
     qrScannedRef.current = true;
     let token: string | null = null;
@@ -372,45 +368,12 @@ export default function ShiftDetailScreen() {
 
       {/* QR Scanner Modal */}
       <Modal visible={showQrScanner} animationType="slide" onRequestClose={() => setShowQrScanner(false)}>
-        <View style={{ flex: 1, backgroundColor: '#000' }}>
-          <CameraView
-            style={{ flex: 1 }}
-            facing="back"
-            barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-            onBarcodeScanned={handleQrScanned}
-          />
-          {/* overlay frame */}
-          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' } as any}>
-            <View style={{ width: 240, height: 240, borderWidth: 3, borderColor: '#fff', borderRadius: 16, opacity: 0.6 }} />
-          </View>
-          {/* header */}
-          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingTop: 60, paddingHorizontal: 20, alignItems: 'center', gap: 8 }}>
-            <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800', textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 } }}>
-              Zeskanuj kod QR kiosku
-            </Text>
-            <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13, textAlign: 'center' }}>
-              Nakieruj aparat na kod QR wyświetlony w kiosku restauracji
-            </Text>
-          </View>
-          {/* error */}
-          {!!qrScanError && (
-            <View style={{ position: 'absolute', bottom: 120, left: 24, right: 24, backgroundColor: '#DC2626', borderRadius: 12, padding: 14, alignItems: 'center' }}>
-              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600', textAlign: 'center' }}>{qrScanError}</Text>
-              <TouchableOpacity onPress={() => { setQrScanError(''); qrScannedRef.current = false; }} style={{ marginTop: 8 }}>
-                <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }}>Spróbuj ponownie</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-          {/* close */}
-          <TouchableOpacity
-            style={{ position: 'absolute', bottom: 48, alignSelf: 'center', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 24, paddingVertical: 12, paddingHorizontal: 32, flexDirection: 'row', alignItems: 'center', gap: 8 }}
-            onPress={() => setShowQrScanner(false)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="close" size={18} color="#fff" />
-            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Anuluj</Text>
-          </TouchableOpacity>
-        </View>
+        <QrScanner
+          onScanned={handleQrScanned}
+          onClose={() => setShowQrScanner(false)}
+          error={qrScanError}
+          onRetry={() => { setQrScanError(''); qrScannedRef.current = false; }}
+        />
       </Modal>
 
       {/* Absence Modal */}
