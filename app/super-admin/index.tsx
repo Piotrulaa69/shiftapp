@@ -231,7 +231,7 @@ export default function SuperAdminDashboard() {
     );
     switch (nav) {
       case 'dashboard':     return <DashboardTab stats={stats} restaurants={restaurants} activity={activity} subOverview={subOverview} setNav={setNav} />;
-      case 'restaurants':   return <RestaurantsTab restaurants={filtered} search={search} setSearch={setSearch} onAdd={() => setShowCreate(true)} onSelectRestaurant={setSelectedRestaurant} />;
+      case 'restaurants':   return <RestaurantsTab restaurants={filtered} search={search} setSearch={setSearch} onAdd={() => setShowCreate(true)} onSelectRestaurant={setSelectedRestaurant} onRefresh={loadAll} />;
       case 'subscriptions': return <SubscriptionsTab subscriptions={subscriptions} overview={subOverview} restaurants={restaurants} onRefresh={loadAll} />;
       case 'users':         return <UsersTab restaurants={restaurants} />;
       case 'settings':      return <SettingsTab promoCodes={promoCodes} onRefresh={loadAll} userId={user?.id ?? ''} />;
@@ -482,7 +482,29 @@ function DashboardTab({ stats, restaurants, activity, subOverview, setNav }: any
 }
 
 // ── TAB: Restaurants ─────────────────────────────────────
-function RestaurantsTab({ restaurants, search, setSearch, onAdd, onSelectRestaurant }: any) {
+function RestaurantsTab({ restaurants, search, setSearch, onAdd, onSelectRestaurant, onRefresh }: any) {
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDelete = (r: RestaurantWithStats) => {
+    Alert.alert(
+      'Usuń restaurację',
+      `Na pewno usunąć "${r.name}"?\n\nZostanie usunięta restauracja, wszyscy pracownicy, zadania, zmiany i dane. Tej operacji nie można cofnąć.`,
+      [
+        { text: 'Anuluj', style: 'cancel' },
+        { text: 'Usuń permanentnie', style: 'destructive', onPress: async () => {
+          setDeletingId(r.id);
+          const result = await deleteRestaurant(r.id);
+          setDeletingId(null);
+          if (result.success) {
+            onRefresh();
+          } else {
+            Alert.alert('Błąd', result.error ?? 'Nie udało się usunąć restauracji.');
+          }
+        }},
+      ]
+    );
+  };
+
   return (
     <View style={{ gap: 14 }}>
       <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
@@ -502,13 +524,15 @@ function RestaurantsTab({ restaurants, search, setSearch, onAdd, onSelectRestaur
           r={r}
           expanded
           onPress={() => onSelectRestaurant(r)}
+          onDelete={() => handleDelete(r)}
+          deleting={deletingId === r.id}
         />
       ))}
     </View>
   );
 }
 
-function RestaurantRow({ r, expanded = false, onPress, onImpersonate }: { r: RestaurantWithStats; expanded?: boolean; onPress?: () => void; onImpersonate?: (id: string) => void }) {
+function RestaurantRow({ r, expanded = false, onPress, onDelete, deleting }: { r: RestaurantWithStats; expanded?: boolean; onPress?: () => void; onDelete?: () => void; deleting?: boolean }) {
   const plan = PLAN_CFG[r.plan as keyof typeof PLAN_CFG] ?? PLAN_CFG.basic;
   const day = new Date(r.created_at).toLocaleDateString('pl-PL');
   return (
@@ -524,9 +548,23 @@ function RestaurantRow({ r, expanded = false, onPress, onImpersonate }: { r: Res
         <Text style={s.restMeta}>{r.owner_name ?? 'brak właściciela'} · {day}</Text>
         {expanded && r.address ? <Text style={s.restAddress} numberOfLines={1}>{r.address}</Text> : null}
       </View>
-      <View style={s.restStats}>
-        <View style={s.restStatItem}><Ionicons name="people-outline" size={13} color={theme.colors.textMuted} /><Text style={s.restStatText}>{r.employee_count}</Text></View>
-        <View style={s.restStatItem}><Ionicons name="list-outline" size={13} color={theme.colors.textMuted} /><Text style={s.restStatText}>{r.task_count}</Text></View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View style={s.restStats}>
+          <View style={s.restStatItem}><Ionicons name="people-outline" size={13} color={theme.colors.textMuted} /><Text style={s.restStatText}>{r.employee_count}</Text></View>
+          <View style={s.restStatItem}><Ionicons name="list-outline" size={13} color={theme.colors.textMuted} /><Text style={s.restStatText}>{r.task_count}</Text></View>
+        </View>
+        {onDelete && (
+          <TouchableOpacity
+            style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: '#FEE2E2', alignItems: 'center', justifyContent: 'center' }}
+            onPress={(e) => { e.stopPropagation?.(); onDelete(); }}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            {deleting
+              ? <ActivityIndicator size="small" color="#DC2626" />
+              : <Ionicons name="trash-outline" size={15} color="#DC2626" />}
+          </TouchableOpacity>
+        )}
       </View>
     </TouchableOpacity>
   );
