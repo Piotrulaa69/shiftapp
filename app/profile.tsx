@@ -276,6 +276,14 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        {/* Help & Contact */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Pomoc i kontakt</Text>
+          <ActionRow icon="help-circle-outline" label="Centrum pomocy" onPress={() => router.push('/help' as any)} />
+          <ActionRow icon="chatbubble-ellipses-outline" label="Napisz do nas" onPress={() => router.push('/help' as any)} />
+          <ActionRow icon="document-text-outline" label="Regulamin i polityka prywatności" onPress={() => router.push('/help' as any)} />
+        </View>
+
         {/* Logout */}
         <View style={styles.section}>
           <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
