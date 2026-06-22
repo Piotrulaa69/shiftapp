@@ -280,7 +280,7 @@ export default function ProfileScreen() {
         {/* Help & Contact */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Pomoc i kontakt</Text>
-          <ActionRow icon="call-outline" label="+48 795 122 357" onPress={() => Linking.openURL('tel:+48795122357')} />
+          <ActionRow icon="call-outline" label="+48 884 184 352" onPress={() => Linking.openURL('tel:+48884184352')} />
           <ActionRow icon="help-circle-outline" label="Centrum pomocy" onPress={() => router.push('/help' as any)} />
           <ActionRow icon="chatbubble-ellipses-outline" label="Napisz do nas" onPress={() => router.push('/help' as any)} />
           <ActionRow icon="document-text-outline" label="Regulamin i polityka prywatności" onPress={() => router.push('/help' as any)} />
