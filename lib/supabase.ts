@@ -74,7 +74,19 @@ export type DbProfile = {
   bank_account_number: string | null;
   bank_name: string | null;
   id_card_number: string | null;
+  login_pin: string | null;
+  login_method: 'pin' | 'qr';
   created_at: string;
+};
+
+export type DbQrSessionToken = {
+  id: string;
+  restaurant_id: string;
+  token: string;
+  created_at: string;
+  expires_at: string;
+  used_by: string | null;
+  used_at: string | null;
 };
 
 export type DbInvitation = {

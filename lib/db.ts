@@ -1678,3 +1678,75 @@ export async function getTopicVideoUrl(storagePath: string): Promise<string | nu
     .createSignedUrl(storagePath, 3600);
   return data?.signedUrl ?? null;
 }
+
+// ─── Kiosk / PIN+QR Login ────────────────────────────────────────────────────
+
+export async function getKioskEmployees(restaurantId: string): Promise<DbProfile[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, first_name, last_name, job_title, avatar_color, login_method, login_pin, role, is_active')
+    .eq('restaurant_id', restaurantId)
+    .eq('is_active', true)
+    .not('is_super_admin', 'eq', true)
+    .order('first_name');
+  if (error) { console.error('getKioskEmployees', error); return []; }
+  return data as DbProfile[];
+}
+
+export async function kioskLoginByPin(restaurantId: string, pin: string): Promise<DbProfile | null> {
+  if (!pin || pin.length < 4) return null;
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .eq('login_pin', pin)
+    .eq('is_active', true)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as DbProfile;
+}
+
+export async function getOrCreateQrToken(restaurantId: string): Promise<string | null> {
+  const now = new Date().toISOString();
+  const { data: existing } = await supabase
+    .from('qr_session_tokens')
+    .select('token, expires_at')
+    .eq('restaurant_id', restaurantId)
+    .is('used_at', null)
+    .gte('expires_at', now)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (existing?.token) return existing.token;
+
+  const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('qr_session_tokens')
+    .insert({ restaurant_id: restaurantId, token, expires_at: expiresAt })
+    .select('token')
+    .single();
+  if (error) { console.error('getOrCreateQrToken', error); return null; }
+  return data.token;
+}
+
+export async function validateAndConsumeQrToken(token: string, employeeId: string): Promise<boolean> {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('qr_session_tokens')
+    .update({ used_by: employeeId, used_at: now })
+    .eq('token', token)
+    .is('used_at', null)
+    .gte('expires_at', now)
+    .select('id')
+    .maybeSingle();
+  return !error && !!data;
+}
+
+export async function updateEmployeeLoginSettings(
+  employeeId: string,
+  fields: { login_pin?: string | null; login_method?: 'pin' | 'qr' }
+): Promise<boolean> {
+  const { error } = await supabase.from('profiles').update(fields).eq('id', employeeId);
+  return !error;
+}

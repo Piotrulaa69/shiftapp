@@ -27,6 +27,7 @@ export default function RootLayout() {
           <Stack.Screen name="task/confirm-description" />
           <Stack.Screen name="training/quiz" />
           <Stack.Screen name="help" />
+          <Stack.Screen name="kiosk" />
         </Stack>
         </NotificationsProvider>
         </SubscriptionProvider>

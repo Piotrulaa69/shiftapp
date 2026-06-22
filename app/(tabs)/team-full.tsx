@@ -5,7 +5,7 @@ import { ActivityIndicator, Clipboard, Modal, Platform, ScrollView, Share, Style
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
-import { ensureDefaultLeaveTypes, generateInvitation, getEmployeeLeaveQuota, getEmployeeLeaveTypeSettings, getEmployees, getPointsForEmployee, setEmployeeLeaveQuota, setEmployeeLeaveTypeSetting, updateEmployeeRole, updateProfile } from '../../lib/db';
+import { ensureDefaultLeaveTypes, generateInvitation, getEmployeeLeaveQuota, getEmployeeLeaveTypeSettings, getEmployees, getPointsForEmployee, setEmployeeLeaveQuota, setEmployeeLeaveTypeSetting, updateEmployeeLoginSettings, updateEmployeeRole, updateProfile } from '../../lib/db';
 import type { DbLeaveType, DbProfile } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
@@ -60,6 +60,10 @@ export default function TeamFullScreen() {
   const staff = employees.filter((e) => e.role === 'employee');
   const [empPoints, setEmpPoints] = useState(0);
 
+  // Login settings state
+  const [editLoginPin, setEditLoginPin] = useState('');
+  const [editLoginMethod, setEditLoginMethod] = useState<'pin' | 'qr'>('pin');
+
   // Leave quota state
   const [leaveDays, setLeaveDays] = useState('');
   const [leaveUsed, setLeaveUsed] = useState('');
@@ -80,6 +84,8 @@ export default function TeamFullScreen() {
     setEditActive(emp.is_active !== false);
     setEditHourlyRate((emp as any).hourly_rate != null ? String((emp as any).hourly_rate) : '');
     setEditRole(emp.role === 'manager' ? 'manager' : 'employee');
+    setEditLoginPin(emp.login_pin || '');
+    setEditLoginMethod((emp.login_method as 'pin' | 'qr') || 'pin');
     const [pointsLedger, quota, types, settings] = await Promise.all([
       getPointsForEmployee(rid, emp.id),
       getEmployeeLeaveQuota(emp.id, new Date().getFullYear()),
@@ -117,6 +123,10 @@ export default function TeamFullScreen() {
         max_hours_monthly: editMaxMonthly ? parseInt(editMaxMonthly) : null,
         is_active: editActive,
         hourly_rate: editHourlyRate ? parseFloat(editHourlyRate) : null,
+      }),
+      updateEmployeeLoginSettings(selectedEmp.id, {
+        login_pin: editLoginPin.trim() || null,
+        login_method: editLoginMethod,
       }),
       selectedEmp.role !== 'owner' && editRole !== (selectedEmp.role === 'manager' ? 'manager' : 'employee')
         ? updateEmployeeRole(selectedEmp.id, editRole)
@@ -427,6 +437,51 @@ export default function TeamFullScreen() {
                       </TouchableOpacity>
                       <Text style={mStyles.toggleLabel}>Aktywny</Text>
                     </View>
+                    {/* Login Settings */}
+                    <View style={{ marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: theme.colors.border }}>
+                      <Text style={[mStyles.fieldLabel, { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 12, color: theme.colors.textMuted }]}>Logowanie do kiosku</Text>
+                      <Text style={mStyles.fieldLabel}>Metoda logowania</Text>
+                      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                        {([['pin', 'PIN', 'keypad-outline'], ['qr', 'QR Code', 'qr-code-outline']] as const).map(([val, label, icon]) => (
+                          <TouchableOpacity
+                            key={val}
+                            style={[mStyles.chip, editLoginMethod === val && mStyles.chipActive, { flex: 1, justifyContent: 'center' }]}
+                            onPress={() => setEditLoginMethod(val)}
+                            activeOpacity={0.7}
+                          >
+                            <Ionicons name={icon} size={14} color={editLoginMethod === val ? theme.colors.primary : theme.colors.textMuted} />
+                            <Text style={[mStyles.chipText, editLoginMethod === val && mStyles.chipTextActive]}>{label}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                      {editLoginMethod === 'pin' && (
+                        <>
+                          <Text style={mStyles.fieldLabel}>PIN (4–6 cyfr)</Text>
+                          <TextInput
+                            style={mStyles.input}
+                            value={editLoginPin}
+                            onChangeText={(v) => setEditLoginPin(v.replace(/\D/g, '').slice(0, 6))}
+                            placeholder="np. 1234"
+                            placeholderTextColor={theme.colors.textMuted}
+                            keyboardType="number-pad"
+                            maxLength={6}
+                            secureTextEntry={false}
+                          />
+                          <Text style={{ fontSize: 11, color: theme.colors.textMuted, marginTop: 4, marginBottom: 4 }}>
+                            Pracownik używa tego PIN-u do logowania na kiosku restauracji.
+                          </Text>
+                        </>
+                      )}
+                      {editLoginMethod === 'qr' && (
+                        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', backgroundColor: '#EFF6FF', borderRadius: 10, padding: 10 }}>
+                          <Ionicons name="information-circle-outline" size={16} color={theme.colors.primary} />
+                          <Text style={{ fontSize: 12, color: theme.colors.primary, flex: 1, lineHeight: 18 }}>
+                            Pracownik skanuje wspólny kod QR wywieszony w restauracji, a następnie wybiera siebie z listy.
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+
                     {/* Leave Quota */}
                     <View style={{ marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: theme.colors.border }}>
                       <Text style={[mStyles.fieldLabel, { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 12, color: theme.colors.textMuted }]}>Norma urlopowa ({new Date().getFullYear()})</Text>
