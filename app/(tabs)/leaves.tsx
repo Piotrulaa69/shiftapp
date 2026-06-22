@@ -5,7 +5,7 @@ import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TextI
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
-import { getEmployees, getLeaveRequests, reviewLeaveRequestWithNotes } from '../../lib/db';
+import { getEmployeeLeaveQuota, getEmployees, getLeaveRequests, reviewLeaveRequestWithNotes, setEmployeeLeaveQuota } from '../../lib/db';
 import type { DbLeaveRequest, DbProfile } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
@@ -43,6 +43,15 @@ export default function LeavesScreen() {
     if (!reviewingRequest || !reviewAction || !user?.id) return;
     setReviewing(true);
     const success = await reviewLeaveRequestWithNotes(reviewingRequest.id, user.id, reviewAction as 'approved' | 'rejected', reviewNote);
+    // Auto-update used_days when approving
+    if (success && reviewAction === 'approved' && reviewingRequest.days_count) {
+      const year = new Date(reviewingRequest.date_from).getFullYear();
+      const currentQuota = await getEmployeeLeaveQuota(reviewingRequest.employee_id, year);
+      const currentUsed = currentQuota?.used_days ?? 0;
+      await setEmployeeLeaveQuota(reviewingRequest.employee_id, year, {
+        used_days: currentUsed + reviewingRequest.days_count,
+      });
+    }
     setReviewing(false);
     if (success) {
       setReviewingRequest(null);

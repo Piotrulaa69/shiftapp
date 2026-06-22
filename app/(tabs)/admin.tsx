@@ -69,6 +69,8 @@ export default function AdminScreen() {
   const [empJobTitle, setEmpJobTitle] = useState('Kelner');
   const [empRole, setEmpRole] = useState<'employee' | 'manager'>('employee');
   const [empLeaveDays, setEmpLeaveDays] = useState<string>('');
+  const [empLeaveUsed, setEmpLeaveUsed] = useState<string>('');
+  const [empLeaveCarried, setEmpLeaveCarried] = useState<string>('');
   const [empLeaveTypeSettings, setEmpLeaveTypeSettings] = useState<{type: string, enabled: boolean, days: string}[]>([]);
   const [jobTitle, setJobTitle] = useState('Kelner');
   const [lastCode, setLastCode] = useState<string | null>(null);
@@ -451,6 +453,8 @@ export default function AdminScreen() {
                     // Load real leave quota from DB
                     getEmployeeLeaveQuota(emp.id, new Date().getFullYear()).then((quota) => {
                       setEmpLeaveDays(quota ? String(quota.total_days) : '20');
+                      setEmpLeaveUsed(quota ? String(quota.used_days) : '0');
+                      setEmpLeaveCarried(quota ? String(quota.carried_over_days) : '0');
                     });
                     setEmpLeaveTypeSettings([
                       { type: 'annual', enabled: true, days: emp.job_title ? '20' : '20' },
@@ -1223,15 +1227,58 @@ export default function AdminScreen() {
                   <Text style={tm.sectionLabel}>NORMA URLOPOWA</Text>
                 </View>
 
-                <Text style={s.mLabel}>Dni urlopu wypoczynkowego (rocznie)</Text>
+                <Text style={s.mLabel}>Pula dni urlopu (rocznie)</Text>
                 <TextInput
                   style={s.mInput}
                   value={empLeaveDays}
                   onChangeText={setEmpLeaveDays}
                   keyboardType="numeric"
-                  placeholder="np. 20"
+                  placeholder="np. 26"
                   placeholderTextColor={theme.colors.textMuted}
                 />
+
+                <Text style={[s.mLabel, { marginTop: 12 }]}>Wykorzystane dni</Text>
+                <TextInput
+                  style={s.mInput}
+                  value={empLeaveUsed}
+                  onChangeText={setEmpLeaveUsed}
+                  keyboardType="numeric"
+                  placeholder="np. 5"
+                  placeholderTextColor={theme.colors.textMuted}
+                />
+
+                <Text style={[s.mLabel, { marginTop: 12 }]}>Dni przeniesione z poprzedniego roku</Text>
+                <TextInput
+                  style={s.mInput}
+                  value={empLeaveCarried}
+                  onChangeText={setEmpLeaveCarried}
+                  keyboardType="numeric"
+                  placeholder="np. 0"
+                  placeholderTextColor={theme.colors.textMuted}
+                />
+
+                {/* Summary badge */}
+                {(() => {
+                  const total = (parseInt(empLeaveDays) || 0) + (parseInt(empLeaveCarried) || 0);
+                  const used = parseInt(empLeaveUsed) || 0;
+                  const remaining = total - used;
+                  return (
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+                      <View style={{ flex: 1, backgroundColor: '#EFF6FF', borderRadius: 10, padding: 10, alignItems: 'center' }}>
+                        <Text style={{ fontSize: 18, fontWeight: '800', color: theme.colors.primary }}>{total}</Text>
+                        <Text style={{ fontSize: 11, color: theme.colors.textMuted, marginTop: 2 }}>łącznie</Text>
+                      </View>
+                      <View style={{ flex: 1, backgroundColor: '#FEF9C3', borderRadius: 10, padding: 10, alignItems: 'center' }}>
+                        <Text style={{ fontSize: 18, fontWeight: '800', color: '#D97706' }}>{used}</Text>
+                        <Text style={{ fontSize: 11, color: theme.colors.textMuted, marginTop: 2 }}>wykorzystane</Text>
+                      </View>
+                      <View style={{ flex: 1, backgroundColor: remaining >= 0 ? '#F0FDF4' : '#FEF2F2', borderRadius: 10, padding: 10, alignItems: 'center' }}>
+                        <Text style={{ fontSize: 18, fontWeight: '800', color: remaining >= 0 ? '#059669' : '#DC2626' }}>{remaining}</Text>
+                        <Text style={{ fontSize: 11, color: theme.colors.textMuted, marginTop: 2 }}>pozostałe</Text>
+                      </View>
+                    </View>
+                  );
+                })()}
 
                 <Text style={[s.mLabel, { marginTop: 16 }]}>Typy urlopów</Text>
                 {empLeaveTypeSettings.map((setting, idx) => (
@@ -1307,9 +1354,12 @@ export default function AdminScreen() {
                   if ((editingEmployee.role === 'manager' ? 'manager' : 'employee') !== empRole) {
                     await updateEmployeeRole(editingEmployee.id, empRole);
                   }
-                  // Save leave quota
-                  const totalDays = parseInt(empLeaveDays) || 0;
-                  await setEmployeeLeaveQuota(editingEmployee.id, new Date().getFullYear(), { total_days: totalDays });
+                  // Save leave quota (all 3 fields)
+                  await setEmployeeLeaveQuota(editingEmployee.id, new Date().getFullYear(), {
+                    total_days: parseInt(empLeaveDays) || 0,
+                    used_days: parseInt(empLeaveUsed) || 0,
+                    carried_over_days: parseInt(empLeaveCarried) || 0,
+                  });
                   setShowEmployeeModal(false);
                   refresh();
                 }}
@@ -1362,6 +1412,15 @@ export default function AdminScreen() {
                   setReviewing(true);
                   const status = reviewAction === 'approve' ? 'approved' : 'rejected';
                   await reviewLeaveRequestWithNotes(reviewingRequest.id, user.id, status, reviewNote.trim() || undefined);
+                  // Auto-update used_days when approving
+                  if (status === 'approved' && reviewingRequest.days_count) {
+                    const year = new Date(reviewingRequest.date_from).getFullYear();
+                    const currentQuota = await getEmployeeLeaveQuota(reviewingRequest.employee_id, year);
+                    const currentUsed = currentQuota?.used_days ?? 0;
+                    await setEmployeeLeaveQuota(reviewingRequest.employee_id, year, {
+                      used_days: currentUsed + reviewingRequest.days_count,
+                    });
+                  }
                   setReviewing(false);
                   setReviewingRequest(null);
                   setReviewAction(null);
