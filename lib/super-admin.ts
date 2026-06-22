@@ -334,8 +334,7 @@ export async function getSubscriptions(): Promise<(Subscription & { restaurant_n
 export async function upsertSubscription(sub: Subscription & { restaurant_name?: string }): Promise<boolean> {
   // Strip computed/joined fields that don't exist as columns
   const { restaurant_name, restaurants, ...rest } = sub as any;
-  const payload: any = {
-    restaurant_id: rest.restaurant_id,
+  const fields: any = {
     plan: rest.plan,
     status: rest.status,
     billing_period: rest.billing_period,
@@ -347,12 +346,31 @@ export async function upsertSubscription(sub: Subscription & { restaurant_name?:
     last_payment_date: rest.last_payment_date ?? null,
     current_period_start: rest.current_period_start ?? null,
     current_period_end: rest.current_period_end ?? null,
+    updated_at: new Date().toISOString(),
   };
-  if (rest.id) payload.id = rest.id;
-  const { error } = await supabase
+
+  // Check if subscription exists for this restaurant
+  const { data: existing } = await supabase
     .from('subscriptions')
-    .upsert(payload, { onConflict: 'restaurant_id' });
-  if (error) { console.error('upsertSubscription error:', error.message, error.code, error.details, error.hint, JSON.stringify(payload)); return false; }
+    .select('id')
+    .eq('restaurant_id', rest.restaurant_id)
+    .maybeSingle();
+
+  let error: any;
+  if (existing?.id) {
+    // UPDATE — never touches plan_id or other unknown columns
+    ({ error } = await supabase
+      .from('subscriptions')
+      .update(fields)
+      .eq('id', existing.id));
+  } else {
+    // INSERT — include restaurant_id
+    ({ error } = await supabase
+      .from('subscriptions')
+      .insert({ restaurant_id: rest.restaurant_id, ...fields }));
+  }
+
+  if (error) { console.error('upsertSubscription error:', error.message, error.code, error.details); return false; }
   return true;
 }
 
