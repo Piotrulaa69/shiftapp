@@ -318,19 +318,43 @@ export async function createRestaurantWithInvite(
 export async function getSubscriptions(): Promise<(Subscription & { restaurant_name: string })[]> {
   const [{ data: subs, error }, { data: rests }] = await Promise.all([
     supabase.from('subscriptions').select('*').order('created_at', { ascending: false }),
-    supabase.from('restaurants').select('id, name'),
+    supabase.from('restaurants').select('id, name, plan, created_at').order('created_at', { ascending: false }),
   ]);
 
   if (error) { console.error('getSubscriptions error:', error.message); }
-  if (!subs) return [];
+
+  const allSubs = subs ?? [];
+  const allRests = rests ?? [];
 
   const nameMap: Record<string, string> = {};
-  (rests ?? []).forEach((r: any) => { nameMap[r.id] = r.name; });
+  allRests.forEach((r: any) => { nameMap[r.id] = r.name; });
 
-  return subs.map((s: any) => ({
+  const real = allSubs.map((s: any) => ({
     ...s,
     restaurant_name: nameMap[s.restaurant_id] ?? '—',
   }));
+
+  // Add virtual trial entries for restaurants with no subscription row
+  const subsRestIds = new Set(allSubs.map((s: any) => s.restaurant_id));
+  const virtual = allRests
+    .filter((r: any) => !subsRestIds.has(r.id) && (r.plan === 'basic' || !r.plan))
+    .map((r: any) => ({
+      id: null,
+      restaurant_id: r.id,
+      restaurant_name: r.name,
+      plan: 'basic',
+      status: 'trial' as const,
+      amount: 0,
+      currency: 'PLN',
+      billing_period: 'monthly',
+      next_payment_date: null,
+      trial_ends_at: null,
+      last_payment_date: null,
+      notes: null,
+      created_at: r.created_at,
+    }));
+
+  return [...real, ...virtual];
 }
 
 // Maps plan text value to plan_id UUID in the plans table
@@ -416,18 +440,27 @@ export async function getSubscriptionsOverview(): Promise<{
   total: number; active: number; trial: number; overdue: number; cancelled: number;
   monthly_revenue: number;
 }> {
-  const { data } = await supabase.from('subscriptions').select('status, plan, amount, billing_period');
-  const all = data ?? [];
+  const [{ data: subsData }, { data: restsData }] = await Promise.all([
+    supabase.from('subscriptions').select('status, plan, amount, billing_period, restaurant_id'),
+    supabase.from('restaurants').select('id, plan'),
+  ]);
+  const subs = subsData ?? [];
+  const rests = restsData ?? [];
+
+  // Restaurants with no subscription row — treat as trial if plan='basic' (or no plan)
+  const subsRestIds = new Set(subs.map((s: any) => s.restaurant_id));
+  const noSubTrials = rests.filter((r: any) => !subsRestIds.has(r.id) && (r.plan === 'basic' || !r.plan)).length;
+
   const isTrial = (s: any) => s.status === 'trial' || s.plan === 'basic';
   const isActive = (s: any) => s.status === 'active' && s.plan !== 'basic';
-  const monthly = all.filter((s: any) => s.billing_period === 'monthly' && isActive(s)).reduce((sum: number, s: any) => sum + (s.amount ?? 0), 0);
-  const annual = all.filter((s: any) => s.billing_period === 'annual' && isActive(s)).reduce((sum: number, s: any) => sum + (s.amount ?? 0) / 12, 0);
+  const monthly = subs.filter((s: any) => s.billing_period === 'monthly' && isActive(s)).reduce((sum: number, s: any) => sum + (s.amount ?? 0), 0);
+  const annual = subs.filter((s: any) => s.billing_period === 'annual' && isActive(s)).reduce((sum: number, s: any) => sum + (s.amount ?? 0) / 12, 0);
   return {
-    total: all.length,
-    active: all.filter(isActive).length,
-    trial: all.filter(isTrial).length,
-    overdue: all.filter((s: any) => s.status === 'overdue').length,
-    cancelled: all.filter((s: any) => s.status === 'cancelled').length,
+    total: subs.length + noSubTrials,
+    active: subs.filter(isActive).length,
+    trial: subs.filter(isTrial).length + noSubTrials,
+    overdue: subs.filter((s: any) => s.status === 'overdue').length,
+    cancelled: subs.filter((s: any) => s.status === 'cancelled').length,
     monthly_revenue: Math.round(monthly + annual),
   };
 }
