@@ -92,6 +92,15 @@ const MANAGEMENT_TILES: HubTile[] = [
     route: '/(tabs)/kursy/manage',
   },
   {
+    id: 'kiosk',
+    title: 'Kiosk',
+    subtitle: 'QR kod do logowania pracowników',
+    icon: 'qr-code',
+    iconColor: '#059669',
+    iconBg: '#F0FDF4',
+    route: '/kiosk',
+  },
+  {
     id: 'schedule-editor',
     title: 'Edycja grafiku',
     subtitle: 'Zarządzaj zmianami zespołu',
@@ -119,6 +128,10 @@ export default function WorkHubScreen() {
   const tiles = MANAGEMENT_TILES;
 
   const navigate = (route: string, tab?: string) => {
+    if (route === '/kiosk') {
+      router.push({ pathname: '/kiosk', params: { rid: user?.restaurantId ?? '', mode: 'qr' } } as any);
+      return;
+    }
     if (tab) {
       router.push({ pathname: route as any, params: { tab } } as any);
     } else {

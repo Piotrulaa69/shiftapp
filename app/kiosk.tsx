@@ -12,8 +12,8 @@ const SUCCESS_RETURN_MS = 4000;
 type KioskMode = 'choose' | 'pin' | 'qr';
 
 export default function KioskScreen() {
-  const { rid } = useLocalSearchParams<{ rid: string }>();
-  const [mode, setMode] = useState<KioskMode>('choose');
+  const { rid, mode: initMode } = useLocalSearchParams<{ rid: string; mode?: string }>();
+  const [mode, setMode] = useState<KioskMode>((initMode as KioskMode) ?? 'choose');
   const [pin, setPin] = useState('');
   const [pinError, setPinError] = useState('');
   const [loading, setLoading] = useState(false);
