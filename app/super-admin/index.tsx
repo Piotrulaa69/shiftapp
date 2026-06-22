@@ -533,12 +533,38 @@ function RestaurantRow({ r, expanded = false, onPress, onImpersonate }: { r: Res
 }
 
 // ── TAB: Subscriptions ──────────────────────────────────
+const NEXT_DATE = (months: number) => {
+  const d = new Date();
+  d.setMonth(d.getMonth() + months);
+  return d.toISOString().split('T')[0];
+};
+
 function SubscriptionsTab({ subscriptions, overview, restaurants, onRefresh }: any) {
   const [editSub, setEditSub] = useState<(Subscription & { restaurant_name: string }) | null>(null);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState<SubscriptionStatus | 'all'>('all');
 
+  // New subscription form
+  const [showNew, setShowNew] = useState(false);
+  const [newRestaurantId, setNewRestaurantId] = useState('');
+  const [newPlan, setNewPlan] = useState<'basic' | 'premium' | 'enterprise'>('premium');
+  const [newStatus, setNewStatus] = useState<SubscriptionStatus>('active');
+  const [newAmount, setNewAmount] = useState('299');
+  const [newBilling, setNewBilling] = useState<'monthly' | 'annual'>('monthly');
+  const [newNextDate, setNewNextDate] = useState(NEXT_DATE(1));
+  const [newNotes, setNewNotes] = useState('');
+  const [newSaving, setNewSaving] = useState(false);
+  const [restaurantSearch, setRestaurantSearch] = useState('');
+
   const visible = filter === 'all' ? subscriptions : subscriptions.filter((s: any) => s.status === filter);
+
+  // Restaurants that don't yet have a subscription entry
+  const existingRestaurantIds = new Set(subscriptions.map((s: any) => s.restaurant_id));
+  const restaurantsWithoutSub = (restaurants as RestaurantWithStats[]).filter(r => !existingRestaurantIds.has(r.id));
+  const allRestaurantsForNew = restaurants as RestaurantWithStats[];
+  const filteredForPicker = allRestaurantsForNew.filter(r =>
+    r.name.toLowerCase().includes(restaurantSearch.toLowerCase())
+  );
 
   const handleSave = async () => {
     if (!editSub) return;
@@ -549,8 +575,49 @@ function SubscriptionsTab({ subscriptions, overview, restaurants, onRefresh }: a
     onRefresh();
   };
 
+  const handleNewSave = async () => {
+    if (!newRestaurantId) { Alert.alert('Błąd', 'Wybierz restaurację'); return; }
+    setNewSaving(true);
+    const restaurant = allRestaurantsForNew.find(r => r.id === newRestaurantId);
+    await upsertSubscription({
+      restaurant_id: newRestaurantId,
+      restaurant_name: restaurant?.name ?? '',
+      plan: newPlan,
+      status: newStatus,
+      amount: parseFloat(newAmount) || 0,
+      currency: 'PLN',
+      billing_period: newBilling,
+      next_payment_date: newNextDate || null,
+      notes: newNotes || null,
+    } as any);
+    setNewSaving(false);
+    setShowNew(false);
+    setNewRestaurantId('');
+    setNewPlan('premium');
+    setNewStatus('active');
+    setNewAmount('299');
+    setNewBilling('monthly');
+    setNewNextDate(NEXT_DATE(1));
+    setNewNotes('');
+    setRestaurantSearch('');
+    onRefresh();
+  };
+
   return (
     <View style={{ gap: 14 }}>
+      {/* Header with add button */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text style={s.sectionTitle}>Subskrypcje</Text>
+        <TouchableOpacity
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.colors.primary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 }}
+          onPress={() => setShowNew(true)}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="add" size={16} color="#fff" />
+          <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>Nadaj subskrypcję</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Overview cards */}
       {overview && (
         <View style={s.statsRow}>
@@ -618,6 +685,159 @@ function SubscriptionsTab({ subscriptions, overview, restaurants, onRefresh }: a
           </TouchableOpacity>
         );
       })}
+
+      {/* ── New Subscription Modal ── */}
+      <Modal visible={showNew} transparent animationType="slide" onRequestClose={() => setShowNew(false)}>
+        <View style={s.overlay}>
+          <View style={s.createModal}>
+            <View style={s.createModalHeader}>
+              <Text style={s.createModalTitle}>Nadaj subskrypcję</Text>
+              <TouchableOpacity onPress={() => setShowNew(false)} activeOpacity={0.7}>
+                <Ionicons name="close" size={22} color={theme.colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+
+              {/* Restaurant picker */}
+              <Text style={s.formLabel}>Restauracja *</Text>
+              <View style={[s.inputRow, { marginBottom: 8 }]}>
+                <Ionicons name="search-outline" size={16} color={theme.colors.textMuted} />
+                <TextInput
+                  style={s.formInput}
+                  placeholder="Szukaj restauracji..."
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={restaurantSearch}
+                  onChangeText={setRestaurantSearch}
+                />
+                {restaurantSearch.length > 0 && (
+                  <TouchableOpacity onPress={() => setRestaurantSearch('')}>
+                    <Ionicons name="close-circle" size={16} color={theme.colors.textMuted} />
+                  </TouchableOpacity>
+                )}
+              </View>
+              <View style={{ maxHeight: 160, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 10, overflow: 'hidden', marginBottom: 14 }}>
+                <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                  {filteredForPicker.map(r => {
+                    const sub = subscriptions.find((s: any) => s.restaurant_id === r.id);
+                    const currentPlan = sub ? (PLAN_CFG[sub.plan as keyof typeof PLAN_CFG]?.label ?? sub.plan) : null;
+                    const selected = newRestaurantId === r.id;
+                    return (
+                      <TouchableOpacity
+                        key={r.id}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: selected ? theme.colors.primaryLight : 'transparent', borderBottomWidth: 1, borderBottomColor: theme.colors.border }}
+                        onPress={() => setNewRestaurantId(r.id)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: selected ? theme.colors.primary : theme.colors.text }}>{r.name}</Text>
+                          {currentPlan && <Text style={{ fontSize: 11, color: theme.colors.textMuted }}>Obecny plan: {currentPlan}</Text>}
+                        </View>
+                        {selected && <Ionicons name="checkmark-circle" size={18} color={theme.colors.primary} />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                  {filteredForPicker.length === 0 && (
+                    <Text style={{ textAlign: 'center', color: theme.colors.textMuted, padding: 16, fontSize: 13 }}>Brak wyników</Text>
+                  )}
+                </ScrollView>
+              </View>
+
+              {/* Plan */}
+              <Text style={s.formLabel}>Plan</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+                {(['basic', 'premium', 'enterprise'] as const).map(p => (
+                  <TouchableOpacity
+                    key={p}
+                    style={[s.filterChip, newPlan === p && s.filterChipActive, { flex: 1, justifyContent: 'center' }]}
+                    onPress={() => setNewPlan(p)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[s.filterText, newPlan === p && s.filterTextActive]}>{PLAN_CFG[p].label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Status */}
+              <Text style={s.formLabel}>Status</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+                {(['trial', 'active', 'overdue', 'paused', 'cancelled'] as SubscriptionStatus[]).map(st => (
+                  <TouchableOpacity
+                    key={st}
+                    style={[s.filterChip, newStatus === st && s.filterChipActive]}
+                    onPress={() => setNewStatus(st)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[s.filterText, newStatus === st && s.filterTextActive]}>{STATUS_CFG[st].label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Billing period */}
+              <Text style={s.formLabel}>Okres rozliczeniowy</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+                {([['monthly', 'Miesięczny'], ['annual', 'Roczny']] as const).map(([val, lbl]) => (
+                  <TouchableOpacity
+                    key={val}
+                    style={[s.filterChip, newBilling === val && s.filterChipActive, { flex: 1, justifyContent: 'center' }]}
+                    onPress={() => setNewBilling(val)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[s.filterText, newBilling === val && s.filterTextActive]}>{lbl}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Amount */}
+              <Text style={s.formLabel}>Kwota (PLN)</Text>
+              <View style={[s.inputRow, { marginBottom: 14 }]}>
+                <Ionicons name="cash-outline" size={16} color={theme.colors.textMuted} />
+                <TextInput
+                  style={s.formInput}
+                  value={newAmount}
+                  keyboardType="numeric"
+                  onChangeText={setNewAmount}
+                  placeholder="299"
+                  placeholderTextColor={theme.colors.textMuted}
+                />
+              </View>
+
+              {/* Next payment date */}
+              <Text style={s.formLabel}>Data następnej płatności</Text>
+              <View style={[s.inputRow, { marginBottom: 14 }]}>
+                <Ionicons name="calendar-outline" size={16} color={theme.colors.textMuted} />
+                <TextInput
+                  style={s.formInput}
+                  value={newNextDate}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={theme.colors.textMuted}
+                  onChangeText={setNewNextDate}
+                />
+              </View>
+
+              {/* Notes */}
+              <Text style={s.formLabel}>Notatki (opcjonalne)</Text>
+              <TextInput
+                style={[s.formInput, { height: 60, textAlignVertical: 'top', paddingTop: 10, marginBottom: 20 }]}
+                value={newNotes}
+                multiline
+                placeholder="np. Zmiana planu na wniosek klienta"
+                placeholderTextColor={theme.colors.textMuted}
+                onChangeText={setNewNotes}
+              />
+
+              <TouchableOpacity
+                style={[s.createBtn, (!newRestaurantId || newSaving) && { opacity: 0.5 }]}
+                onPress={handleNewSave}
+                disabled={!newRestaurantId || newSaving}
+                activeOpacity={0.85}
+              >
+                {newSaving ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="checkmark-circle" size={18} color="#fff" />}
+                <Text style={s.createBtnText}>{newSaving ? 'Zapisywanie...' : 'Nadaj subskrypcję'}</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Edit Subscription Modal */}
       <Modal visible={!!editSub} transparent animationType="slide" onRequestClose={() => setEditSub(null)}>
