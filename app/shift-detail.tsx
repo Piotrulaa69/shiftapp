@@ -43,6 +43,7 @@ export default function ShiftDetailScreen() {
   const [absenceDesc, setAbsenceDesc] = useState('');
   const [elapsed, setElapsed] = useState('00:00:00');
   const [showPinModal, setShowPinModal] = useState(false);
+  const [showQrInfoModal, setShowQrInfoModal] = useState(false);
   const [pin, setPin] = useState('');
   const [pinError, setPinError] = useState('');
 
@@ -91,10 +92,7 @@ export default function ShiftDetailScreen() {
     if (!shift || !user) return;
     const { data: profile } = await supabase.from('profiles').select('login_method').eq('id', user.id).maybeSingle();
     if (profile?.login_method === 'qr') {
-      setClockLoading(true);
-      const ci = await clockIn(rid, shift.id, user.id, 'qr');
-      if (ci) setActiveCI(ci);
-      setClockLoading(false);
+      setShowQrInfoModal(true);
       return;
     }
     setPin('');
@@ -329,6 +327,36 @@ export default function ShiftDetailScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* QR Clock-in Info Modal */}
+      <Modal visible={showQrInfoModal} animationType="fade" transparent onRequestClose={() => setShowQrInfoModal(false)}>
+        <View style={mStyles.overlay}>
+          <View style={mStyles.sheet}>
+            <View style={mStyles.mHeader}>
+              <Text style={mStyles.mTitle}>Zameldowanie przez QR</Text>
+              <TouchableOpacity onPress={() => setShowQrInfoModal(false)}><Ionicons name="close" size={24} color={theme.colors.text} /></TouchableOpacity>
+            </View>
+            <View style={[mStyles.body, { alignItems: 'center', gap: 16, paddingVertical: 24 }]}>
+              <View style={{ width: 80, height: 80, borderRadius: 24, backgroundColor: '#F0FDF4', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="qr-code" size={44} color="#059669" />
+              </View>
+              <Text style={{ fontSize: 17, fontWeight: '800', color: theme.colors.text, textAlign: 'center' }}>
+                Zeskanuj kod QR
+              </Text>
+              <Text style={{ fontSize: 14, color: theme.colors.textMuted, textAlign: 'center', lineHeight: 21 }}>
+                Twoje konto ma włączone logowanie przez kod QR.{'\n'}Podejdź do kiosku restauracji i zeskanuj wyświetlony kod QR, aby się zameldować.
+              </Text>
+              <TouchableOpacity
+                style={{ marginTop: 8, backgroundColor: '#059669', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 32 }}
+                onPress={() => setShowQrInfoModal(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Rozumiem</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
