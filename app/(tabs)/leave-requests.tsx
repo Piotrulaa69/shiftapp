@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { createLeaveRequest, deleteLeaveRequest, ensureDefaultLeaveTypes, getEmployeeLeaveQuota, getEmployees, getLeaveRequests, reviewLeaveRequest, updateLeaveRequest } from '../../lib/db';
+import { createLeaveRequest, deleteLeaveRequest, ensureDefaultLeaveTypes, getEmployeeLeaveQuota, getEmployeeLeaveTypeSettings, getEmployees, getLeaveRequests, reviewLeaveRequest, updateLeaveRequest } from '../../lib/db';
 import type { DbLeaveRequest, DbLeaveType, DbProfile } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
@@ -156,21 +156,35 @@ export default function LeaveRequestsScreen() {
   const load = useCallback(async () => {
     if (!rid || !user) return;
     setLoading(true);
-    const [reqs, types, quota] = await Promise.all([
+    const [reqs, allTypes, quota, empSettings] = await Promise.all([
       getLeaveRequests(rid, user.id),
       ensureDefaultLeaveTypes(rid),
       getEmployeeLeaveQuota(user.id, new Date().getFullYear()),
+      getEmployeeLeaveTypeSettings(user.id),
     ]);
     setRequests(reqs);
-    setLeaveTypes(types);
     setMyLeaveQuotaDays(quota ? quota.total_days : null);
+
     if (canManage) {
+      // Managers/owners see all leave types
+      setLeaveTypes(allTypes);
       const [allReqs, emps] = await Promise.all([getLeaveRequests(rid), getEmployees(rid)]);
       setTeamRequests(allReqs);
       setEmployees(emps);
+    } else {
+      // Regular employees: only show types that have an explicit setting with is_enabled=true
+      // If no settings exist at all, show nothing (default 0 days)
+      if (empSettings.length === 0) {
+        setLeaveTypes([]);
+      } else {
+        const enabledIds = new Set(
+          empSettings.filter((s) => s.is_enabled).map((s) => s.leave_type_id)
+        );
+        setLeaveTypes(allTypes.filter((lt) => enabledIds.has(lt.id)));
+      }
     }
     setLoading(false);
-  }, [rid, user]);
+  }, [rid, user, canManage]);
 
   useEffect(() => { load(); }, [load]);
 

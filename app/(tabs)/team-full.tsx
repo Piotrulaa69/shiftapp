@@ -5,8 +5,8 @@ import { ActivityIndicator, Clipboard, Modal, Platform, ScrollView, Share, Style
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
-import { generateInvitation, getEmployeeLeaveQuota, getEmployees, getPointsForEmployee, setEmployeeLeaveQuota, updateEmployeeRole, updateProfile } from '../../lib/db';
-import type { DbProfile } from '../../lib/supabase';
+import { ensureDefaultLeaveTypes, generateInvitation, getEmployeeLeaveQuota, getEmployeeLeaveTypeSettings, getEmployees, getPointsForEmployee, setEmployeeLeaveQuota, setEmployeeLeaveTypeSetting, updateEmployeeRole, updateProfile } from '../../lib/db';
+import type { DbLeaveType, DbProfile } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
 const JOB_OPTIONS = ['Kelner', 'Kucharz', 'Barista', 'Lider zmiany', 'Hostessa', 'Pizzaiolo', 'Sprzątanie'];
@@ -64,6 +64,8 @@ export default function TeamFullScreen() {
   const [leaveDays, setLeaveDays] = useState('');
   const [leaveUsed, setLeaveUsed] = useState('');
   const [leaveCarried, setLeaveCarried] = useState('');
+  const [leaveTypes, setLeaveTypes] = useState<DbLeaveType[]>([]);
+  const [leaveTypeSettings, setLeaveTypeSettings] = useState<Record<string, { enabled: boolean; days: string }>>({});
 
   const openEmployeeEdit = async (emp: DbProfile) => {
     setSelectedEmp(emp);
@@ -78,15 +80,27 @@ export default function TeamFullScreen() {
     setEditActive(emp.is_active !== false);
     setEditHourlyRate((emp as any).hourly_rate != null ? String((emp as any).hourly_rate) : '');
     setEditRole(emp.role === 'manager' ? 'manager' : 'employee');
-    const [pointsLedger, quota] = await Promise.all([
+    const [pointsLedger, quota, types, settings] = await Promise.all([
       getPointsForEmployee(rid, emp.id),
       getEmployeeLeaveQuota(emp.id, new Date().getFullYear()),
+      ensureDefaultLeaveTypes(rid),
+      getEmployeeLeaveTypeSettings(emp.id),
     ]);
     const totalPoints = pointsLedger.reduce((sum, p) => sum + (p.points || 0), 0);
     setEmpPoints(totalPoints);
-    setLeaveDays(quota ? String(quota.total_days) : '20');
+    setLeaveDays(quota ? String(quota.total_days) : '0');
     setLeaveUsed(quota ? String(quota.used_days) : '0');
     setLeaveCarried(quota ? String(quota.carried_over_days) : '0');
+    setLeaveTypes(types);
+    const map: Record<string, { enabled: boolean; days: string }> = {};
+    types.forEach((lt) => {
+      const s = settings.find((x) => x.leave_type_id === lt.id);
+      map[lt.id] = {
+        enabled: s ? s.is_enabled : false,
+        days: s?.custom_days_per_year != null ? String(s.custom_days_per_year) : '0',
+      };
+    });
+    setLeaveTypeSettings(map);
   };
 
   const saveEmployee = async () => {
@@ -112,6 +126,12 @@ export default function TeamFullScreen() {
         used_days: parseInt(leaveUsed) || 0,
         carried_over_days: parseInt(leaveCarried) || 0,
       }),
+      ...Object.entries(leaveTypeSettings).map(([ltId, s]) =>
+        setEmployeeLeaveTypeSetting(selectedEmp!.id, ltId, {
+          is_enabled: s.enabled,
+          custom_days_per_year: s.enabled ? (parseInt(s.days) || 0) : 0,
+        })
+      ),
     ]);
     setSaving(false);
     if (success) {
@@ -438,6 +458,50 @@ export default function TeamFullScreen() {
                         );
                       })()}
                     </View>
+
+                    {/* Leave types per employee */}
+                    {leaveTypes.length > 0 && (
+                      <View style={{ marginTop: 16 }}>
+                        <Text style={[mStyles.fieldLabel, { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 10, color: theme.colors.textMuted }]}>
+                          Dostępne typy urlopu
+                        </Text>
+                        <Text style={{ fontSize: 11, color: theme.colors.textMuted, marginBottom: 10 }}>
+                          Zaznacz typy urlopów i wpisz liczbę dni. Tylko zaznaczone typy będą widoczne dla pracownika.
+                        </Text>
+                        {leaveTypes.map((lt) => {
+                          const s = leaveTypeSettings[lt.id] ?? { enabled: false, days: '0' };
+                          return (
+                            <View key={lt.id} style={{ marginBottom: 10 }}>
+                              <TouchableOpacity
+                                style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 }}
+                                onPress={() => setLeaveTypeSettings(prev => ({ ...prev, [lt.id]: { ...s, enabled: !s.enabled } }))}
+                                activeOpacity={0.7}
+                              >
+                                <View style={{
+                                  width: 22, height: 22, borderRadius: 6, borderWidth: 2,
+                                  borderColor: s.enabled ? theme.colors.primary : theme.colors.border,
+                                  backgroundColor: s.enabled ? theme.colors.primary : 'transparent',
+                                  alignItems: 'center', justifyContent: 'center',
+                                }}>
+                                  {s.enabled && <Ionicons name="checkmark" size={14} color="#fff" />}
+                                </View>
+                                <Text style={{ fontSize: 14, fontWeight: '600', color: theme.colors.text }}>{lt.name}</Text>
+                              </TouchableOpacity>
+                              {s.enabled && (
+                                <TextInput
+                                  style={[mStyles.input, { marginLeft: 32 }]}
+                                  value={s.days}
+                                  onChangeText={(v) => setLeaveTypeSettings(prev => ({ ...prev, [lt.id]: { ...s, days: v } }))}
+                                  keyboardType="numeric"
+                                  placeholder="Dni rocznie (np. 20)"
+                                  placeholderTextColor={theme.colors.textMuted}
+                                />
+                              )}
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
 
                     <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
                       <TouchableOpacity style={[mStyles.actionBtn, { backgroundColor: theme.colors.surface }]} onPress={() => setEditing(false)} activeOpacity={0.7}>
