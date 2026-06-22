@@ -33,9 +33,9 @@ import { theme } from '../../styles/theme';
 
 // ── Config ─────────────────────────────────────────────
 const PLAN_CFG = {
-  basic:      { label: 'Basic',      color: '#6B7280', bg: '#F3F4F6' },
-  premium:    { label: 'Premium',    color: '#D97706', bg: '#FEF3C7' },
-  enterprise: { label: 'Enterprise', color: '#7C3AED', bg: '#EDE9FE' },
+  basic:      { label: 'Reztro',     color: '#2563EB', bg: '#EFF6FF' },
+  premium:    { label: 'Reztro',     color: '#2563EB', bg: '#EFF6FF' },
+  enterprise: { label: 'Reztro',     color: '#2563EB', bg: '#EFF6FF' },
 };
 
 const STATUS_CFG: Record<SubscriptionStatus, { label: string; color: string; bg: string }> = {
@@ -334,11 +334,11 @@ function CreateRestaurantModal({ visible, superAdminId, onClose, onCreated }: {
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
-  const [plan, setPlan] = useState<'basic' | 'premium'>('basic');
+  const plan = 'basic';
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const reset = () => { setName(''); setAddress(''); setPhone(''); setPlan('basic'); setError(''); };
+  const reset = () => { setName(''); setAddress(''); setPhone(''); setError(''); };
 
   const handleCreate = async () => {
     if (!name.trim()) { setError('Podaj nazwę restauracji.'); return; }
@@ -376,14 +376,6 @@ function CreateRestaurantModal({ visible, superAdminId, onClose, onCreated }: {
               </View>
             ))}
 
-            <Text style={s.formLabel}>Plan</Text>
-            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
-              {(['basic', 'premium'] as const).map(p => (
-                <TouchableOpacity key={p} style={[s.planOption, plan === p && s.planOptionActive]} onPress={() => setPlan(p)} activeOpacity={0.7}>
-                  <Text style={[s.planOptionText, plan === p && s.planOptionTextActive]}>{p === 'basic' ? 'Basic — 99 PLN/mies.' : 'Premium — 199 PLN/mies.'}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
 
             {!!error && <Text style={s.errorText}>{error}</Text>}
 
@@ -585,7 +577,7 @@ function SubscriptionsTab({ subscriptions, overview, restaurants, onRefresh }: a
   // New subscription form
   const [showNew, setShowNew] = useState(false);
   const [newRestaurantId, setNewRestaurantId] = useState('');
-  const [newPlan, setNewPlan] = useState<'basic' | 'premium' | 'enterprise'>('premium');
+  const newPlan = 'basic';
   const [newStatus, setNewStatus] = useState<SubscriptionStatus>('active');
   const [newAmount, setNewAmount] = useState('299');
   const [newBilling, setNewBilling] = useState<'monthly' | 'annual'>('monthly');
@@ -637,7 +629,6 @@ function SubscriptionsTab({ subscriptions, overview, restaurants, onRefresh }: a
     setNewSaving(false);
     setShowNew(false);
     setNewRestaurantId('');
-    setNewPlan('premium');
     setNewStatus('active');
     setNewAmount('299');
     setNewBilling('monthly');
@@ -787,20 +778,6 @@ function SubscriptionsTab({ subscriptions, overview, restaurants, onRefresh }: a
                 </ScrollView>
               </View>
 
-              {/* Plan */}
-              <Text style={s.formLabel}>Plan</Text>
-              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
-                {(['basic', 'premium', 'enterprise'] as const).map(p => (
-                  <TouchableOpacity
-                    key={p}
-                    style={[s.filterChip, newPlan === p && s.filterChipActive, { flex: 1, justifyContent: 'center' }]}
-                    onPress={() => setNewPlan(p)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[s.filterText, newPlan === p && s.filterTextActive]}>{PLAN_CFG[p].label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
 
               {/* Status */}
               <Text style={s.formLabel}>Status</Text>
@@ -906,14 +883,6 @@ function SubscriptionsTab({ subscriptions, overview, restaurants, onRefresh }: a
                   ))}
                 </View>
 
-                <Text style={s.formLabel}>Plan</Text>
-                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
-                  {(['basic','premium','enterprise'] as const).map(p => (
-                    <TouchableOpacity key={p} style={[s.filterChip, editSub.plan === p && s.filterChipActive]} onPress={() => setEditSub({ ...editSub, plan: p })} activeOpacity={0.7}>
-                      <Text style={[s.filterText, editSub.plan === p && s.filterTextActive]}>{PLAN_CFG[p].label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
 
                 <Text style={s.formLabel}>Kwota (PLN)</Text>
                 <View style={[s.inputRow, { marginBottom: 14 }]}>
