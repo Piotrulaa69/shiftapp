@@ -96,6 +96,15 @@ export default function ReportsScreen() {
   const [loading, setLoading] = useState(false);
   const [month, setMonth] = useState(getCurrentMonth());
 
+  // ── employee filter ──
+  const [allEmployees, setAllEmployees] = useState<DbProfile[]>([]);
+  const [filterEmpId, setFilterEmpId] = useState<string>('');
+  const [showEmpPicker, setShowEmpPicker] = useState(false);
+
+  useEffect(() => {
+    if (rid) getEmployees(rid).then(setAllEmployees);
+  }, [rid]);
+
   // ── hours ──
   const [empRows, setEmpRows] = useState<EmpHourRow[]>([]);
   const [expandedEmp, setExpandedEmp] = useState<string | null>(null);
@@ -295,13 +304,18 @@ export default function ReportsScreen() {
     reloadEmpShifts(emp.id);
   };
 
-  // derived
-  const totalTeamHours = empRows.reduce((s, r) => s + r.totalMinutes, 0) / 60;
-  const totalTeamEarnings = empRows.length > 0 && empRows.every((r) => r.earnings !== null)
-    ? empRows.reduce((s, r) => s + (r.earnings ?? 0), 0) : null;
-  const shiftsConfirmed = shiftsData.filter((s) => s.status === 'potwierdzona').length;
-  const clockDone = clockIns.filter((c) => c.status === 'completed').length;
-  const tasksDone = tasksData.filter((t) => t.completed).length;
+  // derived — apply employee filter
+  const filteredEmpRows = filterEmpId ? empRows.filter(r => r.emp.id === filterEmpId) : empRows;
+  const filteredShifts = filterEmpId ? shiftsData.filter(s => s.employee_id === filterEmpId) : shiftsData;
+  const filteredClockIns = filterEmpId ? clockIns.filter(c => c.employee_id === filterEmpId) : clockIns;
+  const filteredTasks = filterEmpId ? tasksData.filter(t => t.assigned_to === filterEmpId) : tasksData;
+
+  const totalTeamHours = filteredEmpRows.reduce((s, r) => s + r.totalMinutes, 0) / 60;
+  const totalTeamEarnings = filteredEmpRows.length > 0 && filteredEmpRows.every((r) => r.earnings !== null)
+    ? filteredEmpRows.reduce((s, r) => s + (r.earnings ?? 0), 0) : null;
+  const shiftsConfirmed = filteredShifts.filter((s) => s.status === 'potwierdzona').length;
+  const clockDone = filteredClockIns.filter((c) => c.status === 'completed').length;
+  const tasksDone = filteredTasks.filter((t) => t.completed).length;
 
   const PRIORITY_COLORS: Record<string, string> = { wysoki: theme.colors.error, normalny: theme.colors.orange, niski: theme.colors.green };
   const STATUS_LABEL: Record<string, string> = { do_zrobienia: 'Do zrobienia', w_trakcie: 'W trakcie', czeka_na_zatwierdzenie: 'Czeka', zatwierdzone: 'Zatwierdzone', zamkniete: 'Zamknięte', odrzucone: 'Odrzucone' };
@@ -333,6 +347,25 @@ export default function ReportsScreen() {
         {/* Month nav — shared for all reports */}
         {!!selected && <MonthNav month={month} onChange={setMonth} />}
 
+        {/* Employee filter */}
+        {!!selected && (
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 0, marginBottom: 4, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: theme.colors.card, borderRadius: 12, borderWidth: 1, borderColor: filterEmpId ? theme.colors.primary : theme.colors.border }}
+            onPress={() => setShowEmpPicker(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="person-outline" size={16} color={filterEmpId ? theme.colors.primary : theme.colors.textMuted} />
+            <Text style={{ flex: 1, fontSize: 14, color: filterEmpId ? theme.colors.text : theme.colors.textMuted }}>
+              {filterEmpId ? (() => { const e = allEmployees.find(x => x.id === filterEmpId); return e ? `${e.first_name} ${e.last_name}` : 'Pracownik'; })() : 'Wszyscy pracownicy'}
+            </Text>
+            {filterEmpId
+              ? <TouchableOpacity onPress={(e) => { e.stopPropagation(); setFilterEmpId(''); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="close-circle" size={18} color={theme.colors.primary} />
+                </TouchableOpacity>
+              : <Ionicons name="chevron-down" size={16} color={theme.colors.textMuted} />}
+          </TouchableOpacity>
+        )}
+
         {loading && <ActivityIndicator style={{ marginTop: 24 }} size="large" color={REPORTS.find((r) => r.key === selected)?.color ?? theme.colors.primary} />}
 
         {/* ── HOURS ── */}
@@ -340,14 +373,14 @@ export default function ReportsScreen() {
           <View style={styles.section}>
             <SummaryRow items={[
               { label: 'Razem godzin', value: `${totalTeamHours.toFixed(1)}h` },
-              { label: 'Aktywnych', value: String(empRows.filter((r) => r.shiftsCount > 0).length) },
+              { label: 'Aktywnych', value: String(filteredEmpRows.filter((r) => r.shiftsCount > 0).length) },
               { label: 'Szac. koszt', value: totalTeamEarnings != null ? `${totalTeamEarnings.toFixed(0)} zł` : '—', color: '#A855F7' },
             ]} />
-            {empRows.length === 0
+            {filteredEmpRows.length === 0
               ? <EmptyState icon="bar-chart-outline" text="Brak danych za ten miesiąc" />
               : <View style={styles.resultCard}>
                   <Text style={styles.resultTitle}>Godziny per pracownik — {monthLabel(month)}</Text>
-                  {empRows.map((row, idx) => {
+                  {filteredEmpRows.map((row, idx) => {
                     const hrs = row.totalMinutes / 60;
                     const hrsStr = `${Math.floor(hrs)}h ${fmt2(row.totalMinutes % 60)}m`;
                     const isExp = expandedEmp === row.emp.id;
@@ -426,15 +459,15 @@ export default function ReportsScreen() {
         {!loading && selected === 'shifts' && (
           <View style={styles.section}>
             <SummaryRow items={[
-              { label: 'Łącznie zmian', value: String(shiftsData.length) },
+              { label: 'Łącznie zmian', value: String(filteredShifts.length) },
               { label: 'Potwierdzone', value: String(shiftsConfirmed), color: theme.colors.green },
-              { label: 'Oczekujące', value: String(shiftsData.length - shiftsConfirmed), color: theme.colors.orange },
+              { label: 'Oczekujące', value: String(filteredShifts.length - shiftsConfirmed), color: theme.colors.orange },
             ]} />
-            {shiftsData.length === 0
+            {filteredShifts.length === 0
               ? <EmptyState icon="calendar-outline" text="Brak zmian w tym miesiącu" />
               : <View style={styles.resultCard}>
                   <Text style={styles.resultTitle}>Lista zmian — {monthLabel(month)}</Text>
-                  {shiftsData.map((s, idx) => {
+                  {filteredShifts.map((s, idx) => {
                     const emp = shiftsProfiles[s.employee_id];
                     const sm = s.start_time && s.end_time ? shiftMinutes(s.start_time, s.end_time) : 0;
                     const isConf = s.status === 'potwierdzona';
@@ -468,15 +501,15 @@ export default function ReportsScreen() {
         {!loading && selected === 'attendance' && (
           <View style={styles.section}>
             <SummaryRow items={[
-              { label: 'Łącznie wejść', value: String(clockIns.length) },
+              { label: 'Łącznie wejść', value: String(filteredClockIns.length) },
               { label: 'Zakończone', value: String(clockDone), color: theme.colors.green },
-              { label: 'Aktywne', value: String(clockIns.length - clockDone), color: theme.colors.primary },
+              { label: 'Aktywne', value: String(filteredClockIns.length - clockDone), color: theme.colors.primary },
             ]} />
-            {clockIns.length === 0
+            {filteredClockIns.length === 0
               ? <EmptyState icon="time-outline" text="Brak zameldowań w tym miesiącu" />
               : <View style={styles.resultCard}>
                   <Text style={styles.resultTitle}>Frekwencja — {monthLabel(month)}</Text>
-                  {clockIns.map((c, idx) => {
+                  {filteredClockIns.map((c, idx) => {
                     const emp = attendanceProfiles[c.employee_id];
                     const inTime = new Date(c.clock_in_at);
                     const outTime = c.clock_out_at ? new Date(c.clock_out_at) : null;
@@ -514,15 +547,15 @@ export default function ReportsScreen() {
         {!loading && selected === 'tasks' && (
           <View style={styles.section}>
             <SummaryRow items={[
-              { label: 'Łącznie', value: String(tasksData.length) },
+              { label: 'Łącznie', value: String(filteredTasks.length) },
               { label: 'Wykonane', value: String(tasksDone), color: theme.colors.green },
-              { label: 'Realizacja', value: tasksData.length > 0 ? `${Math.round(tasksDone / tasksData.length * 100)}%` : '—', color: theme.colors.primary },
+              { label: 'Realizacja', value: filteredTasks.length > 0 ? `${Math.round(tasksDone / filteredTasks.length * 100)}%` : '—', color: theme.colors.primary },
             ]} />
-            {tasksData.length === 0
+            {filteredTasks.length === 0
               ? <EmptyState icon="list-outline" text="Brak zadań w tym miesiącu" />
               : <View style={styles.resultCard}>
                   <Text style={styles.resultTitle}>Zadania — {monthLabel(month)}</Text>
-                  {tasksData.map((t, idx) => {
+                  {filteredTasks.map((t, idx) => {
                     const emp = tasksProfiles[t.assigned_to];
                     const pc = PRIORITY_COLORS[t.priority] ?? theme.colors.textMuted;
                     const statusLabel = STATUS_LABEL[t.status] ?? t.status;
@@ -574,6 +607,48 @@ export default function ReportsScreen() {
                 {editCISaving ? <ActivityIndicator color="#fff" /> : <Text style={eStyles.saveBtnText}>Zapisz zmiany</Text>}
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Employee picker modal */}
+      <Modal visible={showEmpPicker} animationType="fade" transparent onRequestClose={() => setShowEmpPicker(false)}>
+        <View style={eStyles.overlay}>
+          <View style={eStyles.sheet}>
+            <View style={eStyles.header}>
+              <Text style={eStyles.title}>Filtruj po pracowniku</Text>
+              <TouchableOpacity onPress={() => setShowEmpPicker(false)}><Ionicons name="close" size={22} color={theme.colors.text} /></TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 400 }}>
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: theme.colors.border, backgroundColor: !filterEmpId ? theme.colors.primaryLight : 'transparent' }}
+                onPress={() => { setFilterEmpId(''); setShowEmpPicker(false); }}
+                activeOpacity={0.75}
+              >
+                <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: theme.colors.surface, alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="people-outline" size={18} color={theme.colors.textMuted} />
+                </View>
+                <Text style={{ flex: 1, fontSize: 14, fontWeight: !filterEmpId ? '700' : '400', color: !filterEmpId ? theme.colors.primary : theme.colors.text }}>Wszyscy pracownicy</Text>
+                {!filterEmpId && <Ionicons name="checkmark" size={18} color={theme.colors.primary} />}
+              </TouchableOpacity>
+              {allEmployees.map((emp) => (
+                <TouchableOpacity
+                  key={emp.id}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: theme.colors.border, backgroundColor: filterEmpId === emp.id ? theme.colors.primaryLight : 'transparent' }}
+                  onPress={() => { setFilterEmpId(emp.id); setShowEmpPicker(false); }}
+                  activeOpacity={0.75}
+                >
+                  <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: (emp as any).avatar_color ?? theme.colors.primary, alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>{`${emp.first_name?.[0] ?? ''}${emp.last_name?.[0] ?? ''}`.toUpperCase()}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: filterEmpId === emp.id ? '700' : '400', color: filterEmpId === emp.id ? theme.colors.primary : theme.colors.text }}>{emp.first_name} {emp.last_name}</Text>
+                    {emp.job_title ? <Text style={{ fontSize: 12, color: theme.colors.textMuted }}>{emp.job_title}</Text> : null}
+                  </View>
+                  {filterEmpId === emp.id && <Ionicons name="checkmark" size={18} color={theme.colors.primary} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
         </View>
       </Modal>
