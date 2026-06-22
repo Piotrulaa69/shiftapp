@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { getKioskEmployees, getOrCreateQrToken, kioskLoginByPin } from '../lib/db';
+import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { getOrCreateQrToken, kioskLoginByPin } from '../lib/db';
 import type { DbProfile } from '../lib/supabase';
 import { theme } from '../styles/theme';
 
@@ -20,7 +20,6 @@ export default function KioskScreen() {
   const [loggedIn, setLoggedIn] = useState<DbProfile | null>(null);
   const [prevMode, setPrevMode] = useState<KioskMode>('qr');
   const [countdown, setCountdown] = useState(Math.ceil(SUCCESS_RETURN_MS / 1000));
-  const [employees, setEmployees] = useState<DbProfile[]>([]);
   const [qrToken, setQrToken] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
   const [qrTimeLeft, setQrTimeLeft] = useState(QR_REFRESH_MS / 1000);
@@ -28,11 +27,6 @@ export default function KioskScreen() {
   const qrAutoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const returnRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cdRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (!rid) return;
-    getKioskEmployees(rid).then(setEmployees);
-  }, [rid]);
 
   // ── QR token management ──────────────────────────────
   const refreshQrToken = async () => {
@@ -107,11 +101,6 @@ export default function KioskScreen() {
     }
   };
 
-  // ── QR employee select ───────────────────────────────
-  const handleQrSelect = async (emp: DbProfile) => {
-    showSuccess(emp, 'qr');
-    await refreshQrToken();
-  };
 
   if (!rid) {
     return (
@@ -205,28 +194,28 @@ export default function KioskScreen() {
     const mins = Math.floor(qrTimeLeft / 60);
     const secs = qrTimeLeft % 60;
     const qrValue = qrToken ? `reztro://kiosk?token=${qrToken}&rid=${rid}` : 'loading';
-    const qrEmployees = employees.filter(e => e.login_method === 'qr');
 
     return (
-      <ScrollView contentContainerStyle={s.qrScreen} showsVerticalScrollIndicator={false}>
+      <View style={s.qrFullScreen}>
         <TouchableOpacity style={s.backBtn} onPress={() => setMode('choose')} activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={20} color={theme.colors.textMuted} />
           <Text style={s.backBtnText}>Wróć</Text>
         </TouchableOpacity>
 
-        {/* QR Code display */}
-        <View style={s.qrSection}>
-          <Text style={s.qrTitle}>Kod QR restauracji</Text>
-          <Text style={s.qrSub}>Wywieś ten ekran na ścianie — pracownicy skanują ten kod</Text>
+        <View style={s.qrCenterContent}>
+          <Text style={s.qrTitle}>Zeskanuj, aby się zameldować</Text>
+          <Text style={s.qrSub}>Otwórz aplikację Reztro i zeskanuj kod aparatem</Text>
+
           <View style={s.qrBox}>
             {qrLoading || !qrToken
               ? <ActivityIndicator color={theme.colors.primary} size="large" />
               : <Image
-                  source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=10&data=${encodeURIComponent(qrValue)}` }}
-                  style={{ width: 220, height: 220, borderRadius: 8 }}
+                  source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=10&data=${encodeURIComponent(qrValue)}` }}
+                  style={{ width: 240, height: 240, borderRadius: 8 }}
                 />
             }
           </View>
+
           <View style={s.qrTimerRow}>
             <Ionicons name="time-outline" size={14} color={theme.colors.textMuted} />
             <Text style={s.qrTimerText}>
@@ -237,32 +226,7 @@ export default function KioskScreen() {
             </TouchableOpacity>
           </View>
         </View>
-
-        {/* Employee list for QR users */}
-        <View style={s.divider}>
-          <View style={s.dividerLine} />
-          <Text style={s.dividerText}>lub wybierz pracownika poniżej</Text>
-          <View style={s.dividerLine} />
-        </View>
-
-        <View style={s.empList}>
-          {qrEmployees.map((emp) => (
-            <TouchableOpacity key={emp.id} style={s.empCard} onPress={() => handleQrSelect(emp)} activeOpacity={0.8}>
-              <View style={[s.empAvatar, { backgroundColor: emp.avatar_color ?? theme.colors.primary }]}>
-                <Text style={s.empAvatarText}>{emp.first_name[0]}{emp.last_name[0]}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.empName}>{emp.first_name} {emp.last_name}</Text>
-                <Text style={s.empJob}>{emp.job_title}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
-            </TouchableOpacity>
-          ))}
-          {qrEmployees.length === 0 && (
-            <Text style={s.emptyText}>Brak pracowników z metodą logowania QR.{'\n'}Ustaw metodę QR w panelu admina.</Text>
-          )}
-        </View>
-      </ScrollView>
+      </View>
     );
   }
 
@@ -299,23 +263,13 @@ const s = StyleSheet.create({
   backBtnText: { fontSize: 14, color: theme.colors.textMuted, fontWeight: '600' },
 
   // QR
-  qrScreen: { backgroundColor: theme.colors.background, padding: 24, paddingTop: 80, alignItems: 'center', gap: 24, minHeight: '100%' } as any,
-  qrSection: { alignItems: 'center', width: '100%', gap: 10 },
-  qrTitle: { fontSize: 22, fontWeight: '800', color: theme.colors.text },
-  qrSub: { fontSize: 13, color: theme.colors.textMuted, textAlign: 'center', lineHeight: 18 },
-  qrBox: { width: 256, height: 256, backgroundColor: '#fff', borderRadius: 20, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 4, marginTop: 8 },
-  qrTimerRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
+  qrFullScreen: { flex: 1, backgroundColor: theme.colors.background },
+  qrCenterContent: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },
+  qrTitle: { fontSize: 24, fontWeight: '800', color: theme.colors.text, textAlign: 'center' },
+  qrSub: { fontSize: 14, color: theme.colors.textMuted, textAlign: 'center', lineHeight: 20 },
+  qrBox: { width: 280, height: 280, backgroundColor: '#fff', borderRadius: 24, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 5, marginTop: 16, marginBottom: 8 },
+  qrTimerRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
   qrTimerText: { fontSize: 12, color: theme.colors.textMuted },
-  divider: { flexDirection: 'row', alignItems: 'center', gap: 10, width: '100%' },
-  dividerLine: { flex: 1, height: 1, backgroundColor: theme.colors.border },
-  dividerText: { fontSize: 12, color: theme.colors.textMuted } as any,
-  empList: { width: '100%', gap: 10, paddingBottom: 32 },
-  empCard: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: theme.colors.card, borderRadius: 16, padding: 14, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  empAvatar: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  empAvatarText: { fontSize: 17, fontWeight: '800', color: '#fff' },
-  empName: { fontSize: 15, fontWeight: '700', color: theme.colors.text },
-  empJob: { fontSize: 12, color: theme.colors.textMuted, marginTop: 2 },
-  emptyText: { textAlign: 'center', color: theme.colors.textMuted, fontSize: 13, padding: 16, lineHeight: 20 },
 
   // Success
   successScreen: { flex: 1, backgroundColor: '#059669', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 40 },

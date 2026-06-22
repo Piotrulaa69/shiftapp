@@ -87,7 +87,16 @@ export default function ShiftDetailScreen() {
     return () => clearInterval(interval);
   }, [activeCI]);
 
-  const handleClockIn = () => {
+  const handleClockIn = async () => {
+    if (!shift || !user) return;
+    const { data: profile } = await supabase.from('profiles').select('login_method').eq('id', user.id).maybeSingle();
+    if (profile?.login_method === 'qr') {
+      setClockLoading(true);
+      const ci = await clockIn(rid, shift.id, user.id, 'qr');
+      if (ci) setActiveCI(ci);
+      setClockLoading(false);
+      return;
+    }
     setPin('');
     setPinError('');
     setShowPinModal(true);
