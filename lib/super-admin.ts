@@ -401,21 +401,47 @@ export async function updateRestaurant(
   restaurantId: string,
   data: { name?: string; address?: string; phone?: string; plan?: string }
 ): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase
-    .from('restaurants')
-    .update(data)
-    .eq('id', restaurantId);
+  // Try SECURITY DEFINER RPC first (bypasses RLS), fall back to direct
+  if (data.name !== undefined) {
+    const { data: result, error } = await supabase.rpc('super_admin_update_restaurant', {
+      p_restaurant_id: restaurantId,
+      p_name:    data.name ?? '',
+      p_address: data.address ?? '',
+      p_phone:   data.phone ?? '',
+    });
+    if (!error && (result as any)?.success) return { success: true };
+    if (!error && (result as any)?.error) return { success: false, error: (result as any).error };
+  }
+  // Fallback: direct update (works if RLS policies are in place)
+  const { error } = await supabase.from('restaurants').update(data).eq('id', restaurantId);
   if (error) { console.error('updateRestaurant', error); return { success: false, error: error.message }; }
   return { success: true };
 }
 
 export async function deleteRestaurant(restaurantId: string): Promise<{ success: boolean; error?: string }> {
+  // Use SECURITY DEFINER RPC to bypass RLS reliably
+  const { data: result, error: rpcError } = await supabase.rpc('super_admin_delete_restaurant', {
+    p_restaurant_id: restaurantId,
+  });
+  if (!rpcError) {
+    const r = result as any;
+    if (r?.success) return { success: true };
+    if (r?.error)   return { success: false, error: r.error };
+  }
+  // Fallback to direct delete
   const { error } = await supabase.from('restaurants').delete().eq('id', restaurantId);
   if (error) { console.error('deleteRestaurant', error); return { success: false, error: error.message }; }
   return { success: true };
 }
 
 export async function disableRestaurantAccounts(restaurantId: string, disabled: boolean): Promise<boolean> {
+  // Use SECURITY DEFINER RPC to bypass RLS reliably
+  const { data: result, error: rpcError } = await supabase.rpc('super_admin_toggle_accounts', {
+    p_restaurant_id: restaurantId,
+    p_disabled: disabled,
+  });
+  if (!rpcError && (result as any)?.success) return true;
+  // Fallback to direct update
   const { error } = await supabase.from('profiles')
     .update({ is_active: !disabled })
     .eq('restaurant_id', restaurantId)
@@ -425,15 +451,15 @@ export async function disableRestaurantAccounts(restaurantId: string, disabled: 
 }
 
 export async function markSubscriptionPaid(restaurantId: string): Promise<boolean> {
+  // Use SECURITY DEFINER RPC to bypass RLS reliably
+  const { data: result, error: rpcError } = await supabase.rpc('super_admin_mark_paid', {
+    p_restaurant_id: restaurantId,
+  });
+  if (!rpcError && (result as any)?.success) return true;
+  // Fallback: direct upsert
   const today = new Date().toISOString().split('T')[0];
   const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-  const { data: existing } = await supabase
-    .from('subscriptions')
-    .select('id')
-    .eq('restaurant_id', restaurantId)
-    .maybeSingle();
-
+  const { data: existing } = await supabase.from('subscriptions').select('id').eq('restaurant_id', restaurantId).maybeSingle();
   let error: any;
   if (existing?.id) {
     ({ error } = await supabase.from('subscriptions')
@@ -441,17 +467,10 @@ export async function markSubscriptionPaid(restaurantId: string): Promise<boolea
       .eq('id', existing.id));
   } else {
     ({ error } = await supabase.from('subscriptions').insert({
-      restaurant_id: restaurantId,
-      plan: 'basic',
-      status: 'active',
-      billing_period: 'monthly',
-      amount: 99.00,
-      currency: 'PLN',
-      last_payment_date: today,
-      next_payment_date: nextMonth,
+      restaurant_id: restaurantId, plan: 'basic', status: 'active', billing_period: 'monthly',
+      amount: 99.00, currency: 'PLN', last_payment_date: today, next_payment_date: nextMonth,
     }));
   }
-
   if (error) { console.error('markSubscriptionPaid', error); return false; }
   return true;
 }

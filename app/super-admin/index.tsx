@@ -250,6 +250,7 @@ export default function SuperAdminDashboard() {
       <RestaurantDetailModal
         visible={!!selectedRestaurant}
         restaurant={selectedRestaurant}
+        subscription={subscriptions.find(sub => sub.restaurant_id === selectedRestaurant?.id) ?? null}
         onClose={() => setSelectedRestaurant(null)}
         onRefresh={loadAll}
       />
@@ -968,10 +969,109 @@ function ActivityTab({ activity }: any) {
   );
 }
 
+// ── Subscription Card (shown inside restaurant detail) ──
+function SubscriptionCard({ sub }: { sub: (Subscription & { restaurant_name: string }) | null }) {
+  if (!sub) {
+    return (
+      <View style={{ backgroundColor: '#FEF3C7', borderRadius: 12, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <Ionicons name="time-outline" size={18} color="#D97706" />
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: '#92400E' }}>Brak wpisu subskrypcji</Text>
+          <Text style={{ fontSize: 12, color: '#B45309', marginTop: 2 }}>Restauracja w trybie trial (brak rekordu w bazie)</Text>
+        </View>
+      </View>
+    );
+  }
+
+  const effectiveStatus: SubscriptionStatus = (sub.plan === 'basic' && sub.status !== 'cancelled' && sub.status !== 'overdue' && sub.status !== 'active')
+    ? 'trial'
+    : sub.status;
+  const cfg = STATUS_CFG[effectiveStatus] ?? STATUS_CFG.trial;
+
+  const daysLeft = sub.next_payment_date
+    ? Math.ceil((new Date(sub.next_payment_date).getTime() - Date.now()) / 86400000)
+    : sub.trial_ends_at
+    ? Math.ceil((new Date(sub.trial_ends_at).getTime() - Date.now()) / 86400000)
+    : null;
+
+  const isOverdue = effectiveStatus === 'overdue';
+  const isPaid = effectiveStatus === 'active' && !!sub.last_payment_date;
+
+  return (
+    <View style={{ borderRadius: 12, borderWidth: 1.5, borderColor: cfg.color + '40', backgroundColor: cfg.bg, overflow: 'hidden' }}>
+      {/* Status header */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderBottomWidth: 1, borderBottomColor: cfg.color + '20' }}>
+        <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: cfg.color + '20', alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons
+            name={effectiveStatus === 'active' ? 'checkmark-circle' : effectiveStatus === 'trial' ? 'time' : effectiveStatus === 'overdue' ? 'alert-circle' : 'pause-circle'}
+            size={20}
+            color={cfg.color}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={{ backgroundColor: cfg.color, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 }}>
+              <Text style={{ fontSize: 11, fontWeight: '800', color: '#fff' }}>{cfg.label}</Text>
+            </View>
+            {isPaid && (
+              <View style={{ backgroundColor: '#D1FAE5', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Ionicons name="checkmark-done" size={11} color="#059669" />
+                <Text style={{ fontSize: 10, fontWeight: '700', color: '#059669' }}>Opłacone</Text>
+              </View>
+            )}
+          </View>
+          <Text style={{ fontSize: 11, color: cfg.color, marginTop: 3, fontWeight: '600' }}>
+            {sub.amount > 0 ? `${sub.amount} ${sub.currency} / ${sub.billing_period === 'monthly' ? 'mies.' : 'rok'}` : 'Bez płatności'}
+          </Text>
+        </View>
+      </View>
+
+      {/* Details */}
+      <View style={{ padding: 14, gap: 8 }}>
+        {daysLeft !== null && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="calendar-outline" size={14} color={cfg.color} />
+            <Text style={{ fontSize: 12, color: cfg.color, fontWeight: '700' }}>
+              {isOverdue
+                ? `Zaległa ${Math.abs(daysLeft)} dni temu`
+                : effectiveStatus === 'trial'
+                ? `Trial kończy się za ${daysLeft} dni`
+                : `Następna płatność za ${daysLeft} dni`}
+            </Text>
+          </View>
+        )}
+        {sub.last_payment_date && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="card-outline" size={14} color={theme.colors.textMuted} />
+            <Text style={{ fontSize: 12, color: theme.colors.textMuted }}>
+              Ostatnia płatność: {new Date(sub.last_payment_date).toLocaleDateString('pl-PL')}
+            </Text>
+          </View>
+        )}
+        {sub.next_payment_date && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="arrow-forward-circle-outline" size={14} color={theme.colors.textMuted} />
+            <Text style={{ fontSize: 12, color: theme.colors.textMuted }}>
+              Następna: {new Date(sub.next_payment_date).toLocaleDateString('pl-PL')}
+            </Text>
+          </View>
+        )}
+        {sub.notes && (
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 4 }}>
+            <Ionicons name="document-text-outline" size={14} color={theme.colors.textMuted} style={{ marginTop: 1 }} />
+            <Text style={{ fontSize: 12, color: theme.colors.textMuted, flex: 1 }}>{sub.notes}</Text>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
 // ── Restaurant Detail Modal ─────────────────────────────
-function RestaurantDetailModal({ visible, restaurant, onClose, onRefresh }: {
+function RestaurantDetailModal({ visible, restaurant, subscription, onClose, onRefresh }: {
   visible: boolean;
   restaurant: RestaurantWithStats | null;
+  subscription: (Subscription & { restaurant_name: string }) | null;
   onClose: () => void;
   onRefresh: () => void;
 }) {
@@ -1220,6 +1320,12 @@ function RestaurantDetailModal({ visible, restaurant, onClose, onRefresh }: {
                       <Text style={s.statLabel}>Zadań</Text>
                     </View>
                   </View>
+                </View>
+
+                {/* Subscription */}
+                <View style={s.section}>
+                  <Text style={s.formLabel}>Subskrypcja</Text>
+                  <SubscriptionCard sub={subscription} />
                 </View>
 
                 {/* Actions */}
