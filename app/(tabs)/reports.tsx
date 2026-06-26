@@ -11,6 +11,31 @@ import { theme } from '../../styles/theme';
 
 type ReportType = 'shifts' | 'attendance' | 'tasks' | 'hours';
 
+function escapeCSV(val: unknown): string {
+  if (val == null) return '';
+  const s = String(val);
+  if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+function triggerCsvDownload(csv: string, filename: string) {
+  if (Platform.OS !== 'web') {
+    Alert.alert('Eksport CSV', 'Eksport pliku CSV dostępny tylko w wersji przeglądarkowej (web).');
+    return;
+  }
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 const REPORTS: { key: ReportType; icon: string; label: string; desc: string; color: string }[] = [
   { key: 'hours',      icon: 'bar-chart-outline',    label: 'Godziny pracowników', desc: 'Przepracowane godziny i zarobki per osoba',  color: '#A855F7' },
   { key: 'shifts',     icon: 'calendar-outline',     label: 'Zmiany',              desc: 'Lista zmian w wybranym miesiącu',             color: theme.colors.primary },
@@ -136,6 +161,7 @@ export default function ReportsScreen() {
   // ── tasks ──
   const [tasksData, setTasksData] = useState<any[]>([]);
   const [tasksProfiles, setTasksProfiles] = useState<Record<string, DbProfile>>({});
+  const [exportingCsv, setExportingCsv] = useState(false);
 
   const monthRange = useCallback((m: string) => {
     const [y, mo] = m.split('-').map(Number);
@@ -221,6 +247,59 @@ export default function ReportsScreen() {
     } catch (e) { console.error('loadTasks', e); }
     setLoading(false);
   }, [rid, monthRange]);
+
+  const exportTasksCsv = async () => {
+    if (filteredTasks.length === 0) return;
+    setExportingCsv(true);
+    try {
+      const taskIds = filteredTasks.map((t: any) => t.id);
+      const { data: confirmations } = await supabase
+        .from('task_confirmations')
+        .select('*')
+        .in('task_id', taskIds);
+      const confMap: Record<string, any> = {};
+      (confirmations ?? []).forEach((c: any) => { confMap[c.task_id] = c; });
+
+      const headers = ['Data', 'Czas', 'Zadanie', 'Opis zadania', 'Pracownik', 'Status', 'Priorytet', 'Typ potwierdzenia', 'Potwierdzono', 'URL zdjecia', 'Notatki do zdjecia', 'Wartosci', 'Opis potwierdzenia'];
+      const rows = filteredTasks.map((t: any) => {
+        const emp = tasksProfiles[t.assigned_to];
+        const empName = emp ? `${emp.first_name} ${emp.last_name}` : '';
+        const conf = confMap[t.id];
+        let valuesStr = '';
+        if (conf?.values_data) {
+          try {
+            const vals = typeof conf.values_data === 'string' ? JSON.parse(conf.values_data) : conf.values_data;
+            if (Array.isArray(vals)) {
+              valuesStr = vals.map((v: any) => `${v.label ?? v.name ?? ''}: ${v.value ?? ''}${v.unit ? ' ' + v.unit : ''}`).join('; ');
+            } else {
+              valuesStr = JSON.stringify(vals);
+            }
+          } catch { valuesStr = String(conf.values_data); }
+        }
+        return [
+          t.scheduled_date ?? '',
+          t.assigned_time ?? '',
+          t.title ?? '',
+          t.description ?? '',
+          empName,
+          STATUS_LABEL[t.status] ?? t.status ?? '',
+          t.priority ?? '',
+          t.confirmation_type ?? '',
+          conf ? 'Tak' : 'Nie',
+          conf?.photo_url ?? '',
+          conf?.photo_notes ?? '',
+          valuesStr,
+          conf?.description ?? '',
+        ].map(escapeCSV).join(',');
+      });
+      const csv = [headers.join(','), ...rows].join('\n');
+      triggerCsvDownload(csv, `zadania_${month}.csv`);
+    } catch (e) {
+      console.error('exportTasksCsv', e);
+      Alert.alert('Błąd', 'Nie udało się wygenerować eksportu.');
+    }
+    setExportingCsv(false);
+  };
 
   // auto-reload when month changes for active report
   useEffect(() => {
@@ -612,7 +691,20 @@ export default function ReportsScreen() {
             {filteredTasks.length === 0
               ? <EmptyState icon="list-outline" text="Brak zadań w tym miesiącu" />
               : <View style={styles.resultCard}>
-                  <Text style={styles.resultTitle}>Zadania — {monthLabel(month)}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
+                    <Text style={[styles.resultTitle, { flex: 1, padding: 0, borderBottomWidth: 0 }]}>Zadania — {monthLabel(month)}</Text>
+                    <TouchableOpacity
+                      onPress={exportTasksCsv}
+                      disabled={exportingCsv}
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: theme.colors.primaryLight, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 8 }}
+                      activeOpacity={0.75}
+                    >
+                      {exportingCsv
+                        ? <ActivityIndicator size="small" color={theme.colors.primary} />
+                        : <Ionicons name="download-outline" size={15} color={theme.colors.primary} />}
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: theme.colors.primary }}>CSV</Text>
+                    </TouchableOpacity>
+                  </View>
                   {filteredTasks.map((t, idx) => {
                     const emp = tasksProfiles[t.assigned_to];
                     const pc = PRIORITY_COLORS[t.priority] ?? theme.colors.textMuted;

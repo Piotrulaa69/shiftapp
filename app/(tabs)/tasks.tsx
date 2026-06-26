@@ -28,6 +28,40 @@ const PRIORITY_CONFIG: Record<TaskPriority, { label: string; color: string; bg: 
   niski: { label: 'NISKI', color: theme.colors.green, bg: theme.colors.greenLight },
 };
 
+function escapeCSV(val: unknown): string {
+  if (val == null) return '';
+  const s = String(val);
+  if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+function triggerCsvDownload(csv: string, filename: string) {
+  if (Platform.OS !== 'web') {
+    Alert.alert('Eksport CSV', 'Eksport pliku CSV dostępny tylko w wersji przeglądarkowej (web).');
+    return;
+  }
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+const STATUS_LABEL_TASKS: Record<string, string> = {
+  do_zrobienia: 'Do zrobienia',
+  w_trakcie: 'W trakcie',
+  czeka_na_zatwierdzenie: 'Czeka',
+  zatwierdzone: 'Zatwierdzone',
+  zamkniete: 'Zamknięte',
+  odrzucone: 'Odrzucone',
+};
+
 const TABS_EMPLOYEE: { key: string; label: string }[] = [
   { key: 'all', label: 'Zadania' },
   { key: 'zamkniete', label: 'Zamknięte' },
@@ -401,6 +435,7 @@ export default function TasksScreen() {
   }, [params.new, canApprove]));
 
   const [refreshing, setRefreshing] = useState(false);
+  const [exportingCsvTasks, setExportingCsvTasks] = useState(false);
 
   const reload = async () => {
     if (!rid) return;
@@ -621,6 +656,65 @@ export default function TasksScreen() {
     setRejectReason('');
   };
 
+  const exportTasksCsvFromList = async () => {
+    const exportable = tasks.filter((t) => t.confirmation_type);
+    if (exportable.length === 0) {
+      Alert.alert('Brak danych', 'Brak zadań z potwierdzeniem formularzem do eksportu.');
+      return;
+    }
+    setExportingCsvTasks(true);
+    try {
+      const taskIds = exportable.map((t) => t.id);
+      const { data: confirmations } = await supabase
+        .from('task_confirmations')
+        .select('*')
+        .in('task_id', taskIds);
+      const confMap: Record<string, any> = {};
+      (confirmations ?? []).forEach((c: any) => { confMap[c.task_id] = c; });
+
+      const headers = ['Data', 'Czas', 'Zadanie', 'Opis zadania', 'Pracownik', 'Status', 'Priorytet', 'Typ potwierdzenia', 'Potwierdzono', 'URL zdjecia', 'Notatki do zdjecia', 'Wartosci', 'Opis potwierdzenia'];
+      const rows = exportable.map((t) => {
+        const emp = employees.find((e) => e.id === t.assigned_to);
+        const empName = emp ? `${emp.first_name} ${emp.last_name}` : '';
+        const conf = confMap[t.id];
+        let valuesStr = '';
+        if (conf?.values_data) {
+          try {
+            const vals = typeof conf.values_data === 'string' ? JSON.parse(conf.values_data) : conf.values_data;
+            if (Array.isArray(vals)) {
+              valuesStr = vals.map((v: any) => `${v.label ?? v.name ?? ''}: ${v.value ?? ''}${v.unit ? ' ' + v.unit : ''}`).join('; ');
+            } else {
+              valuesStr = JSON.stringify(vals);
+            }
+          } catch { valuesStr = String(conf.values_data); }
+        }
+        return [
+          t.scheduled_date ?? '',
+          t.assigned_time ?? '',
+          t.title ?? '',
+          t.description ?? '',
+          empName,
+          STATUS_LABEL_TASKS[t.status as string] ?? t.status ?? '',
+          t.priority ?? '',
+          t.confirmation_type ?? '',
+          conf ? 'Tak' : 'Nie',
+          conf?.photo_url ?? '',
+          conf?.photo_notes ?? '',
+          valuesStr,
+          conf?.description ?? '',
+        ].map(escapeCSV).join(',');
+      });
+      const today = new Date();
+      const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const csv = [headers.join(','), ...rows].join('\n');
+      triggerCsvDownload(csv, `zadania_z_potwierdzeniami_${dateStr}.csv`);
+    } catch (e) {
+      console.error('exportTasksCsv', e);
+      Alert.alert('Błąd', 'Nie udało się wygenerować eksportu.');
+    }
+    setExportingCsvTasks(false);
+  };
+
   const openApprovalDetail = async (task: DbTask) => {
     setApprovalDetailTask(task);
     setApprovalConfirmation(null);
@@ -760,6 +854,21 @@ export default function TasksScreen() {
             </TouchableOpacity>
           ))}
         </ScrollView>
+
+        {/* CSV export — visible to managers/owners only */}
+        {canApprove && (
+          <TouchableOpacity
+            onPress={exportTasksCsvFromList}
+            disabled={exportingCsvTasks}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-end', marginBottom: 8, marginTop: -4, backgroundColor: theme.colors.primaryLight, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8 }}
+            activeOpacity={0.75}
+          >
+            {exportingCsvTasks
+              ? <ActivityIndicator size="small" color={theme.colors.primary} />
+              : <Ionicons name="download-outline" size={15} color={theme.colors.primary} />}
+            <Text style={{ fontSize: 12, fontWeight: '700', color: theme.colors.primary }}>Eksportuj CSV</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Tasks */}
         <View style={styles.body}>
