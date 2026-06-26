@@ -357,20 +357,11 @@ export async function getSubscriptions(): Promise<(Subscription & { restaurant_n
   return [...real, ...virtual];
 }
 
-// Maps plan text value to plan_id UUID in the plans table
-const PLAN_ID_MAP: Record<string, string> = {
-  basic:      'c26cd388-780b-41c7-86cd-b86cf233ae11',
-  premium:    '38224e02-3ce3-4e3e-b0b8-ba921fe7064d',
-  pro:        '38224e02-3ce3-4e3e-b0b8-ba921fe7064d',
-  enterprise: '38224e02-3ce3-4e3e-b0b8-ba921fe7064d',
-};
-
 export async function upsertSubscription(sub: Subscription & { restaurant_name?: string }): Promise<boolean> {
   // Strip computed/joined fields that don't exist as columns
   const { restaurant_name, restaurants, ...rest } = sub as any;
   const fields: any = {
     plan: rest.plan,
-    plan_id: PLAN_ID_MAP[rest.plan] ?? PLAN_ID_MAP['basic'],
     status: rest.status,
     billing_period: rest.billing_period,
     amount: rest.amount,
@@ -379,8 +370,6 @@ export async function upsertSubscription(sub: Subscription & { restaurant_name?:
     next_payment_date: rest.next_payment_date ?? null,
     trial_ends_at: rest.trial_ends_at ?? null,
     last_payment_date: rest.last_payment_date ?? null,
-    current_period_start: rest.current_period_start ?? null,
-    current_period_end: rest.current_period_end ?? null,
     updated_at: new Date().toISOString(),
   };
 
@@ -393,22 +382,31 @@ export async function upsertSubscription(sub: Subscription & { restaurant_name?:
 
   let error: any;
   if (existing?.id) {
-    // UPDATE — never touches plan_id or other unknown columns
     ({ error } = await supabase
       .from('subscriptions')
       .update(fields)
       .eq('id', existing.id));
   } else {
-    // INSERT — include restaurant_id
     ({ error } = await supabase
       .from('subscriptions')
       .insert({ restaurant_id: rest.restaurant_id, ...fields }));
   }
 
   if (error) { console.error('upsertSubscription error:', error.message, error.code, error.details); return false; }
-  // Also sync plan to restaurants table so restaurant list stays accurate
   await supabase.from('restaurants').update({ plan: rest.plan }).eq('id', rest.restaurant_id);
   return true;
+}
+
+export async function updateRestaurant(
+  restaurantId: string,
+  data: { name?: string; address?: string; phone?: string; plan?: string }
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('restaurants')
+    .update(data)
+    .eq('id', restaurantId);
+  if (error) { console.error('updateRestaurant', error); return { success: false, error: error.message }; }
+  return { success: true };
 }
 
 export async function deleteRestaurant(restaurantId: string): Promise<{ success: boolean; error?: string }> {
@@ -429,9 +427,31 @@ export async function disableRestaurantAccounts(restaurantId: string, disabled: 
 export async function markSubscriptionPaid(restaurantId: string): Promise<boolean> {
   const today = new Date().toISOString().split('T')[0];
   const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const { error } = await supabase.from('subscriptions')
-    .update({ status: 'active', last_payment_date: today, next_payment_date: nextMonth })
-    .eq('restaurant_id', restaurantId);
+
+  const { data: existing } = await supabase
+    .from('subscriptions')
+    .select('id')
+    .eq('restaurant_id', restaurantId)
+    .maybeSingle();
+
+  let error: any;
+  if (existing?.id) {
+    ({ error } = await supabase.from('subscriptions')
+      .update({ status: 'active', last_payment_date: today, next_payment_date: nextMonth })
+      .eq('id', existing.id));
+  } else {
+    ({ error } = await supabase.from('subscriptions').insert({
+      restaurant_id: restaurantId,
+      plan: 'basic',
+      status: 'active',
+      billing_period: 'monthly',
+      amount: 99.00,
+      currency: 'PLN',
+      last_payment_date: today,
+      next_payment_date: nextMonth,
+    }));
+  }
+
   if (error) { console.error('markSubscriptionPaid', error); return false; }
   return true;
 }

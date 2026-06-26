@@ -22,6 +22,7 @@ import {
     getSystemStats,
     markSubscriptionPaid,
     togglePromoCode,
+    updateRestaurant,
     upsertSubscription,
     type PromoCode,
     type RestaurantWithStats,
@@ -590,17 +591,21 @@ function SubscriptionsTab({ subscriptions, overview, restaurants, onRefresh }: a
   const handleSave = async () => {
     if (!editSub) return;
     setSaving(true);
-    await upsertSubscription(editSub);
+    const ok = await upsertSubscription(editSub);
     setSaving(false);
-    setEditSub(null);
-    onRefresh();
+    if (ok) {
+      setEditSub(null);
+      onRefresh();
+    } else {
+      Alert.alert('Błąd', 'Nie udało się zapisać subskrypcji. Sprawdź połączenie i spróbuj ponownie.');
+    }
   };
 
   const handleNewSave = async () => {
     if (!newRestaurantId) { Alert.alert('Błąd', 'Wybierz restaurację'); return; }
     setNewSaving(true);
     const restaurant = allRestaurantsForNew.find(r => r.id === newRestaurantId);
-    await upsertSubscription({
+    const ok = await upsertSubscription({
       restaurant_id: newRestaurantId,
       restaurant_name: restaurant?.name ?? '',
       plan: newPlan,
@@ -612,15 +617,19 @@ function SubscriptionsTab({ subscriptions, overview, restaurants, onRefresh }: a
       notes: newNotes || null,
     } as any);
     setNewSaving(false);
-    setShowNew(false);
-    setNewRestaurantId('');
-    setNewStatus('active');
-    setNewAmount('299');
-    setNewBilling('monthly');
-    setNewNextDate(NEXT_DATE(1));
-    setNewNotes('');
-    setRestaurantSearch('');
-    onRefresh();
+    if (ok) {
+      setShowNew(false);
+      setNewRestaurantId('');
+      setNewStatus('active');
+      setNewAmount('299');
+      setNewBilling('monthly');
+      setNewNextDate(NEXT_DATE(1));
+      setNewNotes('');
+      setRestaurantSearch('');
+      onRefresh();
+    } else {
+      Alert.alert('Błąd', 'Nie udało się nadać subskrypcji. Spróbuj ponownie.');
+    }
   };
 
   return (
@@ -968,8 +977,31 @@ function RestaurantDetailModal({ visible, restaurant, onClose, onRefresh }: {
 }) {
   const { enterRestaurantMode } = useAuth();
   const router = useRouter();
+
+  const [entering, setEntering] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  const [accountsEnabled, setAccountsEnabled] = useState(true);
+
+  useEffect(() => {
+    if (restaurant) {
+      setEditName(restaurant.name);
+      setEditAddress(restaurant.address ?? '');
+      setEditPhone(restaurant.phone ?? '');
+      setEditing(false);
+      setAccountsEnabled(true);
+    }
+  }, [restaurant]);
+
+  if (!restaurant) return null;
+
+  const plan = PLAN_CFG[restaurant.plan as keyof typeof PLAN_CFG] ?? PLAN_CFG.basic;
+
   const handleEnter = async () => {
-    if (!restaurant) return;
     setEntering(true);
     const ok = await enterRestaurantMode(restaurant.id);
     setEntering(false);
@@ -981,37 +1013,70 @@ function RestaurantDetailModal({ visible, restaurant, onClose, onRefresh }: {
     }
   };
 
-  const [entering, setEntering] = useState(false);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-
-  if (!restaurant) return null;
-
-  const plan = PLAN_CFG[restaurant.plan as keyof typeof PLAN_CFG] ?? PLAN_CFG.basic;
+  const handleSaveEdit = async () => {
+    if (!editName.trim()) { Alert.alert('Błąd', 'Nazwa restauracji nie może być pusta.'); return; }
+    setEditSaving(true);
+    const result = await updateRestaurant(restaurant.id, {
+      name: editName.trim(),
+      address: editAddress.trim(),
+      phone: editPhone.trim(),
+    });
+    setEditSaving(false);
+    if (result.success) {
+      setEditing(false);
+      onRefresh();
+      Alert.alert('Gotowe', 'Dane restauracji zostały zaktualizowane.');
+    } else {
+      Alert.alert('Błąd', result.error ?? 'Nie udało się zapisać zmian.');
+    }
+  };
 
   const handleMarkPaid = async () => {
     setActionLoading('paid');
-    await markSubscriptionPaid(restaurant.id);
+    const ok = await markSubscriptionPaid(restaurant.id);
     setActionLoading(null);
-    onRefresh();
-    Alert.alert('Gotowe', 'Subskrypcja oznaczona jako opłacona (aktywna).');
+    if (ok) {
+      onRefresh();
+      Alert.alert('Gotowe', 'Subskrypcja oznaczona jako opłacona (aktywna).');
+    } else {
+      Alert.alert('Błąd', 'Nie udało się zaktualizować subskrypcji.');
+    }
   };
 
-  const handleDisable = () => {
-    Alert.alert('Wyłącz konto', 'Wyłączyć dostęp pracownikom tej restauracji?', [
-      { text: 'Anuluj', style: 'cancel' },
-      { text: 'Wyłącz', style: 'destructive', onPress: async () => {
-        setActionLoading('disable');
-        await disableRestaurantAccounts(restaurant.id, true);
-        setActionLoading(null);
-        Alert.alert('Gotowe', 'Dostęp pracowników został wyłączony.');
-      }},
-    ]);
+  const handleToggleAccounts = () => {
+    const willDisable = accountsEnabled;
+    Alert.alert(
+      willDisable ? 'Wyłącz konta' : 'Włącz konta',
+      willDisable
+        ? 'Wyłączyć dostęp pracownikom tej restauracji?'
+        : 'Przywrócić dostęp pracownikom tej restauracji?',
+      [
+        { text: 'Anuluj', style: 'cancel' },
+        {
+          text: willDisable ? 'Wyłącz' : 'Włącz',
+          style: willDisable ? 'destructive' : 'default',
+          onPress: async () => {
+            setActionLoading('accounts');
+            const ok = await disableRestaurantAccounts(restaurant.id, willDisable);
+            setActionLoading(null);
+            if (ok) {
+              setAccountsEnabled(!willDisable);
+              Alert.alert('Gotowe', willDisable
+                ? 'Dostęp pracowników został wyłączony.'
+                : 'Dostęp pracowników został przywrócony.');
+            } else {
+              Alert.alert('Błąd', 'Nie udało się zmienić dostępu kont.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleDelete = () => {
-    Alert.alert('Usuń restaurację', `Na pewno usunąć "${restaurant.name}"? Tej operacji nie można cofnąć.`, [
+    Alert.alert('Usuń restaurację', `Na pewno usunąć "${restaurant.name}"?\n\nZostanie usunięta restauracja, wszyscy pracownicy i wszystkie dane. Tej operacji nie można cofnąć.`, [
       { text: 'Anuluj', style: 'cancel' },
-      { text: 'Usuń', style: 'destructive', onPress: async () => {
+      { text: 'Usuń permanentnie', style: 'destructive', onPress: async () => {
         setActionLoading('delete');
         const result = await deleteRestaurant(restaurant.id);
         setActionLoading(null);
@@ -1026,108 +1091,197 @@ function RestaurantDetailModal({ visible, restaurant, onClose, onRefresh }: {
       <View style={s.overlay}>
         <View style={s.createModal}>
           <View style={s.createModalHeader}>
-            <Text style={s.createModalTitle}>Szczegóły restauracji</Text>
-            <TouchableOpacity onPress={onClose} activeOpacity={0.7}><Ionicons name="close" size={22} color={theme.colors.textMuted} /></TouchableOpacity>
+            <Text style={s.createModalTitle}>{editing ? 'Edytuj restaurację' : 'Szczegóły restauracji'}</Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {!editing && (
+                <TouchableOpacity
+                  onPress={() => setEditing(true)}
+                  style={{ padding: 4 }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="pencil-outline" size={20} color={theme.colors.primary} />
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
+                <Ionicons name="close" size={22} color={theme.colors.textMuted} />
+              </TouchableOpacity>
+            </View>
           </View>
+
           <ScrollView showsVerticalScrollIndicator={false}>
+            {/* Avatar + name */}
             <View style={{ alignItems: 'center', marginBottom: 16 }}>
               <View style={[s.restAvatar, { width: 60, height: 60, backgroundColor: (restaurant.logo_color ?? '#2563EB') + '22' }]}>
-                <Text style={[s.restAvatarText, { fontSize: 20, color: restaurant.logo_color ?? '#2563EB' }]}>{restaurant.name.slice(0, 2).toUpperCase()}</Text>
+                <Text style={[s.restAvatarText, { fontSize: 20, color: restaurant.logo_color ?? '#2563EB' }]}>
+                  {(editName || restaurant.name).slice(0, 2).toUpperCase()}
+                </Text>
               </View>
-              <Text style={[s.restName, { fontSize: 18, marginTop: 8 }]}>{restaurant.name}</Text>
-              <View style={[s.planBadge, { marginTop: 6, backgroundColor: plan.bg }]}><Text style={[s.planText, { color: plan.color }]}>{plan.label}</Text></View>
+              {!editing && (
+                <>
+                  <Text style={[s.restName, { fontSize: 18, marginTop: 8 }]}>{restaurant.name}</Text>
+                  <View style={[s.planBadge, { marginTop: 6, backgroundColor: plan.bg }]}>
+                    <Text style={[s.planText, { color: plan.color }]}>{plan.label}</Text>
+                  </View>
+                </>
+              )}
             </View>
 
-            <View style={s.section}>
-              <Text style={s.formLabel}>Informacje podstawowe</Text>
-              <View style={[s.settingRow, { backgroundColor: theme.colors.surface, padding: 12 }]}>
-                <View style={[s.settingIcon, { backgroundColor: '#2563EB18' }]}><Ionicons name="person" size={16} color="#2563EB" /></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.settingLabel}>Właściciel</Text>
-                  <Text style={s.settingValue}>{restaurant.owner_name ?? 'Brak'}</Text>
+            {/* Edit form */}
+            {editing ? (
+              <View style={{ gap: 4, marginBottom: 16 }}>
+                <Text style={s.formLabel}>Nazwa restauracji *</Text>
+                <View style={[s.inputRow, { marginBottom: 12 }]}>
+                  <Ionicons name="storefront-outline" size={16} color={theme.colors.textMuted} />
+                  <TextInput
+                    style={s.formInput}
+                    value={editName}
+                    onChangeText={setEditName}
+                    placeholder="Nazwa restauracji"
+                    placeholderTextColor={theme.colors.textMuted}
+                  />
+                </View>
+                <Text style={s.formLabel}>Adres</Text>
+                <View style={[s.inputRow, { marginBottom: 12 }]}>
+                  <Ionicons name="location-outline" size={16} color={theme.colors.textMuted} />
+                  <TextInput
+                    style={s.formInput}
+                    value={editAddress}
+                    onChangeText={setEditAddress}
+                    placeholder="ul. Przykładowa 1, Warszawa"
+                    placeholderTextColor={theme.colors.textMuted}
+                  />
+                </View>
+                <Text style={s.formLabel}>Telefon</Text>
+                <View style={[s.inputRow, { marginBottom: 20 }]}>
+                  <Ionicons name="call-outline" size={16} color={theme.colors.textMuted} />
+                  <TextInput
+                    style={s.formInput}
+                    value={editPhone}
+                    onChangeText={setEditPhone}
+                    placeholder="+48 600 000 000"
+                    placeholderTextColor={theme.colors.textMuted}
+                    keyboardType="phone-pad"
+                  />
+                </View>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <TouchableOpacity
+                    style={[s.filterChip, { flex: 1, justifyContent: 'center' }]}
+                    onPress={() => { setEditing(false); setEditName(restaurant.name); setEditAddress(restaurant.address ?? ''); setEditPhone(restaurant.phone ?? ''); }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[s.filterText, { textAlign: 'center' }]}>Anuluj</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.createBtn, { flex: 1, opacity: editSaving ? 0.6 : 1 }]}
+                    onPress={handleSaveEdit}
+                    disabled={editSaving}
+                    activeOpacity={0.85}
+                  >
+                    {editSaving
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Ionicons name="checkmark-circle" size={16} color="#fff" />}
+                    <Text style={[s.createBtnText, { fontSize: 13 }]}>{editSaving ? 'Zapisuję...' : 'Zapisz'}</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
-              <View style={[s.settingRow, { backgroundColor: theme.colors.surface, padding: 12 }]}>
-                <View style={[s.settingIcon, { backgroundColor: '#05966918' }]}><Ionicons name="location" size={16} color="#059669" /></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.settingLabel}>Adres</Text>
-                  <Text style={s.settingValue}>{restaurant.address ?? 'Brak'}</Text>
+            ) : (
+              <>
+                {/* Info rows */}
+                <View style={s.section}>
+                  <Text style={s.formLabel}>Informacje podstawowe</Text>
+                  {[
+                    { icon: 'person', color: '#2563EB', label: 'Właściciel', value: restaurant.owner_name ?? 'Brak' },
+                    { icon: 'location', color: '#059669', label: 'Adres', value: restaurant.address || 'Brak' },
+                    { icon: 'call', color: '#7C3AED', label: 'Telefon', value: restaurant.phone || 'Brak' },
+                    { icon: 'calendar', color: '#D97706', label: 'Utworzono', value: new Date(restaurant.created_at).toLocaleDateString('pl-PL') },
+                  ].map(({ icon, color, label, value }) => (
+                    <View key={label} style={[s.settingRow, { backgroundColor: theme.colors.surface, padding: 12 }]}>
+                      <View style={[s.settingIcon, { backgroundColor: color + '18' }]}>
+                        <Ionicons name={icon as any} size={16} color={color} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.settingLabel}>{label}</Text>
+                        <Text style={s.settingValue}>{value}</Text>
+                      </View>
+                    </View>
+                  ))}
                 </View>
-              </View>
-              <View style={[s.settingRow, { backgroundColor: theme.colors.surface, padding: 12 }]}>
-                <View style={[s.settingIcon, { backgroundColor: '#7C3AED18' }]}><Ionicons name="call" size={16} color="#7C3AED" /></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.settingLabel}>Telefon</Text>
-                  <Text style={s.settingValue}>{restaurant.phone ?? 'Brak'}</Text>
-                </View>
-              </View>
-              <View style={[s.settingRow, { backgroundColor: theme.colors.surface, padding: 12 }]}>
-                <View style={[s.settingIcon, { backgroundColor: '#D9770618' }]}><Ionicons name="calendar" size={16} color="#D97706" /></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.settingLabel}>Utworzono</Text>
-                  <Text style={s.settingValue}>{new Date(restaurant.created_at).toLocaleDateString('pl-PL')}</Text>
-                </View>
-              </View>
-            </View>
 
-            <View style={s.section}>
-              <Text style={s.formLabel}>Statystyki</Text>
-              <View style={s.statsRow}>
-                <View style={[s.statCard, { flex: 1 }]}>
-                  <Text style={[s.statNum, { fontSize: 22, color: '#2563EB' }]}>{restaurant.employee_count}</Text>
-                  <Text style={s.statLabel}>Pracowników</Text>
+                {/* Stats */}
+                <View style={s.section}>
+                  <Text style={s.formLabel}>Statystyki</Text>
+                  <View style={s.statsRow}>
+                    <View style={[s.statCard, { flex: 1 }]}>
+                      <Text style={[s.statNum, { fontSize: 22, color: '#2563EB' }]}>{restaurant.employee_count}</Text>
+                      <Text style={s.statLabel}>Pracowników</Text>
+                    </View>
+                    <View style={[s.statCard, { flex: 1 }]}>
+                      <Text style={[s.statNum, { fontSize: 22, color: '#059669' }]}>{restaurant.task_count}</Text>
+                      <Text style={s.statLabel}>Zadań</Text>
+                    </View>
+                  </View>
                 </View>
-                <View style={[s.statCard, { flex: 1 }]}>
-                  <Text style={[s.statNum, { fontSize: 22, color: '#059669' }]}>{restaurant.task_count}</Text>
-                  <Text style={s.statLabel}>Zadań</Text>
-                </View>
-              </View>
-            </View>
 
-            <View style={s.section}>
-              <Text style={s.formLabel}>Akcje supportu</Text>
-              <TouchableOpacity
-                style={[s.createBtn, { backgroundColor: '#2563EB', gap: 10 }]}
-                onPress={handleEnter}
-                disabled={entering || !!actionLoading}
-                activeOpacity={0.85}
-              >
-                {entering
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <Ionicons name="shield-checkmark-outline" size={18} color="#fff" />}
-                <Text style={s.createBtnText}>{entering ? 'Wczytywanie...' : `Wejdź jako wsparcie → ${restaurant.name}`}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.createBtn, { backgroundColor: '#059669', gap: 10, marginTop: 8 }]}
-                onPress={handleMarkPaid}
-                disabled={!!actionLoading}
-                activeOpacity={0.85}
-              >
-                {actionLoading === 'paid' ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />}
-                <Text style={s.createBtnText}>Oznacz jako opłacone</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.createBtn, { backgroundColor: '#D97706', gap: 10, marginTop: 8 }]}
-                onPress={handleDisable}
-                disabled={!!actionLoading}
-                activeOpacity={0.85}
-              >
-                {actionLoading === 'disable' ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="ban-outline" size={18} color="#fff" />}
-                <Text style={s.createBtnText}>Wyłącz dostęp pracownikom</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.createBtn, { backgroundColor: '#DC2626', gap: 10, marginTop: 8 }]}
-                onPress={handleDelete}
-                disabled={!!actionLoading}
-                activeOpacity={0.85}
-              >
-                {actionLoading === 'delete' ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="trash-outline" size={18} color="#fff" />}
-                <Text style={s.createBtnText}>Usuń restaurację</Text>
-              </TouchableOpacity>
-              <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 6, textAlign: 'center' }}>
-                Przejdziesz do dashboardu tej restauracji. Widoczny będzie pomarańczowy pasek wsparcia.
-              </Text>
-            </View>
+                {/* Actions */}
+                <View style={s.section}>
+                  <Text style={s.formLabel}>Akcje supportu</Text>
+
+                  <TouchableOpacity
+                    style={[s.createBtn, { backgroundColor: '#2563EB', gap: 10 }]}
+                    onPress={handleEnter}
+                    disabled={entering || !!actionLoading}
+                    activeOpacity={0.85}
+                  >
+                    {entering
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Ionicons name="shield-checkmark-outline" size={18} color="#fff" />}
+                    <Text style={s.createBtnText}>{entering ? 'Wczytywanie...' : `Wejdź jako wsparcie → ${restaurant.name}`}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[s.createBtn, { backgroundColor: '#059669', gap: 10, marginTop: 8 }]}
+                    onPress={handleMarkPaid}
+                    disabled={!!actionLoading}
+                    activeOpacity={0.85}
+                  >
+                    {actionLoading === 'paid'
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />}
+                    <Text style={s.createBtnText}>Oznacz jako opłacone</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[s.createBtn, { backgroundColor: accountsEnabled ? '#D97706' : '#059669', gap: 10, marginTop: 8 }]}
+                    onPress={handleToggleAccounts}
+                    disabled={!!actionLoading}
+                    activeOpacity={0.85}
+                  >
+                    {actionLoading === 'accounts'
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Ionicons name={accountsEnabled ? 'ban-outline' : 'checkmark-done-outline'} size={18} color="#fff" />}
+                    <Text style={s.createBtnText}>
+                      {accountsEnabled ? 'Wyłącz dostęp pracownikom' : 'Włącz dostęp pracownikom'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[s.createBtn, { backgroundColor: '#DC2626', gap: 10, marginTop: 8 }]}
+                    onPress={handleDelete}
+                    disabled={!!actionLoading}
+                    activeOpacity={0.85}
+                  >
+                    {actionLoading === 'delete'
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Ionicons name="trash-outline" size={18} color="#fff" />}
+                    <Text style={s.createBtnText}>Usuń restaurację</Text>
+                  </TouchableOpacity>
+
+                  <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 6, textAlign: 'center' }}>
+                    Przejdziesz do dashboardu tej restauracji. Widoczny będzie pomarańczowy pasek wsparcia.
+                  </Text>
+                </View>
+              </>
+            )}
           </ScrollView>
         </View>
       </View>
