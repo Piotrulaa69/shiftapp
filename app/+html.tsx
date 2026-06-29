@@ -1,7 +1,7 @@
 import { ScrollViewStyleReset } from 'expo-router/html';
 import React from 'react';
 
-const GTM_ID = 'GTM-XXXXXXX'; // ← podmień na swój GTM ID
+const GTM_ID = 'GTM-MW74QC2H';
 
 const gtmHeadScript = `
 (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
