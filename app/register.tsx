@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../context/AlertContext';
 import { useAuth } from '../context/AuthContext';
+import { readGclid, trackEvent } from '../lib/analytics';
 import { theme } from '../styles/theme';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -325,14 +326,17 @@ export default function RegisterScreen() {
         if (pw.length < 6) { render('Hasło musi mieć minimum 6 znaków.'); return; }
 
         portal.innerHTML = currentStep === 1 ? buildStep1(true, '') : buildStep2(showPw, true, '');
+        const gclid = readGclid();
         const result = await registerRestaurant({
           restaurantName: savedStep1.name,
           address: savedStep1.addr,
           phone: savedStep1.phone,
           firstName: fn, lastName: ln, email: em, password: pw,
           refCode: savedStep1.ref || undefined,
+          gclid,
         });
         if (result.success) {
+          trackEvent('sign_up', { user_id: em });
           router.replace('/(tabs)/dashboard');
         } else {
           render(result.error ?? 'Nie udało się zarejestrować. Spróbuj ponownie.');
@@ -368,10 +372,15 @@ export default function RegisterScreen() {
     const handleRegister = async () => {
       if (!validateStep2()) return;
       setLoading(true);
-      const result = await registerRestaurant({ restaurantName, address, phone, firstName, lastName, email, password, refCode: refCode.trim() || undefined });
+      const gclid = readGclid();
+      const result = await registerRestaurant({ restaurantName, address, phone, firstName, lastName, email, password, refCode: refCode.trim() || undefined, gclid });
       setLoading(false);
-      if (result.success) { router.replace('/(tabs)/dashboard'); }
-      else { showAlert('Błąd rejestracji', result.error ?? 'Spróbuj ponownie później.'); }
+      if (result.success) {
+        trackEvent('sign_up', { user_id: email.trim() });
+        router.replace('/(tabs)/dashboard');
+      } else {
+        showAlert('Błąd rejestracji', result.error ?? 'Spróbuj ponownie później.');
+      }
     };
 
     return (

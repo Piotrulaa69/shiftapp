@@ -56,6 +56,7 @@ type AuthContextType = {
     email: string;
     password: string;
     refCode?: string;
+    gclid?: string | null;
   }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   refreshRestaurant: () => Promise<void>;
@@ -265,6 +266,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     email: string;
     password: string;
     refCode?: string;
+    gclid?: string | null;
   }): Promise<{ success: boolean; error?: string }> => {
     _isRegistering = true;
     setIsLoading(true);
@@ -310,7 +312,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 3. Create owner profile
     const avatarColors = ['#2196C9','#22C55E','#F97316','#A855F7','#EAB308','#EF4444','#0F172A'];
     const avatarColor = avatarColors[Math.floor(Math.random() * avatarColors.length)];
-    const { error: profileError } = await supabase.from('profiles').insert({
+    const profilePayload: Record<string, unknown> = {
       id: userId,
       restaurant_id: restData.id,
       first_name: data.firstName.trim(),
@@ -318,7 +320,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       role: 'owner',
       job_title: 'Właściciel',
       avatar_color: avatarColor,
-    });
+    };
+    if (data.gclid) profilePayload.gclid = data.gclid;
+    const { error: profileError } = await supabase.from('profiles').insert(profilePayload);
     if (profileError) {
       _isRegistering = false;
       setIsLoading(false);

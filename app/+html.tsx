@@ -1,6 +1,30 @@
 import { ScrollViewStyleReset } from 'expo-router/html';
 import React from 'react';
 
+const GTM_ID = 'GTM-XXXXXXX'; // ← podmień na swój GTM ID
+
+const gtmHeadScript = `
+(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','${GTM_ID}');
+`.trim();
+
+const gclidInitScript = `
+(function(){
+  try {
+    var p = new URLSearchParams(window.location.search);
+    var g = p.get('gclid');
+    if (g) {
+      var e = new Date();
+      e.setDate(e.getDate() + 90);
+      document.cookie = 'gclid=' + encodeURIComponent(g) + ';domain=.shiftapp.pl;path=/;expires=' + e.toUTCString() + ';SameSite=Lax';
+    }
+  } catch(ex) {}
+})();
+`.trim();
+
 export default function Root({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pl">
@@ -12,10 +36,18 @@ export default function Root({ children }: { children: React.ReactNode }) {
           content="width=device-width, initial-scale=1, shrink-to-fit=no"
         />
         <title>ShiftApp</title>
+        {/* Google Tag Manager */}
+        <script dangerouslySetInnerHTML={{ __html: gtmHeadScript }} />
+        {/* GCLID cookie init */}
+        <script dangerouslySetInnerHTML={{ __html: gclidInitScript }} />
         <ScrollViewStyleReset />
         <style dangerouslySetInnerHTML={{ __html: webStyles }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {/* Google Tag Manager (noscript) */}
+        <noscript dangerouslySetInnerHTML={{ __html: `<iframe src="https://www.googletagmanager.com/ns.html?id=${GTM_ID}" height="0" width="0" style="display:none;visibility:hidden"></iframe>` }} />
+        {children}
+      </body>
     </html>
   );
 }
