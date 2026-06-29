@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Clipboard, Modal, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Clipboard, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
@@ -15,7 +15,7 @@ const EMP_TYPE_LABELS: Record<string, string> = { full_time: 'Pełny etat', part
 
 export default function TeamFullScreen() {
   const router = useRouter();
-  const { user, isOwner, isManager } = useAuth();
+  const { user, restaurant, isOwner, isManager } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
   const { showAlert } = useAlert();
@@ -28,6 +28,7 @@ export default function TeamFullScreen() {
   const [jobTitle, setJobTitle] = useState('Kelner');
   const [lastCode, setLastCode] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [copiedMsg, setCopiedMsg] = useState(false);
   const [generating, setGenerating] = useState(false);
 
   // Employee edit state
@@ -171,14 +172,12 @@ export default function TeamFullScreen() {
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
-  const shareCode = async (code: string) => {
-    try {
-      await Share.share({
-        message: `Dołącz do zespołu używając kodu: ${code}`,
-      });
-    } catch (error) {
-      // Ignore
-    }
+  const copyInviteMessage = async (code: string) => {
+    const restaurantName = restaurant?.name ?? 'swojego zespołu';
+    const message = `Dołącz do zespołu ${restaurantName} w ShiftApp\n\nTwój kod aktywacyjny: ${code}\n\nUtwórz konto na\nhttps://app.shiftapp.pl/login`;
+    await Clipboard.setString(message);
+    setCopiedMsg(true);
+    setTimeout(() => setCopiedMsg(false), 2000);
   };
 
   return (
@@ -227,23 +226,36 @@ export default function TeamFullScreen() {
                   <Text style={s.codeCardTitle}>Ostatnio wygenerowany kod</Text>
                 </View>
                 <Text style={s.codeValue} selectable>{lastCode}</Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
+                <View style={{ gap: 8 }}>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TouchableOpacity
+                      style={[s.shareBtn, { flex: 1, backgroundColor: copiedCode === lastCode ? theme.colors.greenLight : theme.colors.primary }]}
+                      onPress={() => copyToClipboard(lastCode)}
+                      activeOpacity={0.75}
+                    >
+                      <Ionicons
+                        name={copiedCode === lastCode ? 'checkmark' : 'copy-outline'}
+                        size={16}
+                        color={copiedCode === lastCode ? theme.colors.green : theme.colors.white}
+                      />
+                      <Text style={[s.shareBtnText, { color: copiedCode === lastCode ? theme.colors.green : theme.colors.white }]}>
+                        {copiedCode === lastCode ? 'Skopiowano!' : 'Kopiuj kod'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                   <TouchableOpacity
-                    style={[s.shareBtn, { flex: 1, backgroundColor: copiedCode === lastCode ? theme.colors.greenLight : theme.colors.primary }]}
-                    onPress={() => copyToClipboard(lastCode)}
+                    style={[s.shareBtn, { backgroundColor: copiedMsg ? theme.colors.greenLight : theme.colors.surface, borderWidth: 1, borderColor: copiedMsg ? theme.colors.green : theme.colors.border }]}
+                    onPress={() => copyInviteMessage(lastCode)}
                     activeOpacity={0.75}
                   >
                     <Ionicons
-                      name={copiedCode === lastCode ? 'checkmark' : 'copy-outline'}
+                      name={copiedMsg ? 'checkmark' : 'mail-outline'}
                       size={16}
-                      color={copiedCode === lastCode ? theme.colors.green : theme.colors.white}
+                      color={copiedMsg ? theme.colors.green : theme.colors.primary}
                     />
-                    <Text style={[s.shareBtnText, { color: copiedCode === lastCode ? theme.colors.green : theme.colors.white }]}>
-                      {copiedCode === lastCode ? 'Skopiowano!' : 'Kopiuj kod'}
+                    <Text style={[s.shareBtnText, { color: copiedMsg ? theme.colors.green : theme.colors.primary }]}>
+                      {copiedMsg ? 'Skopiowano!' : 'Skopiuj wiadomość'}
                     </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[s.shareBtn, { paddingHorizontal: 14 }]} onPress={() => shareCode(lastCode)} activeOpacity={0.75}>
-                    <Ionicons name="share-social-outline" size={16} color={theme.colors.primary} />
                   </TouchableOpacity>
                 </View>
               </View>
