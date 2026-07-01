@@ -1,11 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Platform, StyleSheet, Text, View } from 'react-native';
+import { useAuth } from '../context/AuthContext';
 import { useSubscription } from '../context/SubscriptionContext';
 import { theme } from '../styles/theme';
 
 export default function TrialBanner() {
+  const { isOwner, isManager } = useAuth();
   const { subscription } = useSubscription();
 
+  if (!isOwner && !isManager) return null;
   if (!subscription) return null;
 
   // Hide banner for active paid subscriptions
