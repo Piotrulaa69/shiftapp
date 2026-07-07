@@ -34,6 +34,7 @@ export type RestaurantWithStats = {
   employee_count: number;
   task_count: number;
   owner_name: string | null;
+  owner_email: string | null;
 };
 
 export type SystemStats = {
@@ -51,11 +52,16 @@ export async function getAllRestaurantsWithStats(): Promise<RestaurantWithStats[
 
   if (error || !restaurants) return [];
 
-  const [{ data: profiles }, { data: tasks }, { data: subs }] = await Promise.all([
+  const [{ data: profiles }, { data: tasks }, { data: subs }, { data: ownerEmails }] = await Promise.all([
     supabase.from('profiles').select('id, restaurant_id, first_name, last_name, role, is_super_admin').eq('is_super_admin', false),
     supabase.from('tasks').select('id, restaurant_id'),
     supabase.from('subscriptions').select('restaurant_id, plan, status'),
+    supabase.rpc('super_admin_get_owner_emails'),
   ]);
+
+  const emailMap = new Map<string, string>(
+    (ownerEmails ?? []).map((e: any) => [e.restaurant_id, e.owner_email])
+  );
 
   return restaurants.map((r: any) => {
     const restProfiles = (profiles ?? []).filter((p: any) => p.restaurant_id === r.id);
@@ -73,6 +79,7 @@ export async function getAllRestaurantsWithStats(): Promise<RestaurantWithStats[
       employee_count: restProfiles.length,
       task_count: restTasks.length,
       owner_name: owner ? `${owner.first_name} ${owner.last_name}` : null,
+      owner_email: emailMap.get(r.id) ?? null,
     };
   });
 }

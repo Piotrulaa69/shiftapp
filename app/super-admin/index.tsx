@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView,
+    ActivityIndicator, Alert, Clipboard, Modal, Platform, Pressable, ScrollView,
     StyleSheet, Text, TextInput, TouchableOpacity,
     useWindowDimensions, View,
 } from 'react-native';
@@ -1303,20 +1303,30 @@ function RestaurantDetailModal({ visible, restaurant, subscription, onClose, onR
                 <View style={s.section}>
                   <Text style={s.formLabel}>Informacje podstawowe</Text>
                   {[
-                    { icon: 'person', color: '#2563EB', label: 'Właściciel', value: restaurant.owner_name ?? 'Brak' },
-                    { icon: 'location', color: '#059669', label: 'Adres', value: restaurant.address || 'Brak' },
-                    { icon: 'call', color: '#7C3AED', label: 'Telefon', value: restaurant.phone || 'Brak' },
-                    { icon: 'calendar', color: '#D97706', label: 'Utworzono', value: new Date(restaurant.created_at).toLocaleDateString('pl-PL') },
-                  ].map(({ icon, color, label, value }) => (
-                    <View key={label} style={[s.settingRow, { backgroundColor: theme.colors.surface, padding: 12 }]}>
+                    { icon: 'person', color: '#2563EB', label: 'Właściciel', value: restaurant.owner_name ?? 'Brak', copyable: false },
+                    { icon: 'mail', color: '#0891B2', label: 'E-mail właściciela', value: restaurant.owner_email ?? 'Brak', copyable: !!restaurant.owner_email },
+                    { icon: 'location', color: '#059669', label: 'Adres', value: restaurant.address || 'Brak', copyable: false },
+                    { icon: 'call', color: '#7C3AED', label: 'Telefon', value: restaurant.phone || 'Brak', copyable: false },
+                    { icon: 'calendar', color: '#D97706', label: 'Utworzono', value: new Date(restaurant.created_at).toLocaleDateString('pl-PL'), copyable: false },
+                  ].map(({ icon, color, label, value, copyable }) => (
+                    <TouchableOpacity
+                      key={label}
+                      style={[s.settingRow, { backgroundColor: theme.colors.surface, padding: 12 }]}
+                      activeOpacity={copyable ? 0.6 : 1}
+                      onPress={copyable ? () => {
+                        Clipboard.setString(value);
+                        Alert.alert('Skopiowano', value);
+                      } : undefined}
+                    >
                       <View style={[s.settingIcon, { backgroundColor: color + '18' }]}>
                         <Ionicons name={icon as any} size={16} color={color} />
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={s.settingLabel}>{label}</Text>
-                        <Text style={s.settingValue}>{value}</Text>
+                        <Text style={[s.settingValue, copyable && { color: '#0891B2', textDecorationLine: 'underline' }]}>{value}</Text>
                       </View>
-                    </View>
+                      {copyable && <Ionicons name="copy-outline" size={14} color="#0891B2" />}
+                    </TouchableOpacity>
                   ))}
                 </View>
 
