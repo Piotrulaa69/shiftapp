@@ -213,6 +213,9 @@ export type DbAvailability = {
   employee_id: string;
   day: string;
   status: 'available' | 'unavailable' | 'partial';
+  approval_status: 'pending' | 'approved' | 'rejected';
+  approved_by: string | null;
+  approved_at: string | null;
   slot1_start: string | null;
   slot1_end: string | null;
   slot2_start: string | null;

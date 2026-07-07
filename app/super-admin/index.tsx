@@ -20,6 +20,7 @@ import {
     getSubscriptions,
     getSubscriptionsOverview,
     getSystemStats,
+    extendTrial,
     markSubscriptionPaid,
     togglePromoCode,
     updateRestaurant,
@@ -1143,6 +1144,18 @@ function RestaurantDetailModal({ visible, restaurant, subscription, onClose, onR
     }
   };
 
+  const handleExtendTrial = async () => {
+    setActionLoading('trial');
+    const ok = await extendTrial(restaurant.id, 30);
+    setActionLoading(null);
+    if (ok) {
+      onRefresh();
+      Alert.alert('Gotowe', 'Trial przedłużony o 30 dni.');
+    } else {
+      Alert.alert('Błąd', 'Nie udało się przedłużyć trialu.');
+    }
+  };
+
   const handleToggleAccounts = () => {
     const willDisable = accountsEnabled;
     Alert.alert(
@@ -1354,6 +1367,18 @@ function RestaurantDetailModal({ visible, restaurant, subscription, onClose, onR
                       ? <ActivityIndicator size="small" color="#fff" />
                       : <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />}
                     <Text style={s.createBtnText}>Oznacz jako opłacone</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[s.createBtn, { backgroundColor: '#0891B2', gap: 10, marginTop: 8 }]}
+                    onPress={handleExtendTrial}
+                    disabled={!!actionLoading}
+                    activeOpacity={0.85}
+                  >
+                    {actionLoading === 'trial'
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Ionicons name="time-outline" size={18} color="#fff" />}
+                    <Text style={s.createBtnText}>Przedłuż trial o 30 dni</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity

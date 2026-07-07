@@ -475,6 +475,24 @@ export async function markSubscriptionPaid(restaurantId: string): Promise<boolea
   return true;
 }
 
+export async function extendTrial(restaurantId: string, days = 30): Promise<boolean> {
+  const newTrialEnd = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const { data: existing } = await supabase.from('subscriptions').select('id').eq('restaurant_id', restaurantId).maybeSingle();
+  let error: any;
+  if (existing?.id) {
+    ({ error } = await supabase.from('subscriptions')
+      .update({ status: 'trial', trial_ends_at: newTrialEnd })
+      .eq('id', existing.id));
+  } else {
+    ({ error } = await supabase.from('subscriptions').insert({
+      restaurant_id: restaurantId, plan: 'basic', status: 'trial', billing_period: 'monthly',
+      amount: 99.00, currency: 'PLN', trial_ends_at: newTrialEnd,
+    }));
+  }
+  if (error) { console.error('extendTrial', error); return false; }
+  return true;
+}
+
 export async function getSubscriptionsOverview(): Promise<{
   total: number; active: number; trial: number; overdue: number; cancelled: number;
   monthly_revenue: number;

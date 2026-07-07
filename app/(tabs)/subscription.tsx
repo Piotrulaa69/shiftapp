@@ -46,7 +46,8 @@ export default function SubscriptionScreen() {
         .from('profiles')
         .select('*', { count: 'exact', head: true })
         .eq('restaurant_id', restaurant.id)
-        .eq('is_super_admin', false),
+        .eq('is_super_admin', false)
+        .eq('is_active', true),
     ]);
 
     const actualEmp = Math.max(BASE_EMP, profileCount ?? BASE_EMP);

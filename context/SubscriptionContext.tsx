@@ -75,15 +75,23 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         hasActiveAccess: (daysLeft ?? 1) > 0,
       });
     } else {
-      const daysLeft = calcTrialDaysLeft(data.trial_ends_at);
-      const isTrialExpired = data.status === 'trial' && (daysLeft ?? 1) <= 0;
+      // If trial_ends_at is missing from the view, fall back to created_at + 30 days
+      let trialEndsAt: string | null = data.trial_ends_at ?? null;
+      if (!trialEndsAt && data.status === 'trial') {
+        const createdAt = restaurant?.createdAt ?? new Date().toISOString();
+        const trialEnd = new Date(createdAt);
+        trialEnd.setDate(trialEnd.getDate() + 30);
+        trialEndsAt = trialEnd.toISOString().slice(0, 10);
+      }
+      const daysLeft = calcTrialDaysLeft(trialEndsAt);
+      const isTrialExpired = data.status === 'trial' && (daysLeft ?? 0) <= 0;
       const hasActiveAccess =
         data.status === 'active' ||
-        (data.status === 'trial' && (daysLeft ?? 1) > 0);
+        (data.status === 'trial' && (daysLeft ?? 0) > 0);
       setSubscription({
         status: data.status as SubscriptionStatus,
-        plan: data.plan,
-        trialEndsAt: data.trial_ends_at,
+        plan: data.plan ?? 'basic',
+        trialEndsAt,
         trialDaysLeft: daysLeft,
         isTrialExpired,
         hasActiveAccess,

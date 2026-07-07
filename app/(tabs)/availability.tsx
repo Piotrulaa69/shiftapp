@@ -5,7 +5,7 @@ import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Text
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import type { RestaurantSettings } from '../../lib/db';
-import { getAvailability, getAvailabilityAll, getEmployees, getRestaurantSettings, getShifts, setAvailability } from '../../lib/db';
+import { approveAvailability, getAvailability, getAvailabilityAll, getEmployees, getRestaurantSettings, getShifts, setAvailability } from '../../lib/db';
 import type { DbAvailability, DbProfile, DbShift } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
@@ -39,11 +39,9 @@ export default function AvailabilityScreen() {
   });
   const [year, month] = currentMonth.split('-').map(Number);
 
-  // Employees & selected employee
   const [employees, setEmployees] = useState<DbProfile[]>([]);
   const [selEmpId, setSelEmpId] = useState(uid);
 
-  // Availability data
   const [data, setData] = useState<DbAvailability[]>([]);
   const [allData, setAllData] = useState<DbAvailability[]>([]);
   const [shifts, setShifts] = useState<DbShift[]>([]);
@@ -60,7 +58,7 @@ export default function AvailabilityScreen() {
   const [slot1End, setSlot1End] = useState('');
 
   // View mode
-  const [viewMode, setViewMode] = useState<'calendar' | 'team'>('calendar');
+  const [viewMode, setViewMode] = useState<'calendar' | 'team' | 'pending'>('calendar');
 
   const loadData = useCallback(async () => {
     if (!rid || !user) return;
@@ -92,8 +90,6 @@ export default function AvailabilityScreen() {
   const isAlwaysAvailable = (empId?: string): boolean => {
     if (!rs) return false;
     const targetId = empId ?? selEmpId;
-    // For managers looking at an employee — search loaded employees list
-    // For a regular employee viewing own calendar — employees list is empty, use user context directly
     const emp = employees.find(e => e.id === targetId);
     const et: string = emp
       ? ((emp as any).employment_type ?? '')
@@ -105,13 +101,20 @@ export default function AvailabilityScreen() {
     return false;
   };
 
+  // Checks local changes FIRST so toggling always reflects immediately,
+  // even for employees marked as always-available in settings.
   const getStatus = (day: string, empId?: string): AvailStatus => {
+    if (!empId && changes[day]) return changes[day];
     if (isAlwaysAvailable(empId)) return 'available';
     const src = empId ? allData : data;
     const found = src.find((d) => d.day === day && (empId ? d.employee_id === empId : true));
-    if (!empId && changes[day]) return changes[day];
     if (!found) return 'none';
     return found.status as AvailStatus;
+  };
+
+  const getApprovalStatus = (day: string): DbAvailability['approval_status'] | null => {
+    const found = data.find((d) => d.day === day);
+    return found?.approval_status ?? null;
   };
 
   const toggleDay = (dayStr: string) => {
@@ -119,7 +122,6 @@ export default function AvailabilityScreen() {
     const idx = STATUS_CYCLE.indexOf(current);
     const next = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length];
     if (next === 'partial') {
-      // open slot modal
       const found = data.find((d) => d.day === dayStr);
       setSlot1Start(found?.slot1_start ?? '08:00');
       setSlot1End(found?.slot1_end ?? '16:00');
@@ -133,24 +135,45 @@ export default function AvailabilityScreen() {
     setSlotModal(null);
   };
 
+  const requiresApproval = !!rs?.availability_require_manager_approval && !canManage;
+
   const handleSave = async () => {
     if (!user) return;
     setSaving(true);
     try {
       const empId = canManage ? selEmpId : uid;
+      // Managers saving for employees always mark as approved
+      const approvalStatus = canManage ? 'approved' : (requiresApproval ? 'pending' : 'approved');
       for (const [day, status] of Object.entries(changes)) {
         const isPartial = status === 'partial';
-        const ok = await setAvailability(rid, empId, day, status === 'none' ? 'unavailable' : status, isPartial ? { slot1_start: slot1Start || undefined, slot1_end: slot1End || undefined } : undefined);
+        const ok = await setAvailability(
+          rid, empId, day,
+          status === 'none' ? 'unavailable' : status,
+          isPartial ? { slot1_start: slot1Start || undefined, slot1_end: slot1End || undefined } : undefined,
+          approvalStatus,
+        );
         if (!ok) {
           Alert.alert('Błąd zapisu', 'Nie udało się zapisać dyspozycyjności. Sprawdź uprawnienia i spróbuj ponownie.');
           return;
         }
       }
+      if (requiresApproval && Object.keys(changes).length > 0) {
+        Alert.alert('Wysłano do zatwierdzenia', 'Twoja dyspozycyjność została wysłana do managera.');
+      }
       loadData();
-    } catch (e) {
+    } catch {
       Alert.alert('Błąd', 'Wystąpił nieoczekiwany błąd.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleApprove = async (avail: DbAvailability, approved: boolean) => {
+    const ok = await approveAvailability(avail.id, approved);
+    if (ok) {
+      loadData();
+    } else {
+      Alert.alert('Błąd', 'Nie udało się zaktualizować statusu zatwierdzenia.');
     }
   };
 
@@ -173,6 +196,15 @@ export default function AvailabilityScreen() {
 
   const selectedEmp = employees.find((e) => e.id === selEmpId);
 
+  // Pending approvals for the current month
+  const pendingApprovals = allData.filter(a => a.approval_status === 'pending');
+  const pendingCount = pendingApprovals.length;
+
+  const empName = (empId: string) => {
+    const e = employees.find(e => e.id === empId);
+    return e ? `${e.first_name} ${e.last_name}` : empId;
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={[styles.header, isDesktop && styles.headerDesktop]}>
@@ -186,12 +218,25 @@ export default function AvailabilityScreen() {
       {/* Manager view toggle */}
       {canManage && (
         <View style={[styles.modeRow, isDesktop && styles.modeRowDesktop]}>
-          {(['calendar', 'team'] as const).map((m) => (
-            <TouchableOpacity key={m} style={[styles.modeBtn, viewMode === m && styles.modeBtnActive]} onPress={() => setViewMode(m)}>
-              <Ionicons name={m === 'calendar' ? 'calendar-outline' : 'people-outline'} size={14} color={viewMode === m ? theme.colors.primary : theme.colors.textSecondary} />
+          {(['calendar', 'team', 'pending'] as const).map((m) => (
+            <TouchableOpacity
+              key={m}
+              style={[styles.modeBtn, viewMode === m && styles.modeBtnActive]}
+              onPress={() => setViewMode(m)}
+            >
+              <Ionicons
+                name={m === 'calendar' ? 'calendar-outline' : m === 'team' ? 'people-outline' : 'checkmark-done-outline'}
+                size={14}
+                color={viewMode === m ? theme.colors.primary : theme.colors.textSecondary}
+              />
               <Text style={[styles.modeBtnText, viewMode === m && styles.modeBtnTextActive]}>
-                {m === 'calendar' ? 'Edycja' : 'Zespół'}
+                {m === 'calendar' ? 'Edycja' : m === 'team' ? 'Zespół' : 'Do zatwierdzenia'}
               </Text>
+              {m === 'pending' && pendingCount > 0 && (
+                <View style={styles.pendingBadge}>
+                  <Text style={styles.pendingBadgeText}>{pendingCount}</Text>
+                </View>
+              )}
             </TouchableOpacity>
           ))}
         </View>
@@ -217,130 +262,223 @@ export default function AvailabilityScreen() {
         </ScrollView>
       )}
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]} style={isDesktop ? { width: '100%' } : undefined}>
-
-        {/* Month nav */}
-        <View style={styles.monthNav}>
-          <TouchableOpacity onPress={prevMonth} style={styles.monthArrow}>
-            <Ionicons name="chevron-back" size={20} color={theme.colors.primary} />
-          </TouchableOpacity>
-          <Text style={styles.monthLabel}>{MONTHS[month - 1]} {year}</Text>
-          <TouchableOpacity onPress={nextMonth} style={styles.monthArrow}>
-            <Ionicons name="chevron-forward" size={20} color={theme.colors.primary} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Legend */}
-        <View style={styles.legend}>
-          {[...Object.entries(STATUS_COLORS).filter(([k]) => k !== 'none'), ['shift', { text: theme.colors.primary, label: 'Zaplanowana zmiana' }]].map(([key, val]: any) => (
-            <View key={key} style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: val.text }]} />
-              <Text style={styles.legendText}>{val.label}</Text>
-            </View>
-          ))}
-        </View>
-
-        {loading ? (
-          <ActivityIndicator style={{ marginTop: 40 }} size="large" color={theme.colors.primary} />
-        ) : viewMode === 'team' && canManage ? (
-          /* ── Team overview table ── */
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
+        style={isDesktop ? { width: '100%' } : undefined}
+      >
+        {/* ── Pending approvals tab ── */}
+        {canManage && viewMode === 'pending' ? (
           <View>
-            {/* Header row */}
-            <View style={styles.teamHeaderRow}>
-              <View style={styles.teamNameCol} />
-              {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
-                const dayStr = `${year}-${fmt2(month)}-${fmt2(d)}`;
-                const isToday = dayStr === todayStr;
+            <View style={styles.monthNav}>
+              <TouchableOpacity onPress={prevMonth} style={styles.monthArrow}>
+                <Ionicons name="chevron-back" size={20} color={theme.colors.primary} />
+              </TouchableOpacity>
+              <Text style={styles.monthLabel}>{MONTHS[month - 1]} {year}</Text>
+              <TouchableOpacity onPress={nextMonth} style={styles.monthArrow}>
+                <Ionicons name="chevron-forward" size={20} color={theme.colors.primary} />
+              </TouchableOpacity>
+            </View>
+            {loading ? (
+              <ActivityIndicator style={{ marginTop: 40 }} size="large" color={theme.colors.primary} />
+            ) : pendingApprovals.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="checkmark-circle-outline" size={48} color={theme.colors.textMuted} />
+                <Text style={styles.emptyText}>Brak oczekujących zatwierdzeń</Text>
+              </View>
+            ) : (
+              pendingApprovals.map((avail) => {
+                const statusColor = STATUS_COLORS[avail.status] ?? STATUS_COLORS.none;
                 return (
-                  <View key={d} style={[styles.teamDayCol, isToday && styles.teamDayColToday]}>
-                    <Text style={[styles.teamDayNum, isToday && { color: theme.colors.primary }]}>{d}</Text>
+                  <View key={avail.id} style={styles.pendingCard}>
+                    <View style={styles.pendingCardLeft}>
+                      <Text style={styles.pendingEmpName}>{empName(avail.employee_id)}</Text>
+                      <Text style={styles.pendingDay}>{avail.day}</Text>
+                      <View style={[styles.statusPill, { backgroundColor: statusColor.bg, borderColor: statusColor.border }]}>
+                        <Ionicons name={statusColor.icon as any} size={12} color={statusColor.text} />
+                        <Text style={[styles.statusPillText, { color: statusColor.text }]}>{statusColor.label}</Text>
+                        {avail.slot1_start && avail.slot1_end && (
+                          <Text style={[styles.statusPillText, { color: statusColor.text }]}>
+                            {' '}· {avail.slot1_start}–{avail.slot1_end}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                    <View style={styles.pendingActions}>
+                      <TouchableOpacity
+                        style={[styles.approveBtn, { backgroundColor: '#22C55E' }]}
+                        onPress={() => handleApprove(avail, true)}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="checkmark" size={16} color="#fff" />
+                        <Text style={styles.approveBtnText}>Zatwierdź</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.approveBtn, { backgroundColor: '#EF4444' }]}
+                        onPress={() => handleApprove(avail, false)}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="close" size={16} color="#fff" />
+                        <Text style={styles.approveBtnText}>Odrzuć</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 );
-              })}
-            </View>
-            {/* Employee rows */}
-            {employees.map((emp) => (
-              <View key={emp.id} style={styles.teamRow}>
-                <View style={styles.teamNameCol}>
-                  <View style={[styles.empAvatarSm, { backgroundColor: emp.avatar_color }]}>
-                    <Text style={styles.empInitialsSm}>{emp.first_name[0]}</Text>
-                  </View>
-                  <Text style={styles.teamEmpName} numberOfLines={1}>{emp.first_name}</Text>
-                </View>
-                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
-                  const dayStr = `${year}-${fmt2(month)}-${fmt2(d)}`;
-                  const st = getStatus(dayStr, emp.id);
-                  const c = STATUS_COLORS[st];
-                  return (
-                    <View key={d} style={[styles.teamDayCol, { backgroundColor: c.bg }]}>
-                      <View style={[styles.teamDot, { backgroundColor: c.text }]} />
-                      {getShiftsOnDay(dayStr, emp.id).length > 0 && (
-                        <View style={styles.teamShiftDot} />
-                      )}
-                    </View>
-                  );
-                })}
-              </View>
-            ))}
-            {employees.length === 0 && (
-              <Text style={{ color: theme.colors.textMuted, textAlign: 'center', marginTop: 30 }}>Brak pracowników</Text>
+              })
             )}
           </View>
         ) : (
-          /* ── Calendar edit mode ── */
           <>
-            {canManage && selectedEmp && (
-              <View style={styles.editingBanner}>
-                <Ionicons name="person-circle-outline" size={16} color={theme.colors.primary} />
-                <Text style={styles.editingBannerText}>Edytujesz: {selectedEmp.first_name} {selectedEmp.last_name}</Text>
-              </View>
-            )}
-            <View style={styles.weekRow}>
-              {DAY_NAMES.map((d) => <Text key={d} style={styles.dayHeader}>{d}</Text>)}
-            </View>
-
-            {Array.from({ length: cells.length / 7 }, (_, week) => (
-              <View key={week} style={styles.weekRow}>
-                {cells.slice(week * 7, week * 7 + 7).map((day, idx) => {
-                  if (day === null) return <View key={idx} style={styles.dayCell} />;
-                  const dayStr = `${year}-${fmt2(month)}-${fmt2(day)}`;
-                  const st = getStatus(dayStr);
-                  const colors = STATUS_COLORS[st];
-                  const isToday = dayStr === todayStr;
-                  return (
-                    <TouchableOpacity
-                      key={idx}
-                      style={[styles.dayCell, { backgroundColor: colors.bg, borderWidth: isToday ? 2 : 1, borderColor: isToday ? theme.colors.primary : colors.border }]}
-                      onPress={() => toggleDay(dayStr)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.dayNum, { color: colors.text }, isToday && { fontWeight: '800' }]}>{day}</Text>
-                      {st !== 'none' && (
-                        <View style={[styles.statusDot, { backgroundColor: colors.text }]} />
-                      )}
-                      {getShiftsOnDay(dayStr, canManage ? selEmpId : uid).map((s) => (
-                        <View key={s.id} style={styles.shiftChip}>
-                          <Text style={styles.shiftChipText} numberOfLines={1}>{s.start_time.slice(0,5)}</Text>
-                        </View>
-                      ))}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            ))}
-
-            <View style={styles.tapHint}>
-              <Ionicons name="information-circle-outline" size={13} color={theme.colors.textMuted} />
-              <Text style={styles.tapHintText}>Klikaj w dzień, aby cyklicznie zmieniać status</Text>
-            </View>
-
-            {Object.keys(changes).length > 0 && (
-              <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.85} disabled={saving}>
-                {saving
-                  ? <ActivityIndicator color={theme.colors.white} />
-                  : <Text style={styles.saveBtnText}>Zapisz zmiany ({Object.keys(changes).length})</Text>
-                }
+            {/* Month nav */}
+            <View style={styles.monthNav}>
+              <TouchableOpacity onPress={prevMonth} style={styles.monthArrow}>
+                <Ionicons name="chevron-back" size={20} color={theme.colors.primary} />
               </TouchableOpacity>
+              <Text style={styles.monthLabel}>{MONTHS[month - 1]} {year}</Text>
+              <TouchableOpacity onPress={nextMonth} style={styles.monthArrow}>
+                <Ionicons name="chevron-forward" size={20} color={theme.colors.primary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Legend */}
+            <View style={styles.legend}>
+              {[...Object.entries(STATUS_COLORS).filter(([k]) => k !== 'none'), ['shift', { text: theme.colors.primary, label: 'Zaplanowana zmiana' }]].map(([key, val]: any) => (
+                <View key={key} style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: val.text }]} />
+                  <Text style={styles.legendText}>{val.label}</Text>
+                </View>
+              ))}
+            </View>
+
+            {loading ? (
+              <ActivityIndicator style={{ marginTop: 40 }} size="large" color={theme.colors.primary} />
+            ) : viewMode === 'team' && canManage ? (
+              /* ── Team overview table ── */
+              <View>
+                <View style={styles.teamHeaderRow}>
+                  <View style={styles.teamNameCol} />
+                  {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
+                    const dayStr = `${year}-${fmt2(month)}-${fmt2(d)}`;
+                    const isToday = dayStr === todayStr;
+                    return (
+                      <View key={d} style={[styles.teamDayCol, isToday && styles.teamDayColToday]}>
+                        <Text style={[styles.teamDayNum, isToday && { color: theme.colors.primary }]}>{d}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+                {employees.map((emp) => (
+                  <View key={emp.id} style={styles.teamRow}>
+                    <View style={styles.teamNameCol}>
+                      <View style={[styles.empAvatarSm, { backgroundColor: emp.avatar_color }]}>
+                        <Text style={styles.empInitialsSm}>{emp.first_name[0]}</Text>
+                      </View>
+                      <Text style={styles.teamEmpName} numberOfLines={1}>{emp.first_name}</Text>
+                    </View>
+                    {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
+                      const dayStr = `${year}-${fmt2(month)}-${fmt2(d)}`;
+                      const st = getStatus(dayStr, emp.id);
+                      const c = STATUS_COLORS[st];
+                      const dayAvail = allData.find(a => a.employee_id === emp.id && a.day === dayStr);
+                      const isPending = dayAvail?.approval_status === 'pending';
+                      return (
+                        <View key={d} style={[styles.teamDayCol, { backgroundColor: c.bg }]}>
+                          <View style={[styles.teamDot, { backgroundColor: isPending ? '#F97316' : c.text }]} />
+                          {isPending && <View style={styles.teamPendingDot} />}
+                          {getShiftsOnDay(dayStr, emp.id).length > 0 && (
+                            <View style={styles.teamShiftDot} />
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                ))}
+                {employees.length === 0 && (
+                  <Text style={{ color: theme.colors.textMuted, textAlign: 'center', marginTop: 30 }}>Brak pracowników</Text>
+                )}
+              </View>
+            ) : (
+              /* ── Calendar edit mode ── */
+              <>
+                {canManage && selectedEmp && (
+                  <View style={styles.editingBanner}>
+                    <Ionicons name="person-circle-outline" size={16} color={theme.colors.primary} />
+                    <Text style={styles.editingBannerText}>Edytujesz: {selectedEmp.first_name} {selectedEmp.last_name}</Text>
+                  </View>
+                )}
+
+                {/* Info for employees when approval is required */}
+                {!canManage && requiresApproval && (
+                  <View style={styles.approvalInfoBanner}>
+                    <Ionicons name="information-circle-outline" size={15} color="#D97706" />
+                    <Text style={styles.approvalInfoText}>Twoja dyspozycyjność wymaga zatwierdzenia przez managera</Text>
+                  </View>
+                )}
+
+                <View style={styles.weekRow}>
+                  {DAY_NAMES.map((d) => <Text key={d} style={styles.dayHeader}>{d}</Text>)}
+                </View>
+
+                {Array.from({ length: cells.length / 7 }, (_, week) => (
+                  <View key={week} style={styles.weekRow}>
+                    {cells.slice(week * 7, week * 7 + 7).map((day, idx) => {
+                      if (day === null) return <View key={idx} style={styles.dayCell} />;
+                      const dayStr = `${year}-${fmt2(month)}-${fmt2(day)}`;
+                      const st = getStatus(dayStr);
+                      const colors = STATUS_COLORS[st];
+                      const isToday = dayStr === todayStr;
+                      const approvalSt = changes[dayStr] ? null : getApprovalStatus(dayStr);
+                      const isPending = approvalSt === 'pending';
+                      const isRejected = approvalSt === 'rejected';
+                      return (
+                        <TouchableOpacity
+                          key={idx}
+                          style={[
+                            styles.dayCell,
+                            {
+                              backgroundColor: colors.bg,
+                              borderWidth: isToday ? 2 : 1,
+                              borderColor: isPending ? '#F97316' : isRejected ? '#EF4444' : isToday ? theme.colors.primary : colors.border,
+                            },
+                          ]}
+                          onPress={() => toggleDay(dayStr)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[styles.dayNum, { color: colors.text }, isToday && { fontWeight: '800' }]}>{day}</Text>
+                          {st !== 'none' && (
+                            <View style={[styles.statusDot, { backgroundColor: colors.text }]} />
+                          )}
+                          {isPending && <Text style={styles.pendingLabel}>⏳</Text>}
+                          {isRejected && <Text style={styles.pendingLabel}>✗</Text>}
+                          {getShiftsOnDay(dayStr, canManage ? selEmpId : uid).map((s) => (
+                            <View key={s.id} style={styles.shiftChip}>
+                              <Text style={styles.shiftChipText} numberOfLines={1}>{s.start_time.slice(0, 5)}</Text>
+                            </View>
+                          ))}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ))}
+
+                <View style={styles.tapHint}>
+                  <Ionicons name="information-circle-outline" size={13} color={theme.colors.textMuted} />
+                  <Text style={styles.tapHintText}>Klikaj w dzień, aby cyklicznie zmieniać status</Text>
+                </View>
+
+                {Object.keys(changes).length > 0 && (
+                  <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.85} disabled={saving}>
+                    {saving
+                      ? <ActivityIndicator color={theme.colors.white} />
+                      : <Text style={styles.saveBtnText}>
+                          {requiresApproval
+                            ? `Wyślij do zatwierdzenia (${Object.keys(changes).length})`
+                            : `Zapisz zmiany (${Object.keys(changes).length})`}
+                        </Text>
+                    }
+                  </TouchableOpacity>
+                )}
+              </>
             )}
           </>
         )}
@@ -385,12 +523,14 @@ const styles = StyleSheet.create({
   headerDesktop: { maxWidth: 720, marginHorizontal: 'auto' as any, width: '100%', paddingHorizontal: 32 },
   backBtn: { padding: 4 },
   headerTitle: { fontSize: 17, fontWeight: '700', color: theme.colors.text },
-  modeRow: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 4, gap: 8 },
+  modeRow: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 4, gap: 8, flexWrap: 'wrap' },
   modeRowDesktop: { maxWidth: 720, marginHorizontal: 'auto' as any, width: '100%', paddingHorizontal: 32 },
-  modeBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
+  modeBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
   modeBtnActive: { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primary },
   modeBtnText: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary },
   modeBtnTextActive: { color: theme.colors.primary },
+  pendingBadge: { backgroundColor: '#EF4444', borderRadius: 8, minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  pendingBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
   empScroll: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 8, paddingVertical: 8 },
   empScrollDesktop: { paddingHorizontal: 32 },
   empChip: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: theme.colors.card, borderRadius: 10, padding: 8, borderWidth: 1.5, borderColor: theme.colors.border },
@@ -410,14 +550,16 @@ const styles = StyleSheet.create({
   legendText: { fontSize: 11, color: theme.colors.textSecondary },
   editingBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.colors.primaryLight, borderRadius: 8, padding: 10, marginBottom: 12 },
   editingBannerText: { fontSize: 13, fontWeight: '600', color: theme.colors.primary },
+  approvalInfoBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FFF4E5', borderRadius: 8, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#F97316' },
+  approvalInfoText: { fontSize: 12, fontWeight: '600', color: '#D97706', flex: 1 },
   weekRow: { flexDirection: 'row', gap: 4, marginBottom: 4 },
   dayHeader: { flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '700', color: theme.colors.textMuted, paddingVertical: 4 },
   dayCell: { flex: 1, aspectRatio: 1, borderRadius: 8, alignItems: 'center', justifyContent: 'center', gap: 2 },
   dayNum: { fontSize: 13, fontWeight: '600' },
   statusDot: { width: 4, height: 4, borderRadius: 2 },
+  pendingLabel: { fontSize: 8 },
   shiftChip: { backgroundColor: theme.colors.primary + '22', borderRadius: 3, paddingHorizontal: 2, paddingVertical: 1, marginTop: 1, width: '90%' },
   shiftChipText: { fontSize: 7, fontWeight: '700', color: theme.colors.primary, textAlign: 'center' },
-  teamShiftDot: { position: 'absolute', bottom: 2, right: 2, width: 4, height: 4, borderRadius: 2, backgroundColor: theme.colors.primary },
   tapHint: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 12, marginBottom: 4 },
   tapHintText: { fontSize: 11, color: theme.colors.textMuted },
   saveBtn: { backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.md, paddingVertical: 14, alignItems: 'center', marginTop: 16 },
@@ -430,9 +572,23 @@ const styles = StyleSheet.create({
   teamDayColToday: { borderWidth: 1.5, borderColor: theme.colors.primary },
   teamDayNum: { fontSize: 9, fontWeight: '700', color: theme.colors.textMuted },
   teamDot: { width: 6, height: 6, borderRadius: 3 },
+  teamPendingDot: { position: 'absolute', top: 2, right: 2, width: 4, height: 4, borderRadius: 2, backgroundColor: '#F97316' },
+  teamShiftDot: { position: 'absolute', bottom: 2, right: 2, width: 4, height: 4, borderRadius: 2, backgroundColor: theme.colors.primary },
   teamEmpName: { fontSize: 10, fontWeight: '600', color: theme.colors.text, flex: 1 },
   empAvatarSm: { width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   empInitialsSm: { fontSize: 8, fontWeight: '700', color: theme.colors.white },
+  // Pending approvals
+  emptyState: { alignItems: 'center', paddingVertical: 60, gap: 12 },
+  emptyText: { fontSize: 15, color: theme.colors.textMuted },
+  pendingCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.colors.card, borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#F97316' },
+  pendingCardLeft: { flex: 1, gap: 4 },
+  pendingEmpName: { fontSize: 14, fontWeight: '700', color: theme.colors.text },
+  pendingDay: { fontSize: 12, color: theme.colors.textMuted },
+  statusPill: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 6, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'flex-start' },
+  statusPillText: { fontSize: 11, fontWeight: '600' },
+  pendingActions: { flexDirection: 'column', gap: 6, marginLeft: 10 },
+  approveBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  approveBtnText: { fontSize: 12, fontWeight: '700', color: '#fff' },
 });
 
 const mStyles = StyleSheet.create({

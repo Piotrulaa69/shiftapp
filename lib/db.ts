@@ -447,6 +447,7 @@ export async function setAvailability(
   day: string,
   status: 'available' | 'unavailable' | 'partial',
   slots?: { slot1_start?: string; slot1_end?: string; slot2_start?: string; slot2_end?: string },
+  approvalStatus: 'pending' | 'approved' = 'approved',
 ): Promise<boolean> {
   const { error } = await supabase
     .from('availability')
@@ -455,8 +456,19 @@ export async function setAvailability(
       employee_id: employeeId,
       day,
       status,
+      approval_status: approvalStatus,
       ...(slots ?? {}),
     }, { onConflict: 'employee_id,day' });
+  if (error) console.error('setAvailability', error);
+  return !error;
+}
+
+export async function approveAvailability(id: string, approved: boolean): Promise<boolean> {
+  const { error } = await supabase
+    .from('availability')
+    .update({ approval_status: approved ? 'approved' : 'rejected' })
+    .eq('id', id);
+  if (error) console.error('approveAvailability', error);
   return !error;
 }
 
@@ -701,7 +713,6 @@ export async function uploadDocumentFile(
   mimeType: string,
 ): Promise<string | null> {
   try {
-    const ext = fileName.split('.').pop() ?? 'bin';
     const path = `${restaurantId}/${Date.now()}_${fileName.replace(/\s+/g, '_')}`;
     const response = await fetch(fileUri);
     const blob = await response.blob();
