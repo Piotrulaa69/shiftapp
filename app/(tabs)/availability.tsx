@@ -160,22 +160,39 @@ export default function AvailabilityScreen() {
   const handleModalSave = async () => {
     if (!dayModal) return;
     const empId = canManage ? selEmpId : uid;
-    const requiresApproval = !!rs?.availability_require_manager_approval && !canManage;
-    const approvalStatus = canManage ? 'approved' : (requiresApproval ? 'pending' : 'approved');
-    setModalSaving(true);
-    const slots = modalStatus === 'partial'
-      ? { slot1_start: formatTimeInput(modalStart), slot1_end: formatTimeInput(modalEnd) }
-      : {};
-    const ok = await setAvailability(rid, empId, dayModal.day, modalStatus, slots, approvalStatus);
-    setModalSaving(false);
-    if (!ok) {
-      Alert.alert('Błąd', 'Nie udało się zapisać dyspozycyjności. Sprawdź połączenie i spróbuj ponownie.');
+    if (!empId || !rid) {
+      Alert.alert('Błąd', 'Brak danych sesji. Zaloguj się ponownie.');
       return;
     }
-    if (requiresApproval) {
-      Alert.alert('Wysłano', 'Dyspozycyjność wysłana do zatwierdzenia przez managera.');
+    setModalSaving(true);
+    const slots = modalStatus === 'partial'
+      ? { slot1_start: formatTimeInput(modalStart) || '08:00', slot1_end: formatTimeInput(modalEnd) || '16:00' }
+      : undefined;
+    const result = await setAvailability(rid, empId, dayModal.day, modalStatus, slots);
+    setModalSaving(false);
+    if (!result.success) {
+      Alert.alert('Błąd zapisu', result.error ?? 'Nie udało się zapisać dyspozycyjności.');
+      return;
     }
+    // Optimistic update: immediately reflect change in local state
+    const newRec: DbAvailability = {
+      id: getDayRecord(dayModal.day)?.id ?? 'temp-' + dayModal.day,
+      restaurant_id: rid,
+      employee_id: empId,
+      day: dayModal.day,
+      status: modalStatus,
+      approval_status: 'approved',
+      approved_by: null,
+      approved_at: null,
+      slot1_start: slots?.slot1_start ?? null,
+      slot1_end: slots?.slot1_end ?? null,
+      slot2_start: null,
+      slot2_end: null,
+      created_at: new Date().toISOString(),
+    };
+    setData(prev => [...prev.filter(d => d.day !== dayModal.day), newRec]);
     setDayModal(null);
+    // Background refresh for accurate data
     loadData();
   };
 
@@ -183,13 +200,13 @@ export default function AvailabilityScreen() {
     if (!dayModal) return;
     const empId = canManage ? selEmpId : uid;
     setModalSaving(true);
-    // Save as unavailable to clear the record
-    const ok = await setAvailability(rid, empId, dayModal.day, 'unavailable', {}, 'approved');
+    const result = await setAvailability(rid, empId, dayModal.day, 'unavailable');
     setModalSaving(false);
-    if (!ok) {
-      Alert.alert('Błąd', 'Nie udało się usunąć dyspozycyjności.');
+    if (!result.success) {
+      Alert.alert('Błąd', result.error ?? 'Nie udało się usunąć dyspozycyjności.');
       return;
     }
+    setData(prev => prev.filter(d => d.day !== dayModal.day));
     setDayModal(null);
     loadData();
   };
@@ -470,7 +487,14 @@ export default function AvailabilityScreen() {
           <View style={m.sheet}>
             {/* Header */}
             <View style={m.mHeader}>
-              <Text style={m.mTitle}>Dyspozycyjność</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={m.mTitle}>Dyspozycyjność</Text>
+                {canManage && (
+                  <Text style={m.mSubtitle}>
+                    {selectedEmp ? `${selectedEmp.first_name} ${selectedEmp.last_name}` : 'Własna'}
+                  </Text>
+                )}
+              </View>
               <TouchableOpacity onPress={() => setDayModal(null)} hitSlop={8}>
                 <Ionicons name="close" size={24} color={theme.colors.text} />
               </TouchableOpacity>
@@ -645,8 +669,9 @@ const s = StyleSheet.create({
 const m = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   sheet: { backgroundColor: theme.colors.card, borderRadius: 20, width: '100%', maxWidth: 480, maxHeight: '90%', overflow: 'hidden' },
-  mHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  mHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', padding: 20, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   mTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
+  mSubtitle: { fontSize: 13, color: theme.colors.primary, fontWeight: '600', marginTop: 2 },
 
   dateLabel: { fontSize: 15, fontWeight: '600', color: theme.colors.text, textTransform: 'capitalize' },
   sectionLabel: { fontSize: 11, fontWeight: '700', color: theme.colors.textMuted, letterSpacing: 0.8, marginBottom: -8 },

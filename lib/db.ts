@@ -446,35 +446,38 @@ export async function setAvailability(
   employeeId: string,
   day: string,
   status: 'available' | 'unavailable' | 'partial',
-  slots?: { slot1_start?: string; slot1_end?: string; slot2_start?: string; slot2_end?: string },
-  approvalStatus: 'pending' | 'approved' = 'approved',
-): Promise<boolean> {
-  const payload: Record<string, unknown> = {
-    restaurant_id: restaurantId,
-    employee_id: employeeId,
-    day,
-    status,
-    ...(slots ?? {}),
-  };
+  slots?: { slot1_start?: string | null; slot1_end?: string | null },
+): Promise<{ success: boolean; error?: string }> {
+  // Explicitly clear slot times when not partial
+  const slot1_start = status === 'partial' ? (slots?.slot1_start ?? null) : null;
+  const slot1_end   = status === 'partial' ? (slots?.slot1_end   ?? null) : null;
 
-  // Try with approval_status (migration 063). Fall back without it if column doesn't exist.
-  const { error } = await supabase
+  const fields: Record<string, unknown> = { status, slot1_start, slot1_end };
+
+  // Check if a record already exists for this employee+day
+  const { data: existing, error: selErr } = await supabase
     .from('availability')
-    .upsert({ ...payload, approval_status: approvalStatus }, { onConflict: 'employee_id,day' });
+    .select('id')
+    .eq('employee_id', employeeId)
+    .eq('day', day)
+    .maybeSingle();
 
-  if (error) {
-    if (error.message?.includes('approval_status') || error.code === '42703') {
-      // Column doesn't exist yet — retry without it
-      const { error: e2 } = await supabase
-        .from('availability')
-        .upsert(payload, { onConflict: 'employee_id,day' });
-      if (e2) { console.error('setAvailability fallback', e2); return false; }
-      return true;
-    }
-    console.error('setAvailability', error);
-    return false;
+  if (selErr) { console.error('setAvailability select', selErr); return { success: false, error: selErr.message }; }
+
+  if (existing?.id) {
+    const { error } = await supabase
+      .from('availability')
+      .update(fields)
+      .eq('id', existing.id);
+    if (error) { console.error('setAvailability update', error); return { success: false, error: error.message }; }
+  } else {
+    const { error } = await supabase
+      .from('availability')
+      .insert({ restaurant_id: restaurantId, employee_id: employeeId, day, ...fields });
+    if (error) { console.error('setAvailability insert', error); return { success: false, error: error.message }; }
   }
-  return true;
+
+  return { success: true };
 }
 
 export async function approveAvailability(id: string, approved: boolean): Promise<boolean> {
