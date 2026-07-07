@@ -449,18 +449,32 @@ export async function setAvailability(
   slots?: { slot1_start?: string; slot1_end?: string; slot2_start?: string; slot2_end?: string },
   approvalStatus: 'pending' | 'approved' = 'approved',
 ): Promise<boolean> {
+  const payload: Record<string, unknown> = {
+    restaurant_id: restaurantId,
+    employee_id: employeeId,
+    day,
+    status,
+    ...(slots ?? {}),
+  };
+
+  // Try with approval_status (migration 063). Fall back without it if column doesn't exist.
   const { error } = await supabase
     .from('availability')
-    .upsert({
-      restaurant_id: restaurantId,
-      employee_id: employeeId,
-      day,
-      status,
-      approval_status: approvalStatus,
-      ...(slots ?? {}),
-    }, { onConflict: 'employee_id,day' });
-  if (error) console.error('setAvailability', error);
-  return !error;
+    .upsert({ ...payload, approval_status: approvalStatus }, { onConflict: 'employee_id,day' });
+
+  if (error) {
+    if (error.message?.includes('approval_status') || error.code === '42703') {
+      // Column doesn't exist yet — retry without it
+      const { error: e2 } = await supabase
+        .from('availability')
+        .upsert(payload, { onConflict: 'employee_id,day' });
+      if (e2) { console.error('setAvailability fallback', e2); return false; }
+      return true;
+    }
+    console.error('setAvailability', error);
+    return false;
+  }
+  return true;
 }
 
 export async function approveAvailability(id: string, approved: boolean): Promise<boolean> {

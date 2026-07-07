@@ -140,10 +140,12 @@ export default function AvailabilityScreen() {
   };
 
   const getStatus = (day: string, empId?: string): AvailStatus | null => {
-    if (isAlwaysAvailable(empId)) return 'available';
+    // Explicit DB record always wins — even for "always available" employees
     const rec = getDayRecord(day, empId);
-    if (!rec) return null;
-    return rec.status as AvailStatus;
+    if (rec) return rec.status as AvailStatus;
+    // No record: fall back to the always-available default
+    if (isAlwaysAvailable(empId)) return 'available';
+    return null;
   };
 
   const openDayModal = (dayStr: string) => {
@@ -641,8 +643,8 @@ const s = StyleSheet.create({
 });
 
 const m = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: theme.colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '90%', overflow: 'hidden' },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  sheet: { backgroundColor: theme.colors.card, borderRadius: 20, width: '100%', maxWidth: 480, maxHeight: '90%', overflow: 'hidden' },
   mHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   mTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
 
