@@ -483,6 +483,16 @@ export async function markSubscriptionPaid(restaurantId: string): Promise<boolea
 }
 
 export async function extendTrial(restaurantId: string, days = 30): Promise<boolean> {
+  // SECURITY DEFINER RPC first — bypasses RLS reliably (direct write is
+  // silently blocked by RLS for the super-admin, so it must go through the RPC).
+  const { data: result, error: rpcError } = await supabase.rpc('super_admin_extend_trial', {
+    p_restaurant_id: restaurantId,
+    p_days: days,
+  });
+  if (!rpcError && (result as any)?.success) return true;
+  if (!rpcError && (result as any)?.error) console.error('extendTrial rpc:', (result as any).error);
+
+  // Fallback: direct write (only works if RLS policies allow it)
   const newTrialEnd = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const { data: existing } = await supabase.from('subscriptions').select('id').eq('restaurant_id', restaurantId).maybeSingle();
   let error: any;

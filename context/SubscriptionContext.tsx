@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 
@@ -53,11 +54,16 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       return;
     }
     setLoading(true);
-    const { data, error } = await supabase
+    // NOTE: do NOT use .maybeSingle() here — if a restaurant ever has more than
+    // one subscription row it throws, and we'd silently fall back to the
+    // created_at+30 trial (expired for old accounts). Take the freshest row.
+    const { data: rows, error } = await supabase
       .from('subscriptions_api')
       .select('*')
       .eq('restaurant_id', user.restaurantId)
-      .maybeSingle();
+      .order('updated_at', { ascending: false, nullsFirst: false })
+      .limit(1);
+    const data = rows?.[0] ?? null;
 
     if (error || !data) {
       // No subscription row — derive trial from restaurant.created_at
@@ -102,6 +108,15 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   useEffect(() => {
     refresh();
+  }, [refresh]);
+
+  // Re-fetch when the app returns to the foreground, so an admin action
+  // (mark paid / extend trial) is reflected without a full app reload.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refresh();
+    });
+    return () => sub.remove();
   }, [refresh]);
 
   return (
