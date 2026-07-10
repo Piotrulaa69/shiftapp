@@ -130,14 +130,15 @@ function StaffingSection({ value, onChange, existingRoles, groups, isDesktop }: 
 
   const updateWeekly = (role: string, dayIdx: number, count: number) => {
     const newWeekly = { ...weekly };
-    if (!newWeekly[role]) newWeekly[role] = [0, 0, 0, 0, 0, 0, 0];
+    // Clone the inner array — never mutate the existing state array in place.
+    newWeekly[role] = newWeekly[role] ? [...newWeekly[role]] : [0, 0, 0, 0, 0, 0, 0];
     newWeekly[role][dayIdx] = count;
     onChange({ ...value, weekly: newWeekly });
   };
 
   const updateGroups = (groupId: string, dayIdx: number, count: number) => {
     const newGroups = { ...groupsConfig };
-    if (!newGroups[groupId]) newGroups[groupId] = [0, 0, 0, 0, 0, 0, 0];
+    newGroups[groupId] = newGroups[groupId] ? [...newGroups[groupId]] : [0, 0, 0, 0, 0, 0, 0];
     newGroups[groupId][dayIdx] = count;
     onChange({ ...value, groups: newGroups });
   };
@@ -320,7 +321,7 @@ function StaffingSection({ value, onChange, existingRoles, groups, isDesktop }: 
                       onPress={() => updateWeekly(role, idx, Math.max(0, (counts as number[])[idx] - 1))}
                       activeOpacity={0.7}
                     >
-                      <Ionicons name="remove" size={12} color={theme.colors.text} />
+                      <Ionicons name="remove" size={16} color={theme.colors.text} />
                     </TouchableOpacity>
                     <Text style={s.dayCount}>{(counts as number[])[idx]}</Text>
                     <TouchableOpacity
@@ -328,7 +329,7 @@ function StaffingSection({ value, onChange, existingRoles, groups, isDesktop }: 
                       onPress={() => updateWeekly(role, idx, (counts as number[])[idx] + 1)}
                       activeOpacity={0.7}
                     >
-                      <Ionicons name="add" size={12} color={theme.colors.text} />
+                      <Ionicons name="add" size={16} color={theme.colors.text} />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -362,7 +363,7 @@ function StaffingSection({ value, onChange, existingRoles, groups, isDesktop }: 
                         onPress={() => updateGroups(groupId, idx, Math.max(0, (counts as number[])[idx] - 1))}
                         activeOpacity={0.7}
                       >
-                        <Ionicons name="remove" size={12} color={theme.colors.text} />
+                        <Ionicons name="remove" size={16} color={theme.colors.text} />
                       </TouchableOpacity>
                       <Text style={s.dayCount}>{(counts as number[])[idx]}</Text>
                       <TouchableOpacity
@@ -370,7 +371,7 @@ function StaffingSection({ value, onChange, existingRoles, groups, isDesktop }: 
                         onPress={() => updateGroups(groupId, idx, (counts as number[])[idx] + 1)}
                         activeOpacity={0.7}
                       >
-                        <Ionicons name="add" size={12} color={theme.colors.text} />
+                        <Ionicons name="add" size={16} color={theme.colors.text} />
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -410,7 +411,7 @@ function StaffingSection({ value, onChange, existingRoles, groups, isDesktop }: 
                       onPress={() => setExceptionCounts((prev) => ({ ...prev, [role]: Math.max(0, (prev[role] || 0) - 1) }))}
                       activeOpacity={0.7}
                     >
-                      <Ionicons name="remove" size={12} color={theme.colors.text} />
+                      <Ionicons name="remove" size={16} color={theme.colors.text} />
                     </TouchableOpacity>
                     <Text style={s.exceptionCountValue}>{exceptionCounts[role] || 0}</Text>
                     <TouchableOpacity
@@ -418,7 +419,7 @@ function StaffingSection({ value, onChange, existingRoles, groups, isDesktop }: 
                       onPress={() => setExceptionCounts((prev) => ({ ...prev, [role]: (prev[role] || 0) + 1 }))}
                       activeOpacity={0.7}
                     >
-                      <Ionicons name="add" size={12} color={theme.colors.text} />
+                      <Ionicons name="add" size={16} color={theme.colors.text} />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -1116,12 +1117,29 @@ const s = StyleSheet.create({
   roleRow: { backgroundColor: theme.colors.card, borderRadius: 10, padding: 12, gap: 12 },
   roleHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   roleName: { fontSize: 14, fontWeight: '700', color: theme.colors.text },
-  daysGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  dayCell: { width: 48, alignItems: 'center', gap: 4 },
-  dayLabel: { fontSize: 11, fontWeight: '600', color: theme.colors.textMuted, textTransform: 'uppercase' },
-  dayControls: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  dayBtn: { width: 24, height: 24, borderRadius: 6, backgroundColor: theme.colors.surface, alignItems: 'center', justifyContent: 'center' },
-  dayCount: { fontSize: 13, fontWeight: '700', color: theme.colors.text, minWidth: 20, textAlign: 'center' },
+  daysGrid: { flexDirection: 'column', gap: 6 },
+  dayCell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: theme.colors.surface,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  dayLabel: { fontSize: 12, fontWeight: '700', color: theme.colors.text, textTransform: 'uppercase' },
+  dayControls: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  dayBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: theme.colors.card,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayCount: { fontSize: 15, fontWeight: '700', color: theme.colors.text, minWidth: 22, textAlign: 'center' },
   exceptionRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 8 },
   dateInput: { flex: 1, borderWidth: 1.5, borderColor: theme.colors.border, borderRadius: 8, padding: 8, fontSize: 13, color: theme.colors.text, backgroundColor: theme.colors.card },
   exceptionCounts: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
