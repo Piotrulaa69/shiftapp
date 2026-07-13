@@ -1471,9 +1471,52 @@ export async function getRestaurantSettings(restaurantId: string): Promise<Resta
   return { ...DEFAULT_SETTINGS, ...data } as RestaurantSettings;
 }
 
+// Columns guaranteed to exist since migration 043. Used as a safe fallback if
+// the full upsert fails because an extended column hasn't been migrated yet
+// (065). This way min_staffing + core rules still save immediately.
+const CORE_SETTINGS_COLUMNS = [
+  'min_staffing',
+  'availability_contract_all_available',
+  'availability_freelance_all_available',
+  'availability_require_unavailability_reason',
+  'availability_require_manager_approval',
+  'availability_freelance_self_report',
+  'availability_freelance_no_approval',
+  'max_consecutive_days',
+  'min_rest_day_after',
+  'min_hours_between_shifts',
+  'max_hours_weekly',
+  'max_hours_monthly',
+  'prevent_opening_closing',
+  'ai_priority_full_staffing',
+  'ai_priority_preferences',
+  'ai_priority_equal_hours',
+  'ai_priority_fixed_shifts',
+  'ai_priority_min_hours',
+] as const;
+
 export async function upsertRestaurantSettings(restaurantId: string, settings: Partial<RestaurantSettings>): Promise<boolean> {
-  const { error } = await supabase.from('restaurant_settings').upsert({ restaurant_id: restaurantId, ...settings, updated_at: new Date().toISOString() }, { onConflict: 'restaurant_id' });
-  return !error;
+  const nowIso = new Date().toISOString();
+  const full = { restaurant_id: restaurantId, ...settings, updated_at: nowIso };
+  const { error } = await supabase
+    .from('restaurant_settings')
+    .upsert(full, { onConflict: 'restaurant_id' });
+
+  if (!error) return true;
+
+  // Full payload failed — very likely an un-migrated column (e.g. ai_notes).
+  // Retry with only the columns known to exist, so core settings still persist.
+  console.warn('upsertRestaurantSettings full save failed, retrying core columns:', error.message);
+  const safe: Record<string, unknown> = { restaurant_id: restaurantId, updated_at: nowIso };
+  for (const key of CORE_SETTINGS_COLUMNS) {
+    if (key in settings) safe[key] = (settings as Record<string, unknown>)[key];
+  }
+  const { error: retryErr } = await supabase
+    .from('restaurant_settings')
+    .upsert(safe, { onConflict: 'restaurant_id' });
+
+  if (retryErr) { console.error('upsertRestaurantSettings retry failed:', retryErr.message); return false; }
+  return true;
 }
 
 // ─── Shift Types ──────────────────────────────────────────────────────────────

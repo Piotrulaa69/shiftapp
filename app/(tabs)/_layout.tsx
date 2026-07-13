@@ -485,11 +485,20 @@ const supportBannerStyles = StyleSheet.create({
   exitText: { fontSize: 12, fontWeight: '700', color: '#fff' },
 });
 
+// Routes inside (tabs) that only owners/managers may open. `href: null` merely
+// hides them from the nav — it does NOT stop an employee from reaching them by
+// editing the URL, so we hard-guard them here (defense: RLS must also protect data).
+const ADMIN_ONLY_ROUTES = [
+  'admin', 'work-hub', 'reports', 'team', 'team-full',
+  'schedule-ai', 'time-tracking', 'documents-ai', 'subscription', 'settings',
+];
+
 export default function TabLayout() {
   const { isAuthenticated, isOwner, isManager, isSuperAdmin, isImpersonating, isLoading } = useAuth();
   const showAdmin = isOwner || isManager;
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
+  const pathname = usePathname();
 
   if (isLoading) {
     return (
@@ -500,6 +509,12 @@ export default function TabLayout() {
   }
   if (!isAuthenticated) return <Redirect href="/login" />;
   if (isSuperAdmin && !isImpersonating) return <Redirect href={'/super-admin' as any} />;
+
+  // Block employees from opening management screens via direct URL.
+  const currentSegment = (pathname.split('?')[0].split('/').filter(Boolean).pop() || '').toLowerCase();
+  if (!showAdmin && ADMIN_ONLY_ROUTES.includes(currentSegment)) {
+    return <Redirect href={'/(tabs)/dashboard' as any} />;
+  }
 
   if (isDesktop) {
     return (
