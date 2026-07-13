@@ -2,11 +2,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator, Alert, Clipboard, Modal, Platform, Pressable, ScrollView,
+    ActivityIndicator, Clipboard, Modal, Platform, Pressable, ScrollView,
     StyleSheet, Text, TextInput, TouchableOpacity,
     useWindowDimensions, View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { showAlert, showConfirm } from '../../utils/alert';
 import { useAuth } from '../../context/AuthContext';
 import { getAllReferrals, markReferralDiscountApplied, type Referral } from '../../lib/referral';
 import {
@@ -263,7 +264,7 @@ export default function SuperAdminDashboard() {
               <View style={[s.logoIcon, { marginBottom: 12 }]}><Ionicons name="checkmark" size={24} color="#fff" /></View>
               <Text style={s.codeModalTitle}>Restauracja utworzona!</Text>
               <Text style={s.codeModalSub}>Wyślij klientowi poniższy kod zaproszenia właściciela (ważny 7 dni):</Text>
-              <TouchableOpacity style={s.codeBox} onPress={() => Alert.alert('Kod zaproszenia', createdCode, [{text: 'OK'}])} activeOpacity={0.7}>
+              <TouchableOpacity style={s.codeBox} onPress={() => showAlert('Kod zaproszenia', createdCode)} activeOpacity={0.7}>
                 <Text style={s.codeText}>{createdCode}</Text>
                 <Ionicons name="copy-outline" size={18} color="#7C3AED" />
               </TouchableOpacity>
@@ -478,22 +479,20 @@ function RestaurantsTab({ restaurants, search, setSearch, onAdd, onSelectRestaur
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const handleDelete = (r: RestaurantWithStats) => {
-    Alert.alert(
+    showConfirm(
       'Usuń restaurację',
       `Na pewno usunąć "${r.name}"?\n\nZostanie usunięta restauracja, wszyscy pracownicy, zadania, zmiany i dane. Tej operacji nie można cofnąć.`,
-      [
-        { text: 'Anuluj', style: 'cancel' },
-        { text: 'Usuń permanentnie', style: 'destructive', onPress: async () => {
-          setDeletingId(r.id);
-          const result = await deleteRestaurant(r.id);
-          setDeletingId(null);
-          if (result.success) {
-            onRefresh();
-          } else {
-            Alert.alert('Błąd', result.error ?? 'Nie udało się usunąć restauracji.');
-          }
-        }},
-      ]
+      async () => {
+        setDeletingId(r.id);
+        const result = await deleteRestaurant(r.id);
+        setDeletingId(null);
+        if (result.success) {
+          onRefresh();
+        } else {
+          showAlert('Błąd', result.error ?? 'Nie udało się usunąć restauracji.');
+        }
+      },
+      'Usuń permanentnie',
     );
   };
 
@@ -599,12 +598,12 @@ function SubscriptionsTab({ subscriptions, overview, restaurants, onRefresh }: a
       setEditSub(null);
       onRefresh();
     } else {
-      Alert.alert('Błąd', 'Nie udało się zapisać subskrypcji. Sprawdź połączenie i spróbuj ponownie.');
+      showAlert('Błąd', 'Nie udało się zapisać subskrypcji. Sprawdź połączenie i spróbuj ponownie.');
     }
   };
 
   const handleNewSave = async () => {
-    if (!newRestaurantId) { Alert.alert('Błąd', 'Wybierz restaurację'); return; }
+    if (!newRestaurantId) { showAlert('Błąd', 'Wybierz restaurację'); return; }
     setNewSaving(true);
     const restaurant = allRestaurantsForNew.find(r => r.id === newRestaurantId);
     const ok = await upsertSubscription({
@@ -630,7 +629,7 @@ function SubscriptionsTab({ subscriptions, overview, restaurants, onRefresh }: a
       setRestaurantSearch('');
       onRefresh();
     } else {
-      Alert.alert('Błąd', 'Nie udało się nadać subskrypcji. Spróbuj ponownie.');
+      showAlert('Błąd', 'Nie udało się nadać subskrypcji. Spróbuj ponownie.');
     }
   };
 
@@ -1110,12 +1109,12 @@ function RestaurantDetailModal({ visible, restaurant, subscription, onClose, onR
       onClose();
       router.replace('/(tabs)/dashboard' as any);
     } else {
-      Alert.alert('Błąd', 'Nie udało się wejść w tryb wsparcia dla tej restauracji.');
+      showAlert('Błąd', 'Nie udało się wejść w tryb wsparcia dla tej restauracji.');
     }
   };
 
   const handleSaveEdit = async () => {
-    if (!editName.trim()) { Alert.alert('Błąd', 'Nazwa restauracji nie może być pusta.'); return; }
+    if (!editName.trim()) { showAlert('Błąd', 'Nazwa restauracji nie może być pusta.'); return; }
     setEditSaving(true);
     const result = await updateRestaurant(restaurant.id, {
       name: editName.trim(),
@@ -1126,77 +1125,73 @@ function RestaurantDetailModal({ visible, restaurant, subscription, onClose, onR
     if (result.success) {
       setEditing(false);
       onRefresh();
-      Alert.alert('Gotowe', 'Dane restauracji zostały zaktualizowane.');
+      showAlert('Gotowe', 'Dane restauracji zostały zaktualizowane.');
     } else {
-      Alert.alert('Błąd', result.error ?? 'Nie udało się zapisać zmian.');
+      showAlert('Błąd', result.error ?? 'Nie udało się zapisać zmian.');
     }
   };
 
   const handleMarkPaid = async () => {
     setActionLoading('paid');
-    const ok = await markSubscriptionPaid(restaurant.id);
+    const res = await markSubscriptionPaid(restaurant.id);
     setActionLoading(null);
-    if (ok) {
+    if (res.success) {
       onRefresh();
-      Alert.alert('Gotowe', 'Subskrypcja oznaczona jako opłacona (aktywna).');
+      showAlert('Gotowe', 'Subskrypcja oznaczona jako opłacona (aktywna).');
     } else {
-      Alert.alert('Błąd', 'Nie udało się zaktualizować subskrypcji.');
+      showAlert('Błąd', res.error ?? 'Nie udało się zaktualizować subskrypcji.');
     }
   };
 
   const handleExtendTrial = async () => {
     setActionLoading('trial');
-    const ok = await extendTrial(restaurant.id, 30);
+    const res = await extendTrial(restaurant.id, 30);
     setActionLoading(null);
-    if (ok) {
+    if (res.success) {
       onRefresh();
-      Alert.alert('Gotowe', 'Trial przedłużony o 30 dni.');
+      showAlert('Gotowe', 'Trial przedłużony o 30 dni.');
     } else {
-      Alert.alert('Błąd', 'Nie udało się przedłużyć trialu.');
+      showAlert('Błąd', res.error ?? 'Nie udało się przedłużyć trialu.');
     }
   };
 
   const handleToggleAccounts = () => {
     const willDisable = accountsEnabled;
-    Alert.alert(
+    showConfirm(
       willDisable ? 'Wyłącz konta' : 'Włącz konta',
       willDisable
         ? 'Wyłączyć dostęp pracownikom tej restauracji?'
         : 'Przywrócić dostęp pracownikom tej restauracji?',
-      [
-        { text: 'Anuluj', style: 'cancel' },
-        {
-          text: willDisable ? 'Wyłącz' : 'Włącz',
-          style: willDisable ? 'destructive' : 'default',
-          onPress: async () => {
-            setActionLoading('accounts');
-            const ok = await disableRestaurantAccounts(restaurant.id, willDisable);
-            setActionLoading(null);
-            if (ok) {
-              setAccountsEnabled(!willDisable);
-              Alert.alert('Gotowe', willDisable
-                ? 'Dostęp pracowników został wyłączony.'
-                : 'Dostęp pracowników został przywrócony.');
-            } else {
-              Alert.alert('Błąd', 'Nie udało się zmienić dostępu kont.');
-            }
-          },
-        },
-      ]
+      async () => {
+        setActionLoading('accounts');
+        const ok = await disableRestaurantAccounts(restaurant.id, willDisable);
+        setActionLoading(null);
+        if (ok) {
+          setAccountsEnabled(!willDisable);
+          showAlert('Gotowe', willDisable
+            ? 'Dostęp pracowników został wyłączony.'
+            : 'Dostęp pracowników został przywrócony.');
+        } else {
+          showAlert('Błąd', 'Nie udało się zmienić dostępu kont.');
+        }
+      },
+      willDisable ? 'Wyłącz' : 'Włącz',
     );
   };
 
   const handleDelete = () => {
-    Alert.alert('Usuń restaurację', `Na pewno usunąć "${restaurant.name}"?\n\nZostanie usunięta restauracja, wszyscy pracownicy i wszystkie dane. Tej operacji nie można cofnąć.`, [
-      { text: 'Anuluj', style: 'cancel' },
-      { text: 'Usuń permanentnie', style: 'destructive', onPress: async () => {
+    showConfirm(
+      'Usuń restaurację',
+      `Na pewno usunąć "${restaurant.name}"?\n\nZostanie usunięta restauracja, wszyscy pracownicy i wszystkie dane. Tej operacji nie można cofnąć.`,
+      async () => {
         setActionLoading('delete');
         const result = await deleteRestaurant(restaurant.id);
         setActionLoading(null);
         if (result.success) { onClose(); onRefresh(); }
-        else Alert.alert('Błąd', result.error ?? 'Nie udało się usunąć restauracji.');
-      }},
-    ]);
+        else showAlert('Błąd', result.error ?? 'Nie udało się usunąć restauracji.');
+      },
+      'Usuń permanentnie',
+    );
   };
 
   return (
@@ -1315,7 +1310,7 @@ function RestaurantDetailModal({ visible, restaurant, subscription, onClose, onR
                       activeOpacity={copyable ? 0.6 : 1}
                       onPress={copyable ? () => {
                         Clipboard.setString(value);
-                        Alert.alert('Skopiowano', value);
+                        showAlert('Skopiowano', value);
                       } : undefined}
                     >
                       <View style={[s.settingIcon, { backgroundColor: color + '18' }]}>
@@ -1452,7 +1447,7 @@ function SettingsTab({ promoCodes, onRefresh, userId }: { promoCodes: PromoCode[
   };
 
   const handleCreatePromo = async () => {
-    if (!promoCode.trim()) { Alert.alert('Błąd', 'Wpisz kod'); return; }
+    if (!promoCode.trim()) { showAlert('Błąd', 'Wpisz kod'); return; }
     setLoading(true);
     const today = new Date().toISOString().split('T')[0];
     const result = await createPromoCode(
@@ -1469,7 +1464,7 @@ function SettingsTab({ promoCodes, onRefresh, userId }: { promoCodes: PromoCode[
       setPromoCode(''); setPromoDiscount('10'); setPromoMaxUses(''); setPromoValidUntil('');
       onRefresh();
     } else {
-      Alert.alert('Błąd', 'Nie udało się utworzyć kodu');
+      showAlert('Błąd', 'Nie udało się utworzyć kodu');
     }
   };
 

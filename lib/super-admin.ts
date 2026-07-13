@@ -457,57 +457,34 @@ export async function disableRestaurantAccounts(restaurantId: string, disabled: 
   return true;
 }
 
-export async function markSubscriptionPaid(restaurantId: string): Promise<boolean> {
-  // Use SECURITY DEFINER RPC to bypass RLS reliably
+export async function markSubscriptionPaid(restaurantId: string): Promise<{ success: boolean; error?: string }> {
+  // SECURITY DEFINER RPC — the only reliable path (a direct write is silently
+  // blocked by RLS for the super-admin). Surface the real reason on failure
+  // instead of masking it with a fallback write that also can't persist.
   const { data: result, error: rpcError } = await supabase.rpc('super_admin_mark_paid', {
     p_restaurant_id: restaurantId,
   });
-  if (!rpcError && (result as any)?.success) return true;
-  // Fallback: direct upsert
-  const today = new Date().toISOString().split('T')[0];
-  const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const { data: existing } = await supabase.from('subscriptions').select('id').eq('restaurant_id', restaurantId).maybeSingle();
-  let error: any;
-  if (existing?.id) {
-    ({ error } = await supabase.from('subscriptions')
-      .update({ status: 'active', last_payment_date: today, next_payment_date: nextMonth })
-      .eq('id', existing.id));
-  } else {
-    ({ error } = await supabase.from('subscriptions').insert({
-      restaurant_id: restaurantId, plan: 'basic', status: 'active', billing_period: 'monthly',
-      amount: 99.00, currency: 'PLN', last_payment_date: today, next_payment_date: nextMonth,
-    }));
+  if (rpcError) {
+    console.error('markSubscriptionPaid rpc error:', rpcError);
+    return { success: false, error: `RPC: ${rpcError.message} (uruchom APPLY_ALL_PENDING.sql w bazie)` };
   }
-  if (error) { console.error('markSubscriptionPaid', error); return false; }
-  return true;
+  const r = result as any;
+  if (r?.success) return { success: true };
+  return { success: false, error: r?.error ?? 'Operacja nie powiodła się.' };
 }
 
-export async function extendTrial(restaurantId: string, days = 30): Promise<boolean> {
-  // SECURITY DEFINER RPC first — bypasses RLS reliably (direct write is
-  // silently blocked by RLS for the super-admin, so it must go through the RPC).
+export async function extendTrial(restaurantId: string, days = 30): Promise<{ success: boolean; error?: string }> {
   const { data: result, error: rpcError } = await supabase.rpc('super_admin_extend_trial', {
     p_restaurant_id: restaurantId,
     p_days: days,
   });
-  if (!rpcError && (result as any)?.success) return true;
-  if (!rpcError && (result as any)?.error) console.error('extendTrial rpc:', (result as any).error);
-
-  // Fallback: direct write (only works if RLS policies allow it)
-  const newTrialEnd = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const { data: existing } = await supabase.from('subscriptions').select('id').eq('restaurant_id', restaurantId).maybeSingle();
-  let error: any;
-  if (existing?.id) {
-    ({ error } = await supabase.from('subscriptions')
-      .update({ status: 'trial', trial_ends_at: newTrialEnd })
-      .eq('id', existing.id));
-  } else {
-    ({ error } = await supabase.from('subscriptions').insert({
-      restaurant_id: restaurantId, plan: 'basic', status: 'trial', billing_period: 'monthly',
-      amount: 99.00, currency: 'PLN', trial_ends_at: newTrialEnd,
-    }));
+  if (rpcError) {
+    console.error('extendTrial rpc error:', rpcError);
+    return { success: false, error: `RPC: ${rpcError.message} (uruchom APPLY_ALL_PENDING.sql w bazie)` };
   }
-  if (error) { console.error('extendTrial', error); return false; }
-  return true;
+  const r = result as any;
+  if (r?.success) return { success: true };
+  return { success: false, error: r?.error ?? 'Operacja nie powiodła się.' };
 }
 
 export async function getSubscriptionsOverview(): Promise<{
