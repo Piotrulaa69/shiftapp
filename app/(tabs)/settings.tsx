@@ -670,6 +670,11 @@ export default function SettingsScreen() {
                 groups={groups}
                 isDesktop={isDesktop}
               />
+              <TouchableOpacity style={[s.saveBtn, rsSaving && { opacity: 0.6 }]} onPress={saveSettings} disabled={rsSaving} activeOpacity={0.85}>
+                {rsSaving ? <ActivityIndicator color={theme.colors.white} /> : rsSaved
+                  ? <><Ionicons name="checkmark" size={18} color={theme.colors.white} /><Text style={s.saveBtnText}>Zapisano obsadę</Text></>
+                  : <><Ionicons name="save-outline" size={18} color={theme.colors.white} /><Text style={s.saveBtnText}>Zapisz minimalną obsadę</Text></>}
+              </TouchableOpacity>
             </SectionCard>
 
             {/* ── 3. Subskrypcja ── */}
