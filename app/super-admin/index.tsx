@@ -15,6 +15,7 @@ import {
     createRestaurantWithInvite,
     deleteRestaurant,
     disableRestaurantAccounts,
+    getRestaurantAccountsEnabled,
     getAllRestaurantsWithStats,
     getPromoCodes,
     getRecentActivity,
@@ -1093,7 +1094,7 @@ function RestaurantDetailModal({ visible, restaurant, subscription, onClose, onR
       setEditAddress(restaurant.address ?? '');
       setEditPhone(restaurant.phone ?? '');
       setEditing(false);
-      setAccountsEnabled(true);
+      getRestaurantAccountsEnabled(restaurant.id).then(setAccountsEnabled);
     }
   }, [restaurant]);
 

@@ -457,6 +457,20 @@ export async function disableRestaurantAccounts(restaurantId: string, disabled: 
   return true;
 }
 
+// Returns true if the restaurant's non-owner staff currently have access
+// (at least one active non-owner account, or no staff yet). Used so the
+// super-admin toggle reflects the real DB state instead of defaulting to "on".
+export async function getRestaurantAccountsEnabled(restaurantId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('is_active')
+    .eq('restaurant_id', restaurantId)
+    .eq('is_super_admin', false)
+    .neq('role', 'owner');
+  if (error || !data || data.length === 0) return true;
+  return data.some((p: any) => p.is_active === true);
+}
+
 export async function markSubscriptionPaid(restaurantId: string): Promise<{ success: boolean; error?: string }> {
   // SECURITY DEFINER RPC — the only reliable path (a direct write is silently
   // blocked by RLS for the super-admin). Surface the real reason on failure

@@ -114,6 +114,12 @@ async function loadUserData(userId: string, email: string): Promise<{ user: Auth
   const isSuperAdmin = (profile as DbProfile).is_super_admin === true;
   const restaurantId = (profile as DbProfile).restaurant_id;
 
+  // Enforce account deactivation — a disabled (non super-admin) account has no access.
+  if (!isSuperAdmin && (profile as DbProfile).is_active === false) {
+    await supabase.auth.signOut();
+    return null;
+  }
+
   // Jeśli super admin nie ma restauracji, to jest OK
   if (isSuperAdmin && !restaurantId) {
     return {
@@ -195,6 +201,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         msg.includes('network')                                               ? 'Błąd połączenia z internetem. Sprawdź sieć i spróbuj ponownie.' :
         error.message ?? 'Wystąpił błąd. Spróbuj ponownie.';
       return { success: false, error: friendly };
+    }
+    // Block deactivated accounts with a clear message (loadUserData enforces this too).
+    const { data: udata } = await supabase.auth.getUser();
+    const uid = udata?.user?.id;
+    if (uid) {
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('is_active, is_super_admin')
+        .eq('id', uid)
+        .single();
+      if (prof && (prof as any).is_super_admin !== true && (prof as any).is_active === false) {
+        await supabase.auth.signOut();
+        setIsLoading(false);
+        return { success: false, error: 'Twoje konto zostało wyłączone. Skontaktuj się z przełożonym.' };
+      }
     }
     // onAuthStateChange will handle setHasSession + loadUserData
     return { success: true };
