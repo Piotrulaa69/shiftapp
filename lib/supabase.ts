@@ -27,6 +27,19 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   },
 });
 
+// Isolated client that never persists its session — used to sign up a NEW user
+// (e.g. admin creating an employee account) without replacing the admin's own
+// session on the main client.
+export function createIsolatedClient() {
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
 // ─── Database types ───────────────────────────────────────────────────────────
 
 export type DbRestaurant = {

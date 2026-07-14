@@ -5,7 +5,7 @@ import { ActivityIndicator, Clipboard, Modal, Platform, ScrollView, StyleSheet, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
-import { ensureDefaultLeaveTypes, generateInvitation, getEmployeeLeaveQuota, getEmployeeLeaveTypeSettings, getEmployees, getPointsForEmployee, setEmployeeLeaveQuota, setEmployeeLeaveTypeSetting, updateEmployeeLoginSettings, updateEmployeeRole, updateProfile } from '../../lib/db';
+import { createEmployeeAccount, ensureDefaultLeaveTypes, generateInvitation, generatePassword, getEmployeeLeaveQuota, getEmployeeLeaveTypeSettings, getEmployees, getPointsForEmployee, setEmployeeLeaveQuota, setEmployeeLeaveTypeSetting, updateEmployeeLoginSettings, updateEmployeeRole, updateProfile, type EmployeeCredentials } from '../../lib/db';
 import type { DbLeaveType, DbProfile } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
@@ -30,6 +30,20 @@ export default function TeamFullScreen() {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [copiedMsg, setCopiedMsg] = useState(false);
   const [generating, setGenerating] = useState(false);
+
+  // Manual "create employee account" flow
+  const [showCreate, setShowCreate] = useState(false);
+  const [ceFirstName, setCeFirstName] = useState('');
+  const [ceLastName, setCeLastName] = useState('');
+  const [ceEmail, setCeEmail] = useState('');
+  const [cePassword, setCePassword] = useState('');
+  const [ceJobTitle, setCeJobTitle] = useState('Kelner');
+  const [ceRole, setCeRole] = useState<'employee' | 'manager'>('employee');
+  const [cePhone, setCePhone] = useState('');
+  const [ceShowPw, setCeShowPw] = useState(true);
+  const [ceSaving, setCeSaving] = useState(false);
+  const [ceResult, setCeResult] = useState<EmployeeCredentials | null>(null);
+  const [ceCopied, setCeCopied] = useState<string | null>(null);
 
   // Employee edit state
   const [selectedEmp, setSelectedEmp] = useState<DbProfile | null>(null);
@@ -180,6 +194,46 @@ export default function TeamFullScreen() {
     setTimeout(() => setCopiedMsg(false), 2000);
   };
 
+  // ── Manual employee creation ──
+  const openCreateModal = () => {
+    setCeFirstName(''); setCeLastName(''); setCeEmail('');
+    setCePassword(generatePassword()); setCeJobTitle('Kelner');
+    setCeRole('employee'); setCePhone(''); setCeShowPw(true);
+    setCeResult(null); setCeCopied(null);
+    setShowCreate(true);
+  };
+
+  const buildCredMessage = (c: EmployeeCredentials) =>
+    `Cześć ${c.firstName}! Twoje konto w ShiftApp${restaurant?.name ? ` (${restaurant.name})` : ''} jest gotowe.\n\n` +
+    `Zaloguj się tutaj:\n${c.loginUrl}\n\n` +
+    `Login (e-mail): ${c.email}\nHasło: ${c.password}\n\n` +
+    `Po zalogowaniu możesz zmienić hasło w swoim profilu.`;
+
+  const copyCred = async (key: string, text: string) => {
+    await Clipboard.setString(text);
+    setCeCopied(key);
+    setTimeout(() => setCeCopied(null), 2000);
+  };
+
+  const submitCreate = async () => {
+    const email = ceEmail.trim().toLowerCase();
+    if (!ceFirstName.trim() || !ceLastName.trim()) { showAlert('Brak danych', 'Podaj imię i nazwisko pracownika.'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showAlert('Nieprawidłowy e-mail', 'Podaj poprawny adres e-mail.'); return; }
+    if (cePassword.trim().length < 6) { showAlert('Za krótkie hasło', 'Hasło musi mieć minimum 6 znaków.'); return; }
+    setCeSaving(true);
+    const res = await createEmployeeAccount({
+      firstName: ceFirstName, lastName: ceLastName, email,
+      password: cePassword.trim(), jobTitle: ceJobTitle, role: ceRole, phone: cePhone,
+    });
+    setCeSaving(false);
+    if (res.success && res.credentials) {
+      setCeResult(res.credentials);
+      load();
+    } else {
+      showAlert('Nie udało się utworzyć konta', res.error ?? 'Spróbuj ponownie.');
+    }
+  };
+
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={[s.header, isDesktop && s.headerDesktop]}>
@@ -212,10 +266,16 @@ export default function TeamFullScreen() {
             </View>
 
             {canManage && (
-              <TouchableOpacity style={s.inviteBtn} onPress={() => setShowInvite(true)} activeOpacity={0.85}>
-                <Ionicons name="person-add" size={20} color={theme.colors.white} />
-                <Text style={s.inviteBtnText}>Zaproś nowego pracownika</Text>
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity style={s.inviteBtn} onPress={openCreateModal} activeOpacity={0.85}>
+                  <Ionicons name="person-add" size={20} color={theme.colors.white} />
+                  <Text style={s.inviteBtnText}>Dodaj pracownika ręcznie</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.inviteSecondaryBtn} onPress={() => setShowInvite(true)} activeOpacity={0.85}>
+                  <Ionicons name="key-outline" size={18} color={theme.colors.primary} />
+                  <Text style={s.inviteSecondaryText}>Zaproś kodem aktywacyjnym</Text>
+                </TouchableOpacity>
+              </>
             )}
 
             {/* Last generated code */}
@@ -293,6 +353,127 @@ export default function TeamFullScreen() {
                 </TouchableOpacity>
               </View>
             )}
+
+            {/* Create employee modal */}
+            <Modal visible={showCreate} animationType="slide" transparent onRequestClose={() => setShowCreate(false)}>
+              <View style={cm.overlay}>
+                <View style={[cm.sheet, isDesktop && cm.sheetDesktop]}>
+                  <View style={cm.headerRow}>
+                    <Text style={cm.title}>{ceResult ? 'Konto utworzone' : 'Nowy pracownik'}</Text>
+                    <TouchableOpacity onPress={() => setShowCreate(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="close" size={24} color={theme.colors.textMuted} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }} keyboardShouldPersistTaps="handled">
+                    {!ceResult ? (
+                      <>
+                        <Text style={cm.sub}>Utwórz konto z gotowym loginem i hasłem, a następnie prześlij dane pracownikowi.</Text>
+
+                        <View style={cm.row2}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={cm.label}>Imię *</Text>
+                            <TextInput style={cm.input} value={ceFirstName} onChangeText={setCeFirstName} placeholder="Jan" placeholderTextColor={theme.colors.textMuted} />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={cm.label}>Nazwisko *</Text>
+                            <TextInput style={cm.input} value={ceLastName} onChangeText={setCeLastName} placeholder="Kowalski" placeholderTextColor={theme.colors.textMuted} />
+                          </View>
+                        </View>
+
+                        <Text style={cm.label}>Login (e-mail) *</Text>
+                        <TextInput style={cm.input} value={ceEmail} onChangeText={setCeEmail} placeholder="jan@restauracja.pl" placeholderTextColor={theme.colors.textMuted} keyboardType="email-address" autoCapitalize="none" />
+
+                        <Text style={cm.label}>Hasło *</Text>
+                        <View style={cm.pwRow}>
+                          <TextInput style={[cm.input, { flex: 1, marginBottom: 0 }]} value={cePassword} onChangeText={setCePassword} placeholder="min. 6 znaków" placeholderTextColor={theme.colors.textMuted} secureTextEntry={!ceShowPw} autoCapitalize="none" />
+                          <TouchableOpacity style={cm.pwBtn} onPress={() => setCeShowPw((v) => !v)}>
+                            <Ionicons name={ceShowPw ? 'eye-off-outline' : 'eye-outline'} size={18} color={theme.colors.textSecondary} />
+                          </TouchableOpacity>
+                          <TouchableOpacity style={cm.pwBtn} onPress={() => setCePassword(generatePassword())}>
+                            <Ionicons name="refresh" size={18} color={theme.colors.primary} />
+                          </TouchableOpacity>
+                        </View>
+
+                        <Text style={cm.label}>Stanowisko</Text>
+                        <View style={cm.chips}>
+                          {JOB_OPTIONS.map((j) => (
+                            <TouchableOpacity key={j} style={[cm.chip, ceJobTitle === j && cm.chipActive]} onPress={() => setCeJobTitle(j)} activeOpacity={0.7}>
+                              <Text style={[cm.chipText, ceJobTitle === j && cm.chipTextActive]}>{j}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+
+                        {isOwner && (
+                          <>
+                            <Text style={cm.label}>Rola w systemie</Text>
+                            <View style={cm.roleRow}>
+                              <TouchableOpacity style={[cm.roleBtn, ceRole === 'employee' && cm.roleBtnActive]} onPress={() => setCeRole('employee')} activeOpacity={0.8}>
+                                <Text style={[cm.roleText, ceRole === 'employee' && cm.roleTextActive]}>Pracownik</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity style={[cm.roleBtn, ceRole === 'manager' && cm.roleBtnActive]} onPress={() => setCeRole('manager')} activeOpacity={0.8}>
+                                <Text style={[cm.roleText, ceRole === 'manager' && cm.roleTextActive]}>Manager</Text>
+                              </TouchableOpacity>
+                            </View>
+                          </>
+                        )}
+
+                        <Text style={cm.label}>Telefon <Text style={{ color: theme.colors.textMuted, fontWeight: '400' }}>(opcjonalnie)</Text></Text>
+                        <TextInput style={cm.input} value={cePhone} onChangeText={setCePhone} placeholder="np. 500 600 700" placeholderTextColor={theme.colors.textMuted} keyboardType="phone-pad" />
+
+                        <TouchableOpacity style={[cm.primaryBtn, ceSaving && { opacity: 0.6 }]} onPress={submitCreate} disabled={ceSaving} activeOpacity={0.85}>
+                          {ceSaving ? <ActivityIndicator color={theme.colors.white} /> : (
+                            <><Ionicons name="checkmark-circle" size={18} color={theme.colors.white} /><Text style={cm.primaryBtnText}>Utwórz konto</Text></>
+                          )}
+                        </TouchableOpacity>
+                      </>
+                    ) : (
+                      <>
+                        <View style={cm.successBox}>
+                          <View style={cm.successIcon}><Ionicons name="checkmark" size={28} color="#fff" /></View>
+                          <Text style={cm.successName}>{ceResult.firstName} {ceResult.lastName}</Text>
+                          <Text style={cm.successJob}>{ceResult.jobTitle}</Text>
+                        </View>
+
+                        <Text style={cm.sub}>Prześlij te dane pracownikowi. Może zmienić hasło po zalogowaniu.</Text>
+
+                        {[
+                          { key: 'link', label: 'Link do logowania', value: ceResult.loginUrl, icon: 'link-outline' as const },
+                          { key: 'email', label: 'Login (e-mail)', value: ceResult.email, icon: 'mail-outline' as const },
+                          { key: 'pass', label: 'Hasło', value: ceResult.password, icon: 'key-outline' as const },
+                        ].map((f) => (
+                          <View key={f.key} style={cm.credRow}>
+                            <Ionicons name={f.icon} size={18} color={theme.colors.textSecondary} />
+                            <View style={{ flex: 1 }}>
+                              <Text style={cm.credLabel}>{f.label}</Text>
+                              <Text style={cm.credValue} selectable numberOfLines={1}>{f.value}</Text>
+                            </View>
+                            <TouchableOpacity style={cm.credCopy} onPress={() => copyCred(f.key, f.value)}>
+                              <Ionicons name={ceCopied === f.key ? 'checkmark' : 'copy-outline'} size={16} color={ceCopied === f.key ? theme.colors.green : theme.colors.primary} />
+                            </TouchableOpacity>
+                          </View>
+                        ))}
+
+                        <TouchableOpacity style={cm.primaryBtn} onPress={() => copyCred('all', buildCredMessage(ceResult))} activeOpacity={0.85}>
+                          <Ionicons name={ceCopied === 'all' ? 'checkmark' : 'copy'} size={18} color={theme.colors.white} />
+                          <Text style={cm.primaryBtnText}>{ceCopied === 'all' ? 'Skopiowano wiadomość!' : 'Skopiuj całą wiadomość'}</Text>
+                        </TouchableOpacity>
+
+                        <View style={cm.row2}>
+                          <TouchableOpacity style={[cm.secondaryBtn, { flex: 1 }]} onPress={openCreateModal} activeOpacity={0.8}>
+                            <Ionicons name="add" size={18} color={theme.colors.primary} />
+                            <Text style={cm.secondaryText}>Dodaj kolejnego</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={[cm.secondaryBtn, { flex: 1 }]} onPress={() => setShowCreate(false)} activeOpacity={0.8}>
+                            <Text style={cm.secondaryText}>Zamknij</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </>
+                    )}
+                  </ScrollView>
+                </View>
+              </View>
+            </Modal>
 
             {/* Employee list */}
             <View style={s.section}>
@@ -644,8 +825,10 @@ const s = StyleSheet.create({
   statCard: { flex: 1, backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.md, padding: 16, alignItems: 'center', ...theme.shadows.card },
   statNum: { fontSize: 24, fontWeight: '700', color: theme.colors.text },
   statLabel: { fontSize: 12, color: theme.colors.textMuted, marginTop: 4 },
-  inviteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.md, paddingVertical: 14, marginBottom: 16 },
+  inviteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.md, paddingVertical: 14, marginBottom: 10 },
   inviteBtnText: { fontSize: 15, fontWeight: '700', color: theme.colors.white },
+  inviteSecondaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.borderRadius.md, paddingVertical: 13, marginBottom: 16 },
+  inviteSecondaryText: { fontSize: 14, fontWeight: '700', color: theme.colors.primary },
   codeCard: { backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.md, padding: 16, marginBottom: 16, ...theme.shadows.card },
   codeCardTop: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   codeCardTitle: { fontSize: 13, fontWeight: '600', color: theme.colors.text },
@@ -715,4 +898,40 @@ const mStyles = StyleSheet.create({
   fieldValue: { fontSize: 14, color: theme.colors.text },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   statusText: { fontSize: 12, fontWeight: '700' },
+});
+
+const cm = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  sheet: { width: '100%', maxWidth: 460, maxHeight: '88%', backgroundColor: theme.colors.card, borderRadius: 20, padding: 20 },
+  sheetDesktop: { maxWidth: 480 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  title: { fontSize: 18, fontWeight: '800', color: theme.colors.text },
+  sub: { fontSize: 13, color: theme.colors.textSecondary, lineHeight: 18, marginBottom: 14 },
+  row2: { flexDirection: 'row', gap: 10 },
+  label: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary, marginTop: 12, marginBottom: 6 },
+  input: { backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.md, height: 46, paddingHorizontal: 14, fontSize: 15, color: theme.colors.text, borderWidth: 1, borderColor: theme.colors.border, marginBottom: 2 },
+  pwRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pwBtn: { width: 46, height: 46, borderRadius: theme.borderRadius.md, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border },
+  chipActive: { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primary },
+  chipText: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary },
+  chipTextActive: { color: theme.colors.primary },
+  roleRow: { flexDirection: 'row', gap: 8 },
+  roleBtn: { flex: 1, paddingVertical: 11, borderRadius: theme.borderRadius.md, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center' },
+  roleBtnActive: { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primary },
+  roleText: { fontSize: 14, fontWeight: '700', color: theme.colors.textSecondary },
+  roleTextActive: { color: theme.colors.primary },
+  primaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.md, height: 50, marginTop: 20 },
+  primaryBtnText: { fontSize: 15, fontWeight: '700', color: theme.colors.white },
+  secondaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.borderRadius.md, height: 46, marginTop: 10 },
+  secondaryText: { fontSize: 14, fontWeight: '700', color: theme.colors.primary },
+  successBox: { alignItems: 'center', gap: 4, paddingVertical: 10 },
+  successIcon: { width: 60, height: 60, borderRadius: 30, backgroundColor: theme.colors.green, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  successName: { fontSize: 18, fontWeight: '800', color: theme.colors.text },
+  successJob: { fontSize: 14, color: theme.colors.textSecondary },
+  credRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.md, borderWidth: 1, borderColor: theme.colors.border, padding: 12, marginTop: 10 },
+  credLabel: { fontSize: 11, fontWeight: '600', color: theme.colors.textMuted, textTransform: 'uppercase' },
+  credValue: { fontSize: 15, fontWeight: '700', color: theme.colors.text },
+  credCopy: { width: 36, height: 36, borderRadius: 10, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center' },
 });

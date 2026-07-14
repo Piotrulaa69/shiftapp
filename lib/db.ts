@@ -14,7 +14,7 @@ import type {
     DbTopic, DbTopicProgress,
     DbTraining
 } from './supabase';
-import { supabase } from './supabase';
+import { createIsolatedClient, supabase } from './supabase';
 
 // Re-export types for screens
 export type { DbProfile as AppUser, DbCourse, DbCourseProgress, DbLesson, DbTopic, DbTopicProgress, DbInvitation as Invitation, DbRestaurant as Restaurant, DbShift as Shift, DbTask as Task, DbTraining as Training };
@@ -327,6 +327,108 @@ export async function findInvitationByCode(code: string): Promise<DbInvitation |
 export async function deleteInvitation(id: string): Promise<boolean> {
   const { error } = await supabase.from('invitations').delete().eq('id', id);
   return !error;
+}
+
+// ─── Manual employee creation (admin creates a full login account) ─────────────
+
+export type NewEmployeeInput = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  jobTitle: string;
+  role: 'employee' | 'manager';
+  phone?: string;
+};
+
+export type EmployeeCredentials = {
+  firstName: string;
+  lastName: string;
+  jobTitle: string;
+  email: string;
+  password: string;
+  loginUrl: string;
+};
+
+export type NewEmployeeResult = {
+  success: boolean;
+  error?: string;
+  credentials?: EmployeeCredentials;
+};
+
+const LOGIN_URL = 'https://app.shiftapp.pl/login';
+
+// Generate a readable but reasonably strong password (no ambiguous chars).
+export function generatePassword(length = 10): string {
+  const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let out = '';
+  for (let i = 0; i < length; i++) {
+    out += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return out;
+}
+
+/**
+ * Create a brand-new employee account from the admin side:
+ *  1. Sign the user up on an ISOLATED client (admin's own session stays intact).
+ *  2. Create the profile via SECURITY DEFINER RPC (admin authorises, uses their restaurant).
+ * Returns the credentials to hand to the employee (email + password + login link).
+ */
+export async function createEmployeeAccount(input: NewEmployeeInput): Promise<NewEmployeeResult> {
+  const email = input.email.trim().toLowerCase();
+  const password = input.password;
+
+  if (!email || !password) return { success: false, error: 'E-mail i hasło są wymagane.' };
+  if (password.length < 6) return { success: false, error: 'Hasło musi mieć minimum 6 znaków.' };
+
+  // 1. Create the auth user without touching the admin's session.
+  const iso = createIsolatedClient();
+  const { data: authData, error: authError } = await iso.auth.signUp({ email, password });
+
+  if (authError || !authData?.user) {
+    const msg = (authError?.message ?? '').toLowerCase();
+    const friendly =
+      msg.includes('already') || msg.includes('exists') || msg.includes('registered') ? 'Konto z tym e-mailem już istnieje.' :
+      msg.includes('password')                                                         ? 'Hasło musi mieć minimum 6 znaków.' :
+      msg.includes('invalid') && msg.includes('email')                                 ? 'Nieprawidłowy adres e-mail.' :
+      msg.includes('rate')                                                             ? 'Za dużo prób. Odczekaj chwilę i spróbuj ponownie.' :
+      authError?.message ?? 'Nie udało się utworzyć konta.';
+    return { success: false, error: friendly };
+  }
+
+  const userId = authData.user.id;
+  // Discard the isolated session right away (only affects the isolated client).
+  try { await iso.auth.signOut(); } catch { /* ignore */ }
+
+  // 2. Create the profile through the RPC (admin's main-client session authorises it).
+  const { data: rpcData, error: rpcError } = await supabase.rpc('admin_create_employee', {
+    p_user_id:    userId,
+    p_first_name: input.firstName.trim(),
+    p_last_name:  input.lastName.trim(),
+    p_job_title:  input.jobTitle.trim(),
+    p_role:       input.role,
+    p_phone:      input.phone?.trim() || null,
+  });
+
+  if (rpcError) {
+    return { success: false, error: `Konto utworzone, ale profil nie: ${rpcError.message} (uruchom migrację 067)` };
+  }
+  const r = rpcData as any;
+  if (!r?.success) {
+    return { success: false, error: r?.error ?? 'Nie udało się utworzyć profilu pracownika.' };
+  }
+
+  return {
+    success: true,
+    credentials: {
+      firstName: input.firstName.trim(),
+      lastName:  input.lastName.trim(),
+      jobTitle:  input.jobTitle.trim(),
+      email,
+      password,
+      loginUrl: LOGIN_URL,
+    },
+  };
 }
 
 // ─── Restaurant ───────────────────────────────────────────────────────────────
