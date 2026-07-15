@@ -7,10 +7,13 @@ import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
 import type { RestaurantSettings, ShiftTypeRow } from '../../lib/db';
 import { deleteShiftType, getEmployeeGroups, getEmployees, getRestaurantSettings, getShiftTypes, updateRestaurant, upsertRestaurantSettings, upsertShiftType } from '../../lib/db';
+import LanguagePicker from '../../components/LanguagePicker';
+import { useI18n } from '../../lib/i18n';
 import type { DbEmployeeGroup } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
 const SECTION_ICONS: Record<string, { icon: string; color: string; bg: string }> = {
+  language: { icon: 'language-outline', color: '#0D9488', bg: '#F0FDFA' },
   restaurant: { icon: 'restaurant-outline', color: '#2563EB', bg: '#EFF6FF' },
   staffing: { icon: 'people-outline', color: '#0891B2', bg: '#ECFEFF' },
   availability: { icon: 'calendar-outline', color: '#7C3AED', bg: '#F5F3FF' },
@@ -490,6 +493,7 @@ export default function SettingsScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
   const { showAlert } = useAlert();
+  const { t: tI18n } = useI18n();
   const rid = user?.restaurantId ?? '';
   const canManage = isOwner || isManager;
 
@@ -633,6 +637,10 @@ export default function SettingsScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[s.content, isDesktop && s.contentDesktop]}>
 
         {/* ── 1. Dane restauracji ── */}
+        <SectionCard {...SECTION_ICONS.language} title={tI18n('Język aplikacji')}>
+          <LanguagePicker />
+        </SectionCard>
+
         <SectionCard {...SECTION_ICONS.restaurant} title="Dane restauracji">
           <Text style={s.label}>Nazwa restauracji</Text>
           <TextInput style={s.input} value={rName} onChangeText={setRName} placeholder="Nazwa restauracji" placeholderTextColor={theme.colors.textMuted} />

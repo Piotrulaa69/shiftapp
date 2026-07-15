@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
+import { useI18n } from '../../lib/i18n';
 import { theme } from '../../styles/theme';
 
 type HubTile = {
@@ -122,6 +123,7 @@ const MANAGEMENT_TILES: HubTile[] = [
 
 export default function WorkHubScreen() {
   const router = useRouter();
+  const { t } = useI18n();
   const { user, isOwner, isManager } = useAuth();
   const isAdmin = isOwner || isManager;
 
@@ -146,7 +148,7 @@ export default function WorkHubScreen() {
           <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={s.headerCenter}>
-          <Text style={s.headerTitle}>Zarządzanie</Text>
+          <Text style={s.headerTitle}>{t('Zarządzanie')}</Text>
           <Text style={s.headerSub}>{user?.name}</Text>
         </View>
         <View style={{ width: 36 }} />
@@ -165,8 +167,8 @@ export default function WorkHubScreen() {
               <View style={[s.tileIconBox, { backgroundColor: tile.iconBg }]}>
                 <Ionicons name={tile.icon as any} size={28} color={tile.iconColor} />
               </View>
-              <Text style={s.tileTitle}>{tile.title}</Text>
-              <Text style={s.tileSub} numberOfLines={2}>{tile.subtitle}</Text>
+              <Text style={s.tileTitle}>{t(tile.title)}</Text>
+              <Text style={s.tileSub} numberOfLines={2}>{t(tile.subtitle)}</Text>
               <View style={s.tileArrow}>
                 <Ionicons name="chevron-forward" size={16} color={tile.iconColor} />
               </View>
@@ -178,7 +180,7 @@ export default function WorkHubScreen() {
         <View style={s.infoStrip}>
           <Ionicons name="information-circle-outline" size={16} color={theme.colors.textMuted} />
           <Text style={s.infoText}>
-            Tutaj zarządzasz wszystkim co dotyczy Twojej restauracji - zespół, grafik, urlopy i raporty.
+            {t('Tutaj zarządzasz wszystkim co dotyczy Twojej restauracji - zespół, grafik, urlopy i raporty.')}
           </Text>
         </View>
 

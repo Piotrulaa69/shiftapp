@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TrialBanner from '../../components/TrialBanner';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationsContext';
+import { useI18n } from '../../lib/i18n';
 import { theme } from '../../styles/theme';
 
 const TAB_CONFIG: Record<string, { label: string; icon: string }> = {
@@ -104,6 +105,7 @@ const bellStyles = StyleSheet.create({
 function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
+  const { t } = useI18n();
   const { logout, isOwner, isManager, restaurant, user } = useAuth();
   const NAV_ITEMS = (isOwner || isManager)
     ? [...NAV_ITEMS_BASE, ...NAV_ITEMS_ADMIN_EXTRA, ...NAV_ITEMS_CHAT]
@@ -138,7 +140,7 @@ function Sidebar() {
                 />
               </View>
               <Text style={[sideStyles.navLabel, isActive && sideStyles.navLabelActive]}>
-                {cfg.label}
+                {t(cfg.label)}
               </Text>
             </TouchableOpacity>
           );
@@ -160,11 +162,11 @@ function Sidebar() {
         </View>
         <TouchableOpacity style={sideStyles.sideActionBtn} onPress={() => router.push('/help' as any)} activeOpacity={0.7}>
           <Ionicons name="headset-outline" size={18} color={theme.colors.primary} />
-          <Text style={sideStyles.sideActionText}>Pomoc i kontakt</Text>
+          <Text style={sideStyles.sideActionText}>{t('Pomoc i kontakt')}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={sideStyles.logoutBtn} onPress={logout} activeOpacity={0.7}>
           <Ionicons name="log-out-outline" size={18} color={theme.colors.textMuted} />
-          <Text style={sideStyles.logoutText}>Wyloguj</Text>
+          <Text style={sideStyles.logoutText}>{t('Wyloguj')}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -253,6 +255,7 @@ type FabAction = { icon: string; label: string; onPress: () => void };
 function MobileTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { t } = useI18n();
   const { isOwner, isManager } = useAuth();
   const isAdmin = isOwner || isManager;
   const [fabOpen, setFabOpen] = useState(false);
@@ -285,7 +288,7 @@ function MobileTabBar({ state, navigation }: BottomTabBarProps) {
           size={22}
           color={color}
         />
-        <Text style={[tabStyles.label, { color }]}>{cfg.label}</Text>
+        <Text style={[tabStyles.label, { color }]}>{t(cfg.label)}</Text>
       </TouchableOpacity>
     );
   };
@@ -331,7 +334,7 @@ function MobileTabBar({ state, navigation }: BottomTabBarProps) {
                 <View style={fabMenuStyles.menuIcon}>
                   <Ionicons name={a.icon as any} size={20} color={theme.colors.primary} />
                 </View>
-                <Text style={fabMenuStyles.menuLabel}>{a.label}</Text>
+                <Text style={fabMenuStyles.menuLabel}>{t(a.label)}</Text>
               </TouchableOpacity>
             ))}
           </View>

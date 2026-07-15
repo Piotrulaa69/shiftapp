@@ -3,9 +3,11 @@ import { AlertProvider } from '../context/AlertContext';
 import { AuthProvider } from '../context/AuthContext';
 import { NotificationsProvider } from '../context/NotificationsContext';
 import { SubscriptionProvider } from '../context/SubscriptionContext';
+import { I18nProvider } from '../lib/i18n';
 
 export default function RootLayout() {
   return (
+    <I18nProvider>
     <AlertProvider>
       <AuthProvider>
         <SubscriptionProvider>
@@ -33,5 +35,6 @@ export default function RootLayout() {
         </SubscriptionProvider>
       </AuthProvider>
     </AlertProvider>
+    </I18nProvider>
   );
 }

@@ -17,14 +17,17 @@ import {
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import LanguagePicker from '../components/LanguagePicker';
 import { useAuth } from '../context/AuthContext';
 import { getNotifPrefs, upsertNotifPrefs } from '../lib/db';
+import { useI18n } from '../lib/i18n';
 import { getReferralStats, type ReferralStats } from '../lib/referral';
 import { supabase } from '../lib/supabase';
 import { theme } from '../styles/theme';
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { t } = useI18n();
   const { user, restaurant, logout } = useAuth();
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -198,30 +201,36 @@ export default function ProfileScreen() {
 
         {/* Info Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Dane osobowe</Text>
-          <InfoRow icon="person-outline" label="Imię i nazwisko" value={user.name} />
+          <Text style={styles.sectionTitle}>{t('Dane osobowe')}</Text>
+          <InfoRow icon="person-outline" label={t('Imię i nazwisko')} value={user.name} />
           <InfoRow icon="mail-outline" label="E-mail" value={user.email} />
-          <InfoRow icon="briefcase-outline" label="Stanowisko" value={user.jobTitle} />
-          <InfoRow icon="business-outline" label="Firma" value={restaurant?.name ?? '—'} />
+          <InfoRow icon="briefcase-outline" label={t('Stanowisko')} value={user.jobTitle} />
+          <InfoRow icon="business-outline" label={t('Firma')} value={restaurant?.name ?? '—'} />
         </View>
 
         {/* Personal data Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Dane kadrowe</Text>
-          <ActionRow icon="id-card-outline" label="Uzupełnij / edytuj dane osobowe" onPress={() => setShowPersonalModal(true)} />
+          <Text style={styles.sectionTitle}>{t('Dane kadrowe')}</Text>
+          <ActionRow icon="id-card-outline" label={t('Uzupełnij / edytuj dane osobowe')} onPress={() => setShowPersonalModal(true)} />
         </View>
 
         {/* Documents Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Dokumenty</Text>
-          <ActionRow icon="document-text-outline" label="Moje dokumenty" onPress={() => router.push('/documents' as any)} />
+          <Text style={styles.sectionTitle}>{t('Dokumenty')}</Text>
+          <ActionRow icon="document-text-outline" label={t('Moje dokumenty')} onPress={() => router.push('/documents' as any)} />
+        </View>
+
+        {/* Language Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t('Język aplikacji')}</Text>
+          <LanguagePicker />
         </View>
 
         {/* Settings Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Ustawienia konta</Text>
-          <ActionRow icon="lock-closed-outline" label="Zmień hasło" onPress={() => setShowPasswordModal(true)} />
-          <ActionRow icon="notifications-outline" label="Preferencje powiadomień" onPress={() => setShowNotifModal(true)} />
+          <Text style={styles.sectionTitle}>{t('Ustawienia konta')}</Text>
+          <ActionRow icon="lock-closed-outline" label={t('Zmień hasło')} onPress={() => setShowPasswordModal(true)} />
+          <ActionRow icon="notifications-outline" label={t('Preferencje powiadomień')} onPress={() => setShowNotifModal(true)} />
         </View>
 
         {/* Referral section — owners only */}
@@ -279,7 +288,7 @@ export default function ProfileScreen() {
 
         {/* Help & Contact */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Pomoc i kontakt</Text>
+          <Text style={styles.sectionTitle}>{t('Pomoc i kontakt')}</Text>
           <ActionRow icon="call-outline" label="+48 884 184 352" onPress={() => Linking.openURL('tel:+48884184352')} />
           <ActionRow icon="help-circle-outline" label="Centrum pomocy" onPress={() => router.push('/help' as any)} />
           <ActionRow icon="chatbubble-ellipses-outline" label="Napisz do nas" onPress={() => router.push('/help' as any)} />
@@ -302,7 +311,7 @@ export default function ProfileScreen() {
         <View style={mStyles.overlay}>
           <View style={[mStyles.sheet, { maxHeight: '92%' }]}>
             <View style={mStyles.mHeader}>
-              <Text style={mStyles.mTitle}>Dane kadrowe</Text>
+              <Text style={mStyles.mTitle}>{t('Dane kadrowe')}</Text>
               <TouchableOpacity onPress={() => setShowPersonalModal(false)}>
                 <Ionicons name="close" size={24} color={theme.colors.text} />
               </TouchableOpacity>
@@ -332,7 +341,7 @@ export default function ProfileScreen() {
               <Text style={mStyles.label}>Nazwa banku *</Text>
               <TextInput style={mStyles.input} value={pBank} onChangeText={setPBank} placeholder="np. PKO BP" placeholderTextColor={theme.colors.textMuted} />
 
-              <Text style={pStyles.sect}>Dane kadrowe</Text>
+              <Text style={pStyles.sect}>{t('Dane kadrowe')}</Text>
               <Text style={mStyles.label}>Oddział NFZ *</Text>
               <TextInput style={mStyles.input} value={pNfz} onChangeText={setPNfz} placeholder="np. Mazowiecki" placeholderTextColor={theme.colors.textMuted} />
               <Text style={mStyles.label}>Urząd skarbowy *</Text>

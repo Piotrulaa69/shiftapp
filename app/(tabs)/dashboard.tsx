@@ -23,6 +23,7 @@ import {
     getTasks,
     getTodayShift,
 } from '../../lib/db';
+import { useI18n } from '../../lib/i18n';
 import type { DbClockIn, DbShift, DbTask } from '../../lib/supabase';
 import { exitRestaurantMode } from '../../lib/super-admin';
 import { theme } from '../../styles/theme';
@@ -53,6 +54,7 @@ const CLOCK_STATUS_LABELS: Record<ClockStatus, { label: string; color: string; b
 
 export default function DashboardScreen() {
   const { logout, user, restaurant } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
@@ -142,7 +144,7 @@ export default function DashboardScreen() {
         <View style={styles.header}>
           <View style={[styles.headerInner, isDesktop && styles.headerInnerDesktop]}>
             <View style={styles.headerLeft}>
-              <Text style={styles.greeting}>Cześć, {user?.firstName}! 👋</Text>
+              <Text style={styles.greeting}>{t('Cześć')}, {user?.firstName}! 👋</Text>
               <Text style={styles.greetingSub}>{restaurant?.name}</Text>
               {user?.isSuperAdmin && (
                 <TouchableOpacity
@@ -154,7 +156,7 @@ export default function DashboardScreen() {
                   }}
                   style={{ marginTop: 4 }}
                 >
-                  <Text style={{ fontSize: 12, color: '#DC2626', fontWeight: '500' }}>Wyjdź z trybu zarządzania</Text>
+                  <Text style={{ fontSize: 12, color: '#DC2626', fontWeight: '500' }}>{t('Wyjdź z trybu zarządzania')}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -221,11 +223,11 @@ export default function DashboardScreen() {
           <View style={[styles.section, styles.sectionDesktop]}>
             <View style={styles.sectionHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text style={styles.sectionTitle}>Do zatwierdzenia</Text>
+                <Text style={styles.sectionTitle}>{t('Do zatwierdzenia')}</Text>
                 <View style={styles.badge}><Text style={styles.badgeText}>{totalPending}</Text></View>
               </View>
               <TouchableOpacity onPress={() => router.push('/(tabs)/admin' as any)}>
-                <Text style={styles.seeAll}>Wszystkie</Text>
+                <Text style={styles.seeAll}>{t('Wszystkie')}</Text>
               </TouchableOpacity>
             </View>
             {pendingCounts.leaveRequests > 0 && (
@@ -233,7 +235,7 @@ export default function DashboardScreen() {
                 <View style={[styles.pendingIcon, { backgroundColor: '#FFF7ED' }]}>
                   <Ionicons name="umbrella-outline" size={16} color="#F97316" />
                 </View>
-                <Text style={styles.pendingLabel}>Wnioski urlopowe</Text>
+                <Text style={styles.pendingLabel}>{t('Wnioski urlopowe')}</Text>
                 <View style={styles.pendingBadge}><Text style={styles.pendingBadgeText}>{pendingCounts.leaveRequests}</Text></View>
                 <Ionicons name="chevron-forward" size={14} color={theme.colors.textMuted} />
               </TouchableOpacity>
@@ -243,7 +245,7 @@ export default function DashboardScreen() {
                 <View style={[styles.pendingIcon, { backgroundColor: '#F0FDF4' }]}>
                   <Ionicons name="checkmark-circle-outline" size={16} color="#16A34A" />
                 </View>
-                <Text style={styles.pendingLabel}>Zadania do zatwierdzenia</Text>
+                <Text style={styles.pendingLabel}>{t('Zadania do zatwierdzenia')}</Text>
                 <View style={[styles.pendingBadge, { backgroundColor: '#F0FDF4' }]}><Text style={[styles.pendingBadgeText, { color: '#16A34A' }]}>{pendingCounts.taskApprovals}</Text></View>
                 <Ionicons name="chevron-forward" size={14} color={theme.colors.textMuted} />
               </TouchableOpacity>
@@ -253,7 +255,7 @@ export default function DashboardScreen() {
                 <View style={[styles.pendingIcon, { backgroundColor: '#EFF6FF' }]}>
                   <Ionicons name="swap-horizontal-outline" size={16} color={theme.colors.primary} />
                 </View>
-                <Text style={styles.pendingLabel}>Wymiany zmian</Text>
+                <Text style={styles.pendingLabel}>{t('Wymiany zmian')}</Text>
                 <View style={[styles.pendingBadge, { backgroundColor: '#EFF6FF' }]}><Text style={[styles.pendingBadgeText, { color: theme.colors.primary }]}>{pendingCounts.swaps}</Text></View>
                 <Ionicons name="chevron-forward" size={14} color={theme.colors.textMuted} />
               </TouchableOpacity>
@@ -263,7 +265,7 @@ export default function DashboardScreen() {
                 <View style={[styles.pendingIcon, { backgroundColor: '#FEF2F2' }]}>
                   <Ionicons name="alert-circle-outline" size={16} color="#EF4444" />
                 </View>
-                <Text style={styles.pendingLabel}>Nieobecności</Text>
+                <Text style={styles.pendingLabel}>{t('Nieobecności')}</Text>
                 <View style={[styles.pendingBadge, { backgroundColor: '#FEF2F2' }]}><Text style={[styles.pendingBadgeText, { color: '#EF4444' }]}>{pendingCounts.absences}</Text></View>
                 <Ionicons name="chevron-forward" size={14} color={theme.colors.textMuted} />
               </TouchableOpacity>
@@ -275,13 +277,13 @@ export default function DashboardScreen() {
         {isManager && (
           <View style={[styles.section, styles.sectionDesktop]}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Dziś — {todayShifts.length} zmian{todayShifts.length === 1 ? 'a' : todayShifts.length < 5 ? 'y' : ''}</Text>
+              <Text style={styles.sectionTitle}>{t('Dziś')} — {todayShifts.length} {todayShifts.length === 1 ? t('zmiana') : todayShifts.length < 5 ? t('zmiany') : t('zmian')}</Text>
               <TouchableOpacity onPress={() => router.push('/(tabs)/schedule' as any)}>
-                <Text style={styles.seeAll}>Grafik</Text>
+                <Text style={styles.seeAll}>{t('Grafik')}</Text>
               </TouchableOpacity>
             </View>
             {todayShifts.length === 0 ? (
-              <Text style={{ fontSize: 13, color: theme.colors.textMuted, textAlign: 'center', paddingVertical: 12 }}>Brak zmian na dziś</Text>
+              <Text style={{ fontSize: 13, color: theme.colors.textMuted, textAlign: 'center', paddingVertical: 12 }}>{t('Brak zmian na dziś')}</Text>
             ) : (
               todayShifts.slice(0, 6).map((shift) => {
                 const cs = getClockStatus(shift, todayClockIns);
@@ -302,7 +304,7 @@ export default function DashboardScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.todayName}>{shift.employee_name}</Text>
                       <Text style={styles.todayTime}>{shift.start_time} – {shift.end_time}</Text>
-                      {elapsedText && <Text style={styles.todayElapsed}>Przepracowano: {elapsedText}</Text>}
+                      {elapsedText && <Text style={styles.todayElapsed}>{t('Przepracowano')}: {elapsedText}</Text>}
                     </View>
                     <View style={[styles.csChip, { backgroundColor: csInfo.bg }]}>
                       <Text style={[styles.csChipText, { color: csInfo.color }]}>{csInfo.label}</Text>
@@ -320,22 +322,22 @@ export default function DashboardScreen() {
             <View style={styles.shiftCardAccent} />
             <View style={styles.shiftCardBody}>
               <View style={styles.shiftCardTop}>
-                <Text style={styles.shiftCardTitle}>Dzisiejsza zmiana</Text>
+                <Text style={styles.shiftCardTitle}>{t('Dzisiejsza zmiana')}</Text>
                 {todayShift && (
                   <View style={[styles.statusBadge, activeCI ? { backgroundColor: '#EFF6FF' } : undefined]}>
                     <Text style={[styles.statusBadgeText, activeCI ? { color: theme.colors.primary } : undefined]}>
-                      {activeCI ? 'W trakcie' : todayShift.status === 'potwierdzona' ? 'Potwierdzona' : 'Zaplanowana'}
+                      {activeCI ? t('W trakcie') : todayShift.status === 'potwierdzona' ? t('Potwierdzona') : t('Zaplanowana')}
                     </Text>
                   </View>
                 )}
               </View>
               <View style={styles.shiftDetails}>
                 <View style={styles.shiftDetailItem}>
-                  <Text style={styles.shiftDetailLabel}>Godziny</Text>
+                  <Text style={styles.shiftDetailLabel}>{t('Godziny')}</Text>
                   <Text style={styles.shiftTime}>{todayShift?.start_time ?? '--:--'} – {todayShift?.end_time ?? '--:--'}</Text>
                 </View>
                 <View style={styles.shiftDetailItem}>
-                  <Text style={styles.shiftDetailLabel}>Lokalizacja</Text>
+                  <Text style={styles.shiftDetailLabel}>{t('Lokalizacja')}</Text>
                   <Text style={styles.shiftLocation}>{todayShift?.location ?? 'Brak'}</Text>
                 </View>
               </View>
@@ -359,13 +361,13 @@ export default function DashboardScreen() {
         {/* Tasks */}
         <View style={[styles.section, styles.sectionDesktop]}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Zadania na dziś</Text>
+            <Text style={styles.sectionTitle}>{t('Zadania na dziś')}</Text>
             <TouchableOpacity onPress={() => router.push('/(tabs)/tasks')}>
-              <Text style={styles.seeAll}>Zobacz wszystkie</Text>
+              <Text style={styles.seeAll}>{t('Zobacz wszystkie')}</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.progressRow}>
-            <Text style={styles.progressLabel}>Postęp</Text>
+            <Text style={styles.progressLabel}>{t('Postęp')}</Text>
             <Text style={styles.progressCount}>{completedTasks.length}/{tasks.length}</Text>
           </View>
           <View style={styles.progressBg}>
@@ -379,7 +381,7 @@ export default function DashboardScreen() {
               <Text style={[styles.taskTitle, (task.completed || task.status === 'zatwierdzone') && styles.taskTitleDone]}>{task.title}</Text>
               {task.status === 'czeka_na_zatwierdzenie' && (
                 <View style={{ backgroundColor: '#FFFBEB', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
-                  <Text style={{ fontSize: 10, color: '#F59E0B', fontWeight: '600' }}>Oczekuje</Text>
+                  <Text style={{ fontSize: 10, color: '#F59E0B', fontWeight: '600' }}>{t('Oczekuje')}</Text>
                 </View>
               )}
             </View>
@@ -394,17 +396,17 @@ export default function DashboardScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text style={styles.sectionTitle}>Do zatwierdzenia</Text>
+                <Text style={styles.sectionTitle}>{t('Do zatwierdzenia')}</Text>
                 <View style={styles.badge}><Text style={styles.badgeText}>{totalPending}</Text></View>
               </View>
               <TouchableOpacity onPress={() => router.push('/(tabs)/admin' as any)}>
-                <Text style={styles.seeAll}>Wszystkie</Text>
+                <Text style={styles.seeAll}>{t('Wszystkie')}</Text>
               </TouchableOpacity>
             </View>
             {pendingCounts.leaveRequests > 0 && (
               <TouchableOpacity style={styles.pendingRow} onPress={() => router.push('/(tabs)/admin' as any)} activeOpacity={0.7}>
                 <View style={[styles.pendingIcon, { backgroundColor: '#FFF7ED' }]}><Ionicons name="umbrella-outline" size={16} color="#F97316" /></View>
-                <Text style={styles.pendingLabel}>Wnioski urlopowe</Text>
+                <Text style={styles.pendingLabel}>{t('Wnioski urlopowe')}</Text>
                 <View style={styles.pendingBadge}><Text style={styles.pendingBadgeText}>{pendingCounts.leaveRequests}</Text></View>
                 <Ionicons name="chevron-forward" size={14} color={theme.colors.textMuted} />
               </TouchableOpacity>
@@ -412,7 +414,7 @@ export default function DashboardScreen() {
             {pendingCounts.taskApprovals > 0 && (
               <TouchableOpacity style={styles.pendingRow} onPress={() => router.push('/(tabs)/tasks' as any)} activeOpacity={0.7}>
                 <View style={[styles.pendingIcon, { backgroundColor: '#F0FDF4' }]}><Ionicons name="checkmark-circle-outline" size={16} color="#16A34A" /></View>
-                <Text style={styles.pendingLabel}>Zadania do zatwierdzenia</Text>
+                <Text style={styles.pendingLabel}>{t('Zadania do zatwierdzenia')}</Text>
                 <View style={[styles.pendingBadge, { backgroundColor: '#F0FDF4' }]}><Text style={[styles.pendingBadgeText, { color: '#16A34A' }]}>{pendingCounts.taskApprovals}</Text></View>
                 <Ionicons name="chevron-forward" size={14} color={theme.colors.textMuted} />
               </TouchableOpacity>
@@ -420,7 +422,7 @@ export default function DashboardScreen() {
             {pendingCounts.swaps > 0 && (
               <TouchableOpacity style={styles.pendingRow} onPress={() => router.push('/(tabs)/admin' as any)} activeOpacity={0.7}>
                 <View style={[styles.pendingIcon, { backgroundColor: '#EFF6FF' }]}><Ionicons name="swap-horizontal-outline" size={16} color={theme.colors.primary} /></View>
-                <Text style={styles.pendingLabel}>Wymiany zmian</Text>
+                <Text style={styles.pendingLabel}>{t('Wymiany zmian')}</Text>
                 <View style={[styles.pendingBadge, { backgroundColor: '#EFF6FF' }]}><Text style={[styles.pendingBadgeText, { color: theme.colors.primary }]}>{pendingCounts.swaps}</Text></View>
                 <Ionicons name="chevron-forward" size={14} color={theme.colors.textMuted} />
               </TouchableOpacity>
@@ -428,7 +430,7 @@ export default function DashboardScreen() {
             {pendingCounts.absences > 0 && (
               <TouchableOpacity style={styles.pendingRow} onPress={() => router.push('/(tabs)/absences' as any)} activeOpacity={0.7}>
                 <View style={[styles.pendingIcon, { backgroundColor: '#FEF2F2' }]}><Ionicons name="alert-circle-outline" size={16} color="#EF4444" /></View>
-                <Text style={styles.pendingLabel}>Nieobecności</Text>
+                <Text style={styles.pendingLabel}>{t('Nieobecności')}</Text>
                 <View style={[styles.pendingBadge, { backgroundColor: '#FEF2F2' }]}><Text style={[styles.pendingBadgeText, { color: '#EF4444' }]}>{pendingCounts.absences}</Text></View>
                 <Ionicons name="chevron-forward" size={14} color={theme.colors.textMuted} />
               </TouchableOpacity>
@@ -440,13 +442,13 @@ export default function DashboardScreen() {
         {isManager && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Dziś — {todayShifts.length} zmian{todayShifts.length === 1 ? 'a' : todayShifts.length < 5 ? 'y' : ''}</Text>
+              <Text style={styles.sectionTitle}>{t('Dziś')} — {todayShifts.length} {todayShifts.length === 1 ? t('zmiana') : todayShifts.length < 5 ? t('zmiany') : t('zmian')}</Text>
               <TouchableOpacity onPress={() => router.push('/(tabs)/schedule' as any)}>
-                <Text style={styles.seeAll}>Grafik</Text>
+                <Text style={styles.seeAll}>{t('Grafik')}</Text>
               </TouchableOpacity>
             </View>
             {todayShifts.length === 0 ? (
-              <Text style={{ fontSize: 13, color: theme.colors.textMuted, textAlign: 'center', paddingVertical: 12 }}>Brak zmian na dziś</Text>
+              <Text style={{ fontSize: 13, color: theme.colors.textMuted, textAlign: 'center', paddingVertical: 12 }}>{t('Brak zmian na dziś')}</Text>
             ) : (
               todayShifts.slice(0, 6).map((shift) => {
                 const cs = getClockStatus(shift, todayClockIns);
@@ -465,7 +467,7 @@ export default function DashboardScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.todayName}>{shift.employee_name}</Text>
                       <Text style={styles.todayTime}>{shift.start_time} – {shift.end_time}</Text>
-                      {elapsedText && <Text style={styles.todayElapsed}>Przepracowano: {elapsedText}</Text>}
+                      {elapsedText && <Text style={styles.todayElapsed}>{t('Przepracowano')}: {elapsedText}</Text>}
                     </View>
                     <View style={[styles.csChip, { backgroundColor: csInfo.bg }]}>
                       <Text style={[styles.csChipText, { color: csInfo.color }]}>{csInfo.label}</Text>
@@ -483,22 +485,22 @@ export default function DashboardScreen() {
             <View style={styles.shiftCardAccent} />
             <View style={styles.shiftCardBody}>
               <View style={styles.shiftCardTop}>
-                <Text style={styles.shiftCardTitle}>Dzisiejsza zmiana</Text>
+                <Text style={styles.shiftCardTitle}>{t('Dzisiejsza zmiana')}</Text>
                 {todayShift && (
                   <View style={[styles.statusBadge, activeCI ? { backgroundColor: '#EFF6FF' } : undefined]}>
                     <Text style={[styles.statusBadgeText, activeCI ? { color: theme.colors.primary } : undefined]}>
-                      {activeCI ? 'W trakcie' : todayShift.status === 'potwierdzona' ? 'Potwierdzona' : 'Zaplanowana'}
+                      {activeCI ? t('W trakcie') : todayShift.status === 'potwierdzona' ? t('Potwierdzona') : t('Zaplanowana')}
                     </Text>
                   </View>
                 )}
               </View>
               <View style={styles.shiftDetails}>
                 <View style={styles.shiftDetailItem}>
-                  <Text style={styles.shiftDetailLabel}>Godziny</Text>
+                  <Text style={styles.shiftDetailLabel}>{t('Godziny')}</Text>
                   <Text style={styles.shiftTime}>{todayShift?.start_time ?? '--:--'} – {todayShift?.end_time ?? '--:--'}</Text>
                 </View>
                 <View style={styles.shiftDetailItem}>
-                  <Text style={styles.shiftDetailLabel}>Lokalizacja</Text>
+                  <Text style={styles.shiftDetailLabel}>{t('Lokalizacja')}</Text>
                   <Text style={styles.shiftLocation}>{todayShift?.location ?? 'Brak'}</Text>
                 </View>
               </View>
@@ -520,13 +522,13 @@ export default function DashboardScreen() {
         {/* Tasks (mobile) */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Zadania na dziś</Text>
+            <Text style={styles.sectionTitle}>{t('Zadania na dziś')}</Text>
             <TouchableOpacity onPress={() => router.push('/(tabs)/tasks')}>
-              <Text style={styles.seeAll}>Zobacz wszystkie</Text>
+              <Text style={styles.seeAll}>{t('Zobacz wszystkie')}</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.progressRow}>
-            <Text style={styles.progressLabel}>Postęp</Text>
+            <Text style={styles.progressLabel}>{t('Postęp')}</Text>
             <Text style={styles.progressCount}>{completedTasks.length}/{tasks.length}</Text>
           </View>
           <View style={styles.progressBg}>
@@ -540,7 +542,7 @@ export default function DashboardScreen() {
               <Text style={[styles.taskTitle, (task.completed || task.status === 'zatwierdzone') && styles.taskTitleDone]}>{task.title}</Text>
               {task.status === 'czeka_na_zatwierdzenie' && (
                 <View style={{ backgroundColor: '#FFFBEB', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
-                  <Text style={{ fontSize: 10, color: '#F59E0B', fontWeight: '600' }}>Oczekuje</Text>
+                  <Text style={{ fontSize: 10, color: '#F59E0B', fontWeight: '600' }}>{t('Oczekuje')}</Text>
                 </View>
               )}
             </View>
@@ -552,7 +554,7 @@ export default function DashboardScreen() {
         {!isDesktop && (
           <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
             <Ionicons name="log-out-outline" size={16} color={theme.colors.textMuted} />
-            <Text style={styles.logoutText}>Wyloguj się</Text>
+            <Text style={styles.logoutText}>{t('Wyloguj się')}</Text>
           </TouchableOpacity>
         )}
         </View>{/* end contentWrapper */}

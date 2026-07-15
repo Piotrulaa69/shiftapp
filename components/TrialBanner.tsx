@@ -2,11 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useSubscription } from '../context/SubscriptionContext';
+import { useI18n } from '../lib/i18n';
 import { theme } from '../styles/theme';
 
 export default function TrialBanner() {
   const { isOwner, isManager } = useAuth();
   const { subscription } = useSubscription();
+  const { t } = useI18n();
 
   if (!isOwner && !isManager) return null;
   if (!subscription) return null;
@@ -20,7 +22,7 @@ export default function TrialBanner() {
       <View style={[styles.banner, styles.expiredBanner]}>
         <Ionicons name="lock-closed" size={14} color="#fff" />
         <Text style={styles.expiredText}>
-          Okres próbny wygasł — skontaktuj się z nami, aby aktywować subskrypcję
+          {t('Okres próbny wygasł — skontaktuj się z nami, aby aktywować subskrypcję')}
         </Text>
       </View>
     );
@@ -35,12 +37,12 @@ export default function TrialBanner() {
         <View style={styles.left}>
           <Ionicons name="time-outline" size={14} color={isUrgent ? '#fff' : theme.colors.primary} />
           <Text style={[styles.label, isUrgent && styles.labelUrgent]}>
-            Okres próbny · Pakiet Basic
+            {t('Okres próbny')} · {t('Pakiet Basic')}
           </Text>
         </View>
         <View style={[styles.daysBadge, isUrgent ? styles.daysBadgeUrgent : styles.daysBadgeTrial]}>
           <Text style={[styles.daysText, isUrgent && styles.daysTextUrgent]}>
-            {days > 0 ? `${days} ${days === 1 ? 'dzień' : 'dni'}` : 'ostatni dzień'}
+            {days > 0 ? `${days} ${days === 1 ? t('dzień') : t('dni')}` : t('ostatni dzień')}
           </Text>
         </View>
       </View>
@@ -54,8 +56,8 @@ export default function TrialBanner() {
         <Ionicons name="alert-circle" size={14} color="#fff" />
         <Text style={styles.expiredText}>
           {subscription.status === 'overdue'
-            ? 'Subskrypcja przeterminowana — prosimy o uregulowanie płatności'
-            : 'Subskrypcja zawieszona — skontaktuj się z obsługą'}
+            ? t('Subskrypcja przeterminowana — prosimy o uregulowanie płatności')
+            : t('Subskrypcja zawieszona — skontaktuj się z obsługą')}
         </Text>
       </View>
     );
