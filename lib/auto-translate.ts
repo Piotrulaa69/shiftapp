@@ -1,20 +1,20 @@
 /**
  * auto-translate.ts — long-term, zero-maintenance UI translation (web).
  *
- * Instead of hand-written dictionaries, this watches the rendered DOM and
- * machine-translates every visible Polish string on the fly:
- *   1. localStorage cache (instant, per device)
- *   2. Supabase shared cache `ui_translations` (each unique string is
- *      translated ONCE globally, then reused by every user/device)
- *   3. Google Translate (free gtx endpoint) for strings never seen before,
- *      results saved back to both caches.
+ * v2 — performance-focused rewrite:
+ *  - The FULL shared cache (Supabase `ui_translations`) is preloaded ONCE at
+ *    init, so navigating the app never waits on database roundtrips.
+ *  - MutationObserver sweeps ONLY the mutated subtrees (not the whole
+ *    document on every click) — no jank on large screens.
+ *  - Unknown strings go to Google Translate in PARALLEL batches and are
+ *    applied IMMEDIATELY per batch, targeted at the exact nodes waiting for
+ *    them (no full re-scan).
+ *  - Results persist to localStorage + the global Supabase cache, so every
+ *    unique string (including user content: tasks, courses, announcements)
+ *    is translated once ever — for all users.
  *
- * New screens and future features translate automatically — no dictionary
- * entries, no t() wrapping required. Native apps currently keep Polish
- * (plus the curated t() dictionary); the DOM approach is web-only.
- *
- * Skips: numbers, URLs/e-mails, user input values, and anything inside an
- * element marked data-notranslate / translate="no" / .notranslate.
+ * Skips numbers, URLs/e-mails, input values, and anything inside
+ * data-notranslate / translate="no" / .notranslate.
  */
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
@@ -23,27 +23,27 @@ type Lang = 'pl' | 'en' | 'uk';
 
 let currentLang: Lang = 'pl';
 let observer: MutationObserver | null = null;
-let sweepTimer: ReturnType<typeof setTimeout> | null = null;
-let suppress = false; // guard: ignore mutations caused by our own writes
 
-const mem = new Map<string, string>();   // source -> translated (current lang)
-const outputs = new Set<string>();        // translated values (skip re-translating)
-const pending = new Set<string>();        // strings queued for translation
-let flushing = false;
+const mem = new Map<string, string>();          // source -> translated
+const outputs = new Set<string>();               // translated values (never re-translate)
+const waitingText = new Map<string, Set<Text>>();        // source -> text nodes awaiting
+const waitingPh = new Map<string, Set<Element>>();       // source -> elements awaiting placeholder
+let flushScheduled = false;
+let inFlight = 0;
+const MAX_PARALLEL = 4;
 
 const LS_KEY = (lang: string) => `shiftapp_at_${lang}`;
 
-/* ── helpers ───────────────────────────────────────────────────────── */
+/* ── filters ───────────────────────────────────────────────────────── */
 
 const HAS_LETTERS = /[a-ząęółśżźćńA-ZĄĘÓŁŚŻŹĆŃ]/;
 const LOOKS_SKIPPABLE = /^(\d[\d\s.,:%/-]*|[^\p{L}]*|https?:\/\/\S+|\S+@\S+\.\S+)$/u;
 
 function shouldTranslate(src: string): boolean {
-  const s = src.trim();
-  if (s.length < 2 || s.length > 800) return false;
-  if (!HAS_LETTERS.test(s)) return false;
-  if (LOOKS_SKIPPABLE.test(s)) return false;
-  if (outputs.has(s)) return false; // already a translation output
+  if (src.length < 2 || src.length > 800) return false;
+  if (!HAS_LETTERS.test(src)) return false;
+  if (LOOKS_SKIPPABLE.test(src)) return false;
+  if (outputs.has(src)) return false;
   return true;
 }
 
@@ -54,6 +54,8 @@ function isExcluded(el: Element | null): boolean {
   if (el.closest('[data-notranslate], [translate="no"], .notranslate')) return true;
   return false;
 }
+
+/* ── caches ────────────────────────────────────────────────────────── */
 
 function loadLocalCache(lang: string) {
   try {
@@ -74,140 +76,170 @@ function saveLocalCache() {
       mem.forEach((v, k) => { obj[k] = v; });
       localStorage.setItem(LS_KEY(currentLang), JSON.stringify(obj));
     } catch { /* ignore */ }
-  }, 800);
+  }, 500);
 }
 
-/* ── translation sources ───────────────────────────────────────────── */
-
-async function fetchFromSharedCache(batch: string[]): Promise<string[]> {
-  // Returns the strings still missing after the shared cache lookup.
+// One-shot bulk preload of the ENTIRE shared cache — after this, navigation
+// never waits on the database.
+async function preloadSharedCache(lang: Lang) {
   try {
-    const { data } = await supabase
-      .from('ui_translations')
-      .select('source, translated')
-      .eq('lang', currentLang)
-      .in('source', batch);
-    const found = new Set<string>();
-    (data ?? []).forEach((r: any) => {
-      mem.set(r.source, r.translated);
-      outputs.add(r.translated);
-      found.add(r.source);
-    });
-    if (found.size) saveLocalCache();
-    return batch.filter((s) => !found.has(s));
-  } catch {
-    return batch;
-  }
-}
-
-async function fetchFromGoogle(batch: string[]): Promise<void> {
-  // Free gtx endpoint; conservative batching to stay under URL limits.
-  const CHUNK = 15;
-  for (let i = 0; i < batch.length; i += CHUNK) {
-    const chunk = batch.slice(i, i + CHUNK);
-    const url =
-      `https://translate.googleapis.com/translate_a/t?client=gtx&sl=pl&tl=${currentLang}&format=text&` +
-      chunk.map((s) => `q=${encodeURIComponent(s)}`).join('&');
-    try {
-      const res = await fetch(url);
-      if (!res.ok) continue;
-      const json = await res.json();
-      const arr: any[] = Array.isArray(json) ? json : [];
-      const rows: { source: string; translated: string }[] = [];
-      chunk.forEach((src, idx) => {
-        const item = arr[idx];
-        const translated = typeof item === 'string' ? item : Array.isArray(item) ? String(item[0] ?? '') : '';
-        if (translated && translated !== src) {
-          mem.set(src, translated);
-          outputs.add(translated);
-          rows.push({ source: src, translated });
-        } else {
-          mem.set(src, src); // don't retry endlessly
-        }
+    const PAGE = 1000;
+    for (let from = 0; from < 20000; from += PAGE) {
+      const { data, error } = await supabase
+        .from('ui_translations')
+        .select('source, translated')
+        .eq('lang', lang)
+        .range(from, from + PAGE - 1);
+      if (error || !data?.length) break;
+      data.forEach((r: any) => {
+        if (!mem.has(r.source)) { mem.set(r.source, r.translated); outputs.add(r.translated); }
       });
-      saveLocalCache();
-      // Persist to the global shared cache (best effort; ignore failures/RLS).
-      if (rows.length) {
-        supabase
-          .from('ui_translations')
-          .upsert(rows.map((r) => ({ lang: currentLang, ...r })), { onConflict: 'lang,source', ignoreDuplicates: true })
-          .then(() => {}, () => {});
-      }
-    } catch { /* network hiccup — strings stay pending for a later sweep */ }
+      if (data.length < PAGE) break;
+    }
+    saveLocalCache();
+    resolveWaiting(Array.from(waitingText.keys()).concat(Array.from(waitingPh.keys())));
+  } catch { /* table may not exist yet — Google path still works */ }
+}
+
+/* ── applying translations to waiting nodes ────────────────────────── */
+
+function applyTextNode(node: Text, src: string, translated: string) {
+  const raw = node.nodeValue ?? '';
+  if (!raw.includes(src)) return; // node changed meanwhile
+  node.nodeValue = raw.replace(src, translated);
+  observer?.takeRecords(); // discard our own mutation records
+}
+
+function resolveWaiting(sources: string[]) {
+  for (const src of sources) {
+    const translated = mem.get(src);
+    if (translated === undefined || translated === src) {
+      if (translated === src) { waitingText.delete(src); waitingPh.delete(src); }
+      continue;
+    }
+    const nodes = waitingText.get(src);
+    if (nodes) {
+      nodes.forEach((n) => applyTextNode(n, src, translated));
+      waitingText.delete(src);
+    }
+    const els = waitingPh.get(src);
+    if (els) {
+      els.forEach((el) => { el.setAttribute('placeholder', translated); });
+      observer?.takeRecords();
+      waitingPh.delete(src);
+    }
   }
 }
 
-async function flushPending() {
-  if (flushing || pending.size === 0) return;
-  flushing = true;
+/* ── Google Translate (parallel batches, applied per batch) ────────── */
+
+async function translateChunk(chunk: string[]) {
+  const url =
+    `https://translate.googleapis.com/translate_a/t?client=gtx&sl=pl&tl=${currentLang}&format=text&` +
+    chunk.map((s) => `q=${encodeURIComponent(s)}`).join('&');
   try {
-    const batch = Array.from(pending).slice(0, 200);
-    batch.forEach((s) => pending.delete(s));
-    const missing = await fetchFromSharedCache(batch);
-    if (missing.length) await fetchFromGoogle(missing);
-    applyAll(); // apply what we've learned
-  } finally {
-    flushing = false;
-    if (pending.size > 0) setTimeout(flushPending, 400);
-  }
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(to);
+    if (!res.ok) return;
+    const json = await res.json();
+    const arr: any[] = Array.isArray(json) ? json : [];
+    const rows: { source: string; translated: string }[] = [];
+    chunk.forEach((src, idx) => {
+      const item = arr[idx];
+      const translated = typeof item === 'string' ? item : Array.isArray(item) ? String(item[0] ?? '') : '';
+      if (translated && translated !== src) {
+        mem.set(src, translated);
+        outputs.add(translated);
+        rows.push({ source: src, translated });
+      } else {
+        mem.set(src, src); // don't retry endlessly
+      }
+    });
+    resolveWaiting(chunk);   // apply IMMEDIATELY — no waiting for other batches
+    saveLocalCache();
+    if (rows.length) {
+      supabase
+        .from('ui_translations')
+        .upsert(rows.map((r) => ({ lang: currentLang, ...r })), { onConflict: 'lang,source', ignoreDuplicates: true })
+        .then(() => {}, () => {});
+    }
+  } catch { /* network hiccup — nodes stay queued; a later sweep retries */ }
 }
 
-/* ── DOM sweep & apply ─────────────────────────────────────────────── */
-
-function collectTextNodes(root: Node): Text[] {
-  const out: Text[] = [];
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode(node) {
-      if (isExcluded((node as Text).parentElement)) return NodeFilter.FILTER_REJECT;
-      return NodeFilter.FILTER_ACCEPT;
-    },
-  });
-  let n: Node | null;
-  while ((n = walker.nextNode())) out.push(n as Text);
-  return out;
+function scheduleFlush() {
+  if (flushScheduled) return;
+  flushScheduled = true;
+  setTimeout(async () => {
+    flushScheduled = false;
+    const unknown = Array.from(new Set([
+      ...waitingText.keys(),
+      ...waitingPh.keys(),
+    ])).filter((s) => !mem.has(s));
+    if (!unknown.length) return;
+    const CHUNK = 20;
+    const chunks: string[][] = [];
+    for (let i = 0; i < unknown.length; i += CHUNK) chunks.push(unknown.slice(i, i + CHUNK));
+    // Parallel with a small concurrency cap
+    const queue = [...chunks];
+    const workers = Array.from({ length: Math.min(MAX_PARALLEL, queue.length) }, async () => {
+      while (queue.length) {
+        const c = queue.shift();
+        if (c) { inFlight++; await translateChunk(c); inFlight--; }
+      }
+    });
+    await Promise.all(workers);
+    if (waitingText.size || waitingPh.size) scheduleFlush();
+  }, 40);
 }
 
-function applyToNode(node: Text) {
+/* ── sweeping (targeted — only the given subtree) ──────────────────── */
+
+function processTextNode(node: Text) {
+  if (isExcluded(node.parentElement)) return;
   const raw = node.nodeValue ?? '';
   const src = raw.trim();
   if (!src || !shouldTranslate(src)) return;
   const translated = mem.get(src);
-  if (translated === undefined) {
-    pending.add(src);
+  if (translated !== undefined) {
+    if (translated !== src) applyTextNode(node, src, translated);
     return;
   }
-  if (translated !== src) {
-    suppress = true;
-    node.nodeValue = raw.replace(src, translated);
-    suppress = false;
-  }
+  let set = waitingText.get(src);
+  if (!set) { set = new Set(); waitingText.set(src, set); }
+  set.add(node);
 }
 
-function applyPlaceholders(root: ParentNode) {
-  root.querySelectorAll('input[placeholder], textarea[placeholder]').forEach((el) => {
+function sweep(root: Node) {
+  if (root.nodeType === Node.TEXT_NODE) { processTextNode(root as Text); return; }
+  if (!(root instanceof Element) && !(root instanceof Document)) return;
+  if (root instanceof Element && isExcluded(root)) return;
+
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let n: Node | null;
+  while ((n = walker.nextNode())) processTextNode(n as Text);
+
+  const rootEl = root instanceof Document ? root.body : root;
+  if (!rootEl) return;
+  const phEls = rootEl.matches?.('input[placeholder], textarea[placeholder]')
+    ? [rootEl, ...Array.from(rootEl.querySelectorAll('input[placeholder], textarea[placeholder]'))]
+    : Array.from(rootEl.querySelectorAll('input[placeholder], textarea[placeholder]'));
+  phEls.forEach((el) => {
     if (isExcluded(el)) return;
     const src = (el.getAttribute('placeholder') ?? '').trim();
     if (!src || !shouldTranslate(src)) return;
     const translated = mem.get(src);
-    if (translated === undefined) { pending.add(src); return; }
-    if (translated !== src) {
-      suppress = true;
-      el.setAttribute('placeholder', translated);
-      suppress = false;
+    if (translated !== undefined) {
+      if (translated !== src) { el.setAttribute('placeholder', translated); observer?.takeRecords(); }
+      return;
     }
+    let set = waitingPh.get(src);
+    if (!set) { set = new Set(); waitingPh.set(src, set); }
+    set.add(el);
   });
-}
 
-function applyAll() {
-  if (currentLang === 'pl' || typeof document === 'undefined') return;
-  collectTextNodes(document.body).forEach(applyToNode);
-  applyPlaceholders(document);
-  if (pending.size) flushPending();
-}
-
-function scheduleSweep() {
-  if (sweepTimer) clearTimeout(sweepTimer);
-  sweepTimer = setTimeout(applyAll, 150);
+  if (waitingText.size || waitingPh.size) scheduleFlush();
 }
 
 /* ── public API ────────────────────────────────────────────────────── */
@@ -216,18 +248,27 @@ export function initAutoTranslate(lang: Lang) {
   if (Platform.OS !== 'web' || typeof document === 'undefined') return;
 
   if (observer) { observer.disconnect(); observer = null; }
-  mem.clear(); outputs.clear(); pending.clear();
+  mem.clear(); outputs.clear(); waitingText.clear(); waitingPh.clear();
   currentLang = lang;
-  if (lang === 'pl') return; // Polish is the source language — nothing to do
+  if (lang === 'pl') return; // Polish is the source language
 
-  loadLocalCache(lang);
+  loadLocalCache(lang);       // instant for anything seen on this device
+  preloadSharedCache(lang);   // one bulk fetch — then zero DB waits while clicking
 
-  observer = new MutationObserver(() => {
-    if (suppress) return;
-    scheduleSweep();
+  observer = new MutationObserver((records) => {
+    // Sweep ONLY what changed — never the whole document.
+    for (const rec of records) {
+      if (rec.type === 'characterData') {
+        processTextNode(rec.target as Text);
+      } else if (rec.type === 'childList') {
+        rec.addedNodes.forEach((n) => sweep(n));
+      }
+    }
+    if (waitingText.size || waitingPh.size) scheduleFlush();
   });
   observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-  scheduleSweep();
+
+  sweep(document); // initial full pass (once)
 }
 
 export function stopAutoTranslate() {
