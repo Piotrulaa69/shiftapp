@@ -4,12 +4,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { getEmployees } from '../../lib/db';
+import { getEmployees, getTaskConfirmations, type DbTaskConfirmation } from '../../lib/db';
 import type { DbProfile } from '../../lib/supabase';
 import { supabase } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
-type ReportType = 'shifts' | 'attendance' | 'tasks' | 'hours';
+type ReportType = 'shifts' | 'attendance' | 'tasks' | 'hours' | 'confirmations';
 
 function escapeCSV(val: unknown): string {
   if (val == null) return '';
@@ -41,7 +41,12 @@ const REPORTS: { key: ReportType; icon: string; label: string; desc: string; col
   { key: 'shifts',     icon: 'calendar-outline',     label: 'Zmiany',              desc: 'Lista zmian w wybranym miesiącu',             color: theme.colors.primary },
   { key: 'attendance', icon: 'time-outline',          label: 'Frekwencja',          desc: 'Zameldowania i spóźnienia pracowników',       color: '#22C55E' },
   { key: 'tasks',      icon: 'list-outline',          label: 'Zadania',             desc: 'Wykonanie zadań przez zespół w miesiącu',     color: '#F97316' },
+  { key: 'confirmations', icon: 'thermometer-outline', label: 'Kontrole i pomiary', desc: 'Temperatury lodówek i inne zadania cykliczne — pełna lista z każdego dnia', color: '#0D9488' },
 ];
+
+const CONF_TYPE_LABEL: Record<string, string> = { values: 'Pomiary', photo: 'Zdjęcie', description: 'Opis' };
+const CONF_STATUS_LABEL: Record<string, string> = { ok: 'OK', low: 'Za nisko', high: 'Za wysoko', empty: '—' };
+const CONF_STATUS_COLOR: Record<string, string> = { ok: '#22C55E', low: '#2563EB', high: '#DC2626', empty: '#9CA3AF' };
 
 const MONTHS_PL = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
 const MONTHS_SHORT = ['','Sty','Lut','Mar','Kwi','Maj','Cze','Lip','Sie','Wrz','Paź','Lis','Gru'];
@@ -163,6 +168,12 @@ export default function ReportsScreen() {
   const [tasksProfiles, setTasksProfiles] = useState<Record<string, DbProfile>>({});
   const [exportingCsv, setExportingCsv] = useState(false);
 
+  // ── confirmations (HACCP / values / photo / description — full daily history) ──
+  const [confirmationsData, setConfirmationsData] = useState<DbTaskConfirmation[]>([]);
+  const [confirmationsProfiles, setConfirmationsProfiles] = useState<Record<string, DbProfile>>({});
+  const [confTaskFilter, setConfTaskFilter] = useState<string>(''); // task_id, '' = all
+  const [exportingConfCsv, setExportingConfCsv] = useState(false);
+
   const monthRange = useCallback((m: string) => {
     const [y, mo] = m.split('-').map(Number);
     const lastDay = new Date(y, mo, 0).getDate();
@@ -248,6 +259,23 @@ export default function ReportsScreen() {
     setLoading(false);
   }, [rid, monthRange]);
 
+  // ── load confirmations (values/photo/description — one row per actual completion) ──
+  const loadConfirmations = useCallback(async (m: string) => {
+    setLoading(true); setConfirmationsData([]);
+    try {
+      const { from, to } = monthRange(m);
+      const [confs, employees] = await Promise.all([
+        getTaskConfirmations(rid, from, to),
+        getEmployees(rid),
+      ]);
+      const map: Record<string, DbProfile> = {};
+      employees.forEach((e) => { map[e.id] = e; });
+      setConfirmationsData(confs);
+      setConfirmationsProfiles(map);
+    } catch (e) { console.error('loadConfirmations', e); }
+    setLoading(false);
+  }, [rid, monthRange]);
+
   const exportTasksCsv = async () => {
     if (filteredTasks.length === 0) return;
     setExportingCsv(true);
@@ -301,6 +329,53 @@ export default function ReportsScreen() {
     setExportingCsv(false);
   };
 
+  // Long format — one row PER MEASUREMENT (e.g. per fridge, per day) so a whole
+  // month of a recurring HACCP task exports as a full, filterable list instead
+  // of collapsing to a single row.
+  const exportConfirmationsCsv = () => {
+    if (filteredConfirmations.length === 0) return;
+    setExportingConfCsv(true);
+    try {
+      const headers = ['Data', 'Godzina', 'Zadanie', 'Pracownik', 'Typ', 'Pomiar', 'Wartość', 'Jednostka', 'Min', 'Max', 'Status pomiaru', 'URL zdjęcia', 'Notatka do zdjęcia', 'Opis / checklista'];
+      const rows: string[] = [];
+      filteredConfirmations.forEach((c) => {
+        const emp = confirmationsProfiles[c.employee_id];
+        const empName = emp ? `${emp.first_name} ${emp.last_name}` : '';
+        const d = new Date(c.created_at);
+        const dateStr = `${d.getFullYear()}-${fmt2(d.getMonth() + 1)}-${fmt2(d.getDate())}`;
+        const timeStr = `${fmt2(d.getHours())}:${fmt2(d.getMinutes())}`;
+        const base = [dateStr, timeStr, c.task_title, empName, CONF_TYPE_LABEL[c.confirmation_type] ?? c.confirmation_type];
+
+        if (c.confirmation_type === 'values' && Array.isArray(c.values_data) && c.values_data.length > 0) {
+          c.values_data.forEach((v) => {
+            rows.push([
+              ...base,
+              v.name ?? '', String(v.value ?? ''), v.unit ?? '', String(v.min ?? ''), String(v.max ?? ''),
+              CONF_STATUS_LABEL[v.status] ?? v.status ?? '', '', '', '',
+            ].map(escapeCSV).join(','));
+          });
+        } else {
+          const checklistStr = Array.isArray(c.checklist_data)
+            ? c.checklist_data.map((it) => `${it.label}: ${it.checked ? '✓' : '✗'}`).join('; ')
+            : '';
+          const desc = [c.description, checklistStr].filter(Boolean).join(' | ');
+          rows.push([
+            ...base,
+            '', '', '', '', '', '',
+            c.photo_url ?? '', c.photo_notes ?? '', desc,
+          ].map(escapeCSV).join(','));
+        }
+      });
+      const csv = [headers.join(','), ...rows].join('\n');
+      const suffix = confTaskFilter ? `_${(confirmationsData.find((c) => c.task_id === confTaskFilter)?.task_title ?? 'zadanie').replace(/[^a-z0-9]+/gi, '_')}` : '';
+      triggerCsvDownload(csv, `kontrole${suffix}_${month}.csv`);
+    } catch (e) {
+      console.error('exportConfirmationsCsv', e);
+      Alert.alert('Błąd', 'Nie udało się wygenerować eksportu.');
+    }
+    setExportingConfCsv(false);
+  };
+
   // auto-reload when month changes for active report
   useEffect(() => {
     if (!selected) return;
@@ -308,14 +383,17 @@ export default function ReportsScreen() {
     else if (selected === 'shifts') loadShifts(month);
     else if (selected === 'attendance') loadAttendance(month);
     else if (selected === 'tasks') loadTasks(month);
+    else if (selected === 'confirmations') loadConfirmations(month);
   }, [month, selected]);
 
   const selectReport = (type: ReportType) => {
     setSelected(type);
+    setConfTaskFilter('');
     if (type === 'hours') loadHours(month);
     else if (type === 'shifts') loadShifts(month);
     else if (type === 'attendance') loadAttendance(month);
     else if (type === 'tasks') loadTasks(month);
+    else if (type === 'confirmations') loadConfirmations(month);
   };
 
   const toggleEmpExpand = async (empId: string) => {
@@ -397,6 +475,13 @@ export default function ReportsScreen() {
   const filteredShifts = filterEmpId ? shiftsData.filter(s => s.employee_id === filterEmpId) : shiftsData;
   const filteredClockIns = filterEmpId ? clockIns.filter(c => c.employee_id === filterEmpId) : clockIns;
   const filteredTasks = filterEmpId ? tasksData.filter(t => t.assigned_to === filterEmpId) : tasksData;
+  const confByEmp = filterEmpId ? confirmationsData.filter(c => c.employee_id === filterEmpId) : confirmationsData;
+  const filteredConfirmations = confTaskFilter ? confByEmp.filter(c => c.task_id === confTaskFilter) : confByEmp;
+  const confDistinctTasks = Array.from(
+    new Map(confByEmp.map((c) => [c.task_id, c.task_title])).entries()
+  ).sort((a, b) => a[1].localeCompare(b[1]));
+  const confOutOfRange = filteredConfirmations.reduce((sum, c) =>
+    sum + (Array.isArray(c.values_data) ? c.values_data.filter((v) => v.status && v.status !== 'ok').length : 0), 0);
 
   const totalTeamHours = filteredEmpRows.reduce((s, r) => s + r.totalMinutes, 0) / 60;
   const totalTeamEarnings = filteredEmpRows.length > 0 && filteredEmpRows.every((r) => r.earnings !== null)
@@ -731,6 +816,104 @@ export default function ReportsScreen() {
                             <Text style={[styles.priorityDotText, { color: pc }]}>{t.priority}</Text>
                           </View>
                         </View>
+                      </View>
+                    );
+                  })}
+                </View>
+            }
+          </View>
+        )}
+
+        {/* ── CONFIRMATIONS (HACCP / values / photo / description) ── */}
+        {!loading && selected === 'confirmations' && (
+          <View style={styles.section}>
+            {confDistinctTasks.length > 1 && (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                <TouchableOpacity
+                  onPress={() => setConfTaskFilter('')}
+                  style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, backgroundColor: !confTaskFilter ? '#0D948818' : theme.colors.card, borderWidth: 1, borderColor: !confTaskFilter ? '#0D9488' : theme.colors.border }}
+                  activeOpacity={0.75}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: !confTaskFilter ? '#0D9488' : theme.colors.textSecondary }}>Wszystkie zadania</Text>
+                </TouchableOpacity>
+                {confDistinctTasks.map(([taskId, title]) => (
+                  <TouchableOpacity
+                    key={taskId}
+                    onPress={() => setConfTaskFilter(taskId)}
+                    style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, backgroundColor: confTaskFilter === taskId ? '#0D948818' : theme.colors.card, borderWidth: 1, borderColor: confTaskFilter === taskId ? '#0D9488' : theme.colors.border }}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: confTaskFilter === taskId ? '#0D9488' : theme.colors.textSecondary }} numberOfLines={1}>{title}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            <SummaryRow items={[
+              { label: 'Wpisów', value: String(filteredConfirmations.length) },
+              { label: 'Dni z kontrolą', value: String(new Set(filteredConfirmations.map((c) => c.created_at.slice(0, 10))).size) },
+              { label: 'Poza normą', value: String(confOutOfRange), color: confOutOfRange > 0 ? theme.colors.error : theme.colors.green },
+            ]} />
+
+            {filteredConfirmations.length === 0
+              ? <EmptyState icon="thermometer-outline" text="Brak kontroli w tym miesiącu" />
+              : <View style={styles.resultCard}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
+                    <Text style={[styles.resultTitle, { flex: 1, padding: 0, borderBottomWidth: 0 }]}>Kontrole i pomiary — {monthLabel(month)}</Text>
+                    <TouchableOpacity
+                      onPress={exportConfirmationsCsv}
+                      disabled={exportingConfCsv}
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#0D948818', paddingHorizontal: 11, paddingVertical: 7, borderRadius: 8 }}
+                      activeOpacity={0.75}
+                    >
+                      {exportingConfCsv
+                        ? <ActivityIndicator size="small" color="#0D9488" />
+                        : <Ionicons name="download-outline" size={15} color="#0D9488" />}
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#0D9488' }}>CSV — cały miesiąc</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {filteredConfirmations.map((c, idx) => {
+                    const emp = confirmationsProfiles[c.employee_id];
+                    const d = new Date(c.created_at);
+                    const outOfRangeCount = Array.isArray(c.values_data) ? c.values_data.filter((v) => v.status && v.status !== 'ok').length : 0;
+                    return (
+                      <View key={c.id} style={[{ padding: 14, gap: 8 }, idx > 0 && styles.borderTop]}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                          <View style={styles.shiftDateBox}>
+                            <Text style={styles.shiftDay}>{fmt2(d.getDate())}</Text>
+                            <Text style={styles.shiftMon}>{MONTHS_SHORT[d.getMonth() + 1]}</Text>
+                          </View>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={styles.listRowTitle} numberOfLines={1}>{c.task_title}</Text>
+                            <Text style={styles.listRowSub} numberOfLines={1}>
+                              {emp ? `${emp.first_name} ${emp.last_name}` : ''} · {fmt2(d.getHours())}:{fmt2(d.getMinutes())} · {CONF_TYPE_LABEL[c.confirmation_type] ?? c.confirmation_type}
+                            </Text>
+                          </View>
+                          {outOfRangeCount > 0 && (
+                            <View style={[styles.statusBadge, { backgroundColor: '#FEF2F2' }]}>
+                              <Text style={[styles.statusBadgeText, { color: theme.colors.error }]}>{outOfRangeCount} poza normą</Text>
+                            </View>
+                          )}
+                        </View>
+
+                        {c.confirmation_type === 'values' && Array.isArray(c.values_data) && c.values_data.length > 0 && (
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                            {c.values_data.map((v, vi) => (
+                              <View key={vi} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, backgroundColor: theme.colors.background }}>
+                                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: CONF_STATUS_COLOR[v.status] ?? '#9CA3AF' }} />
+                                <Text style={{ fontSize: 11, color: theme.colors.textSecondary }}>{v.name}: <Text style={{ fontWeight: '700', color: theme.colors.text }}>{v.value}{v.unit}</Text></Text>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+
+                        {c.confirmation_type === 'photo' && (
+                          <Text style={styles.listRowSub}>{c.photo_notes || 'Zdjęcie bez notatki'}</Text>
+                        )}
+
+                        {c.confirmation_type === 'description' && (
+                          <Text style={styles.listRowSub} numberOfLines={2}>{c.description || '—'}</Text>
+                        )}
                       </View>
                     );
                   })}

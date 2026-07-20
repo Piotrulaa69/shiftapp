@@ -1143,6 +1143,47 @@ export async function createTaskConfirmation(input: TaskConfirmationInput): Prom
   return true;
 }
 
+export type DbTaskConfirmation = {
+  id: string;
+  restaurant_id: string;
+  task_id: string;
+  employee_id: string;
+  confirmation_type: 'photo' | 'values' | 'description';
+  photo_url: string | null;
+  photo_notes: string | null;
+  values_data: { name: string; value: number; unit: string; min: number; max: number; status: string }[] | null;
+  description: string | null;
+  checklist_data: { label: string; checked: boolean }[] | null;
+  created_at: string;
+  task_title: string;
+  task_description: string;
+};
+
+// Every completion of a task (incl. recurring ones like daily fridge-temperature
+// checks) writes its OWN row here with its own created_at — this is the durable
+// per-day history. The `tasks` table itself is reused across days for recurring
+// tasks, so it can NEVER answer "what happened on every day this month" — this
+// function is the correct source for that.
+export async function getTaskConfirmations(
+  restaurantId: string,
+  dateFrom: string,
+  dateTo: string
+): Promise<DbTaskConfirmation[]> {
+  const { data, error } = await supabase
+    .from('task_confirmations')
+    .select('*, tasks(title, description)')
+    .eq('restaurant_id', restaurantId)
+    .gte('created_at', `${dateFrom}T00:00:00`)
+    .lte('created_at', `${dateTo}T23:59:59`)
+    .order('created_at', { ascending: false });
+  if (error) { console.error('getTaskConfirmations', error); return []; }
+  return (data ?? []).map((c: any) => ({
+    ...c,
+    task_title: c.tasks?.title ?? '(usunięte zadanie)',
+    task_description: c.tasks?.description ?? '',
+  }));
+}
+
 export async function uploadTaskPhoto(
   restaurantId: string,
   taskId: string,
