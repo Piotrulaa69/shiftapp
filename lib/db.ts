@@ -300,13 +300,13 @@ export async function getInvitations(restaurantId: string): Promise<DbInvitation
 export async function generateInvitation(
   restaurantId: string,
   createdBy: string,
-  jobTitle: string
+  groupIds: string[] = []
 ): Promise<DbInvitation | null> {
   const code = Math.random().toString(36).substring(2, 8).toUpperCase();
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from('invitations')
-    .insert({ restaurant_id: restaurantId, code, created_by: createdBy, job_title: jobTitle, expires_at: expiresAt })
+    .insert({ restaurant_id: restaurantId, code, created_by: createdBy, group_ids: groupIds, expires_at: expiresAt })
     .select()
     .single();
   if (error) { console.error('generateInvitation', error); return null; }
@@ -336,15 +336,15 @@ export type NewEmployeeInput = {
   lastName: string;
   email: string;
   password: string;
-  jobTitle: string;
   role: 'employee' | 'manager';
   phone?: string;
+  groupIds?: string[];
 };
 
 export type EmployeeCredentials = {
   firstName: string;
   lastName: string;
-  jobTitle: string;
+  groupNames: string[];
   email: string;
   password: string;
   loginUrl: string;
@@ -401,21 +401,32 @@ export async function createEmployeeAccount(input: NewEmployeeInput): Promise<Ne
   try { await iso.auth.signOut(); } catch { /* ignore */ }
 
   // 2. Create the profile through the RPC (admin's main-client session authorises it).
+  //    Groups replace job titles — the RPC assigns the new employee to them.
+  const groupIds = input.groupIds ?? [];
   const { data: rpcData, error: rpcError } = await supabase.rpc('admin_create_employee', {
     p_user_id:    userId,
     p_first_name: input.firstName.trim(),
     p_last_name:  input.lastName.trim(),
-    p_job_title:  input.jobTitle.trim(),
     p_role:       input.role,
     p_phone:      input.phone?.trim() || null,
+    p_group_ids:  groupIds,
   });
 
   if (rpcError) {
-    return { success: false, error: `Konto utworzone, ale profil nie: ${rpcError.message} (uruchom migrację 067)` };
+    return { success: false, error: `Konto utworzone, ale profil nie: ${rpcError.message} (uruchom migrację 072)` };
   }
   const r = rpcData as any;
   if (!r?.success) {
     return { success: false, error: r?.error ?? 'Nie udało się utworzyć profilu pracownika.' };
+  }
+
+  let groupNames: string[] = [];
+  if (groupIds.length) {
+    const restaurantId = r?.restaurant_id;
+    if (restaurantId) {
+      const allGroups = await getEmployeeGroups(restaurantId);
+      groupNames = allGroups.filter((g) => groupIds.includes(g.id)).map((g) => g.name);
+    }
   }
 
   return {
@@ -423,7 +434,7 @@ export async function createEmployeeAccount(input: NewEmployeeInput): Promise<Ne
     credentials: {
       firstName: input.firstName.trim(),
       lastName:  input.lastName.trim(),
-      jobTitle:  input.jobTitle.trim(),
+      groupNames,
       email,
       password,
       loginUrl: LOGIN_URL,

@@ -121,7 +121,7 @@ function buildJoinPortal(step: Step, loading: boolean, err: string, restaurantNa
   const registerForm = `
     <div class="aj-form">
       <button class="aj-back" data-action="backToCode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="15 18 9 12 15 6"/></svg>Zmień kod</button>
-      <div class="aj-ok"><div class="aj-ok-ico">${CHECK_ICO}</div><div><div class="aj-ok-name">${restaurantName}</div><div class="aj-ok-role">Stanowisko: ${jobTitle}</div></div></div>
+      <div class="aj-ok"><div class="aj-ok-ico">${CHECK_ICO}</div><div><div class="aj-ok-name">${restaurantName}</div>${jobTitle ? `<div class="aj-ok-role">Stanowisko: ${jobTitle}</div>` : ''}</div></div>
       <div class="aj-fh">Utwórz konto</div>
       <div class="aj-fs">Uzupełnij dane logowania, aby dołączyć do zespołu.</div>
       ${err ? `<div class="aj-err">${ERR_ICO}${err}</div>` : ''}
@@ -483,7 +483,7 @@ export default function JoinScreen() {
             {mStep === 'register' && (
               <>
                 <Text style={mob.title}>Utwórz konto</Text>
-                <Text style={mob.sub}>{mRestaurant} · {mJob}</Text>
+                <Text style={mob.sub}>{mJob ? `${mRestaurant} · ${mJob}` : mRestaurant}</Text>
                 <View style={{ flexDirection: 'row', gap: 12 }}>
                   <View style={{ flex: 1 }}>
                     <Text style={mob.lbl}>Imię</Text>

@@ -108,6 +108,7 @@ export type DbInvitation = {
   code: string;
   created_by: string;
   job_title: string;
+  group_ids: string[];
   expires_at: string;
   used: boolean;
   used_by: string | null;

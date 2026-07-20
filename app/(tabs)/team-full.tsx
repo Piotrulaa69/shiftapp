@@ -5,11 +5,10 @@ import { ActivityIndicator, Clipboard, Modal, Platform, ScrollView, StyleSheet, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
-import { createEmployeeAccount, ensureDefaultLeaveTypes, generateInvitation, generatePassword, getEmployeeLeaveQuota, getEmployeeLeaveTypeSettings, getEmployees, getPointsForEmployee, setEmployeeLeaveQuota, setEmployeeLeaveTypeSetting, updateEmployeeLoginSettings, updateEmployeeRole, updateProfile, type EmployeeCredentials } from '../../lib/db';
-import type { DbLeaveType, DbProfile } from '../../lib/supabase';
+import { assignEmployeeToGroup, createEmployeeAccount, ensureDefaultLeaveTypes, generateInvitation, generatePassword, getEmployeeGroups, getEmployeeGroupsWithMembers, getEmployeeLeaveQuota, getEmployeeLeaveTypeSettings, getEmployees, getPointsForEmployee, removeEmployeeFromGroup, setEmployeeLeaveQuota, setEmployeeLeaveTypeSetting, updateEmployeeLoginSettings, updateEmployeeRole, updateProfile, type EmployeeCredentials } from '../../lib/db';
+import type { DbEmployeeGroup, DbLeaveType, DbProfile } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
-const JOB_OPTIONS = ['Kelner', 'Kucharz', 'Barista', 'Lider zmiany', 'Hostessa', 'Pizzaiolo', 'Sprzątanie'];
 const ROLE_LABELS: Record<string, string> = { owner: 'Właściciel', manager: 'Manager', employee: 'Pracownik' };
 const EMP_TYPE_LABELS: Record<string, string> = { full_time: 'Pełny etat', part_time: 'Część etatu', contract: 'Umowa zlecenie' };
 
@@ -25,11 +24,15 @@ export default function TeamFullScreen() {
   const [employees, setEmployees] = useState<DbProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [showInvite, setShowInvite] = useState(false);
-  const [jobTitle, setJobTitle] = useState('Kelner');
+  const [inviteGroupIds, setInviteGroupIds] = useState<string[]>([]);
   const [lastCode, setLastCode] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [copiedMsg, setCopiedMsg] = useState(false);
   const [generating, setGenerating] = useState(false);
+
+  // Groups — replace the old fixed "stanowisko" list; a restaurant defines its own.
+  const [groups, setGroups] = useState<DbEmployeeGroup[]>([]);
+  const [groupsByEmployee, setGroupsByEmployee] = useState<Record<string, DbEmployeeGroup[]>>({});
 
   // Manual "create employee account" flow
   const [showCreate, setShowCreate] = useState(false);
@@ -37,7 +40,7 @@ export default function TeamFullScreen() {
   const [ceLastName, setCeLastName] = useState('');
   const [ceEmail, setCeEmail] = useState('');
   const [cePassword, setCePassword] = useState('');
-  const [ceJobTitle, setCeJobTitle] = useState('Kelner');
+  const [ceGroupIds, setCeGroupIds] = useState<string[]>([]);
   const [ceRole, setCeRole] = useState<'employee' | 'manager'>('employee');
   const [cePhone, setCePhone] = useState('');
   const [ceShowPw, setCeShowPw] = useState(true);
@@ -48,7 +51,7 @@ export default function TeamFullScreen() {
   // Employee edit state
   const [selectedEmp, setSelectedEmp] = useState<DbProfile | null>(null);
   const [editing, setEditing] = useState(false);
-  const [editJobTitle, setEditJobTitle] = useState('');
+  const [editGroupIds, setEditGroupIds] = useState<string[]>([]);
   const [editPhone, setEditPhone] = useState('');
   const [editEmpType, setEditEmpType] = useState<'full_time' | 'part_time' | 'contract'>('full_time');
   const [editMinWeekly, setEditMinWeekly] = useState('');
@@ -63,8 +66,21 @@ export default function TeamFullScreen() {
   const load = useCallback(async () => {
     if (!rid) return;
     setLoading(true);
-    const em = await getEmployees(rid);
+    const [em, gr, grWithMembers] = await Promise.all([
+      getEmployees(rid),
+      getEmployeeGroups(rid),
+      getEmployeeGroupsWithMembers(rid),
+    ]);
     setEmployees(em);
+    setGroups(gr);
+    const byEmp: Record<string, DbEmployeeGroup[]> = {};
+    grWithMembers.forEach((g) => {
+      g.members.forEach((empId) => {
+        if (!byEmp[empId]) byEmp[empId] = [];
+        byEmp[empId].push(g);
+      });
+    });
+    setGroupsByEmployee(byEmp);
     setLoading(false);
   }, [rid]);
 
@@ -89,7 +105,7 @@ export default function TeamFullScreen() {
   const openEmployeeEdit = async (emp: DbProfile) => {
     setSelectedEmp(emp);
     setEditing(false);
-    setEditJobTitle(emp.job_title || '');
+    setEditGroupIds((groupsByEmployee[emp.id] ?? []).map((g) => g.id));
     setEditPhone(emp.phone || '');
     setEditEmpType(emp.employment_type || 'full_time');
     setEditMinWeekly(emp.min_hours_weekly?.toString() || '');
@@ -127,9 +143,11 @@ export default function TeamFullScreen() {
   const saveEmployee = async () => {
     if (!selectedEmp) return;
     setSaving(true);
+    const prevGroupIds = (groupsByEmployee[selectedEmp.id] ?? []).map((g) => g.id);
+    const toAdd = editGroupIds.filter((id) => !prevGroupIds.includes(id));
+    const toRemove = prevGroupIds.filter((id) => !editGroupIds.includes(id));
     const [success] = await Promise.all([
       updateProfile(selectedEmp.id, {
-        job_title: editJobTitle,
         phone: editPhone,
         employment_type: editEmpType,
         min_hours_weekly: editMinWeekly ? parseInt(editMinWeekly) : null,
@@ -157,6 +175,8 @@ export default function TeamFullScreen() {
           custom_days_per_year: s.enabled ? (parseInt(s.days) || 0) : 0,
         })
       ),
+      ...toAdd.map((gid) => assignEmployeeToGroup(selectedEmp!.id, gid)),
+      ...toRemove.map((gid) => removeEmployeeFromGroup(selectedEmp!.id, gid)),
     ]);
     setSaving(false);
     if (success) {
@@ -170,11 +190,12 @@ export default function TeamFullScreen() {
   const generateInvite = async () => {
     if (!rid || !user?.id) return;
     setGenerating(true);
-    const invitation = await generateInvitation(rid, user.id, jobTitle);
+    const invitation = await generateInvitation(rid, user.id, inviteGroupIds);
     setGenerating(false);
     if (invitation) {
       setLastCode(invitation.code);
       setShowInvite(false);
+      setInviteGroupIds([]);
     } else {
       showAlert('Błąd', 'Nie udało się wygenerować kodu');
     }
@@ -197,7 +218,7 @@ export default function TeamFullScreen() {
   // ── Manual employee creation ──
   const openCreateModal = () => {
     setCeFirstName(''); setCeLastName(''); setCeEmail('');
-    setCePassword(generatePassword()); setCeJobTitle('Kelner');
+    setCePassword(generatePassword()); setCeGroupIds([]);
     setCeRole('employee'); setCePhone(''); setCeShowPw(true);
     setCeResult(null); setCeCopied(null);
     setShowCreate(true);
@@ -223,7 +244,7 @@ export default function TeamFullScreen() {
     setCeSaving(true);
     const res = await createEmployeeAccount({
       firstName: ceFirstName, lastName: ceLastName, email,
-      password: cePassword.trim(), jobTitle: ceJobTitle, role: ceRole, phone: cePhone,
+      password: cePassword.trim(), role: ceRole, phone: cePhone, groupIds: ceGroupIds,
     });
     setCeSaving(false);
     if (res.success && res.credentials) {
@@ -330,19 +351,26 @@ export default function TeamFullScreen() {
                     <Ionicons name="close" size={22} color={theme.colors.textMuted} />
                   </TouchableOpacity>
                 </View>
-                <Text style={s.inviteModalSub}>Wybierz stanowisko dla nowego pracownika</Text>
-                <View style={s.jobGrid}>
-                  {JOB_OPTIONS.map((j) => (
-                    <TouchableOpacity
-                      key={j}
-                      style={[s.jobChip, jobTitle === j && s.jobChipActive]}
-                      onPress={() => setJobTitle(j)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[s.jobChipText, jobTitle === j && s.jobChipTextActive]}>{j}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                <Text style={s.inviteModalSub}>Przypisz grupy dla nowego pracownika (opcjonalnie)</Text>
+                {groups.length === 0 ? (
+                  <Text style={s.emptySub}>Brak grup — utwórz je w sekcji „Grupy”, aby przypisywać pracowników.</Text>
+                ) : (
+                  <View style={s.jobGrid}>
+                    {groups.map((g) => {
+                      const active = inviteGroupIds.includes(g.id);
+                      return (
+                        <TouchableOpacity
+                          key={g.id}
+                          style={[s.jobChip, active && s.jobChipActive, { borderLeftWidth: 3, borderLeftColor: g.color }]}
+                          onPress={() => setInviteGroupIds((prev) => active ? prev.filter((id) => id !== g.id) : [...prev, g.id])}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[s.jobChipText, active && s.jobChipTextActive]}>{g.name}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
                 <TouchableOpacity style={s.generateBtn} onPress={generateInvite} disabled={generating} activeOpacity={0.85}>
                   {generating ? <ActivityIndicator color={theme.colors.white} /> : (
                     <>
@@ -395,14 +423,26 @@ export default function TeamFullScreen() {
                           </TouchableOpacity>
                         </View>
 
-                        <Text style={cm.label}>Stanowisko</Text>
-                        <View style={cm.chips}>
-                          {JOB_OPTIONS.map((j) => (
-                            <TouchableOpacity key={j} style={[cm.chip, ceJobTitle === j && cm.chipActive]} onPress={() => setCeJobTitle(j)} activeOpacity={0.7}>
-                              <Text style={[cm.chipText, ceJobTitle === j && cm.chipTextActive]}>{j}</Text>
-                            </TouchableOpacity>
-                          ))}
-                        </View>
+                        <Text style={cm.label}>Grupy <Text style={{ color: theme.colors.textMuted, fontWeight: '400' }}>(opcjonalnie)</Text></Text>
+                        {groups.length === 0 ? (
+                          <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginBottom: 8 }}>Brak grup — utwórz je w sekcji „Grupy”.</Text>
+                        ) : (
+                          <View style={cm.chips}>
+                            {groups.map((g) => {
+                              const active = ceGroupIds.includes(g.id);
+                              return (
+                                <TouchableOpacity
+                                  key={g.id}
+                                  style={[cm.chip, active && cm.chipActive, { borderLeftWidth: 3, borderLeftColor: g.color }]}
+                                  onPress={() => setCeGroupIds((prev) => active ? prev.filter((id) => id !== g.id) : [...prev, g.id])}
+                                  activeOpacity={0.7}
+                                >
+                                  <Text style={[cm.chipText, active && cm.chipTextActive]}>{g.name}</Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                        )}
 
                         {isOwner && (
                           <>
@@ -432,7 +472,9 @@ export default function TeamFullScreen() {
                         <View style={cm.successBox}>
                           <View style={cm.successIcon}><Ionicons name="checkmark" size={28} color="#fff" /></View>
                           <Text style={cm.successName}>{ceResult.firstName} {ceResult.lastName}</Text>
-                          <Text style={cm.successJob}>{ceResult.jobTitle}</Text>
+                          {ceResult.groupNames.length > 0 && (
+                            <Text style={cm.successJob}>{ceResult.groupNames.join(', ')}</Text>
+                          )}
                         </View>
 
                         <Text style={cm.sub}>Prześlij te dane pracownikowi. Może zmienić hasło po zalogowaniu.</Text>
@@ -485,7 +527,7 @@ export default function TeamFullScreen() {
                   </View>
                   <View style={s.empInfo}>
                     <Text style={s.empName}>{emp.first_name} {emp.last_name}</Text>
-                    <Text style={s.empRole}>{emp.job_title}</Text>
+                    <Text style={s.empRole}>{(groupsByEmployee[emp.id] && groupsByEmployee[emp.id].length) ? groupsByEmployee[emp.id].map((g) => g.name).join(', ') : 'Bez grupy'}</Text>
                   </View>
                   <View style={s.ownerBadge}>
                     <Ionicons name="shield-checkmark" size={12} color={theme.colors.primary} />
@@ -505,7 +547,7 @@ export default function TeamFullScreen() {
                     </View>
                     <View style={s.empInfo}>
                       <Text style={s.empName}>{emp.first_name} {emp.last_name}</Text>
-                      <Text style={s.empRole}>{emp.job_title}</Text>
+                      <Text style={s.empRole}>{(groupsByEmployee[emp.id] && groupsByEmployee[emp.id].length) ? groupsByEmployee[emp.id].map((g) => g.name).join(', ') : 'Bez grupy'}</Text>
                     </View>
                     <View style={s.managerBadge}>
                       <Ionicons name="shield-outline" size={12} color={theme.colors.primary} />
@@ -532,7 +574,7 @@ export default function TeamFullScreen() {
                     </View>
                     <View style={s.empInfo}>
                       <Text style={s.empName}>{emp.first_name} {emp.last_name}</Text>
-                      <Text style={s.empRole}>{emp.job_title}</Text>
+                      <Text style={s.empRole}>{(groupsByEmployee[emp.id] && groupsByEmployee[emp.id].length) ? groupsByEmployee[emp.id].map((g) => g.name).join(', ') : 'Bez grupy'}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
                   </TouchableOpacity>
@@ -557,7 +599,11 @@ export default function TeamFullScreen() {
                   <Text style={mStyles.bigAvatarText}>{selectedEmp ? `${selectedEmp.first_name?.[0] ?? ''}${selectedEmp.last_name?.[0] ?? ''}`.toUpperCase() : ''}</Text>
                 </View>
                 <Text style={mStyles.profileName}>{selectedEmp?.first_name} {selectedEmp?.last_name}</Text>
-                <Text style={mStyles.profileTitle}>{selectedEmp?.job_title}</Text>
+                <Text style={mStyles.profileTitle}>
+                  {selectedEmp && (groupsByEmployee[selectedEmp.id]?.length
+                    ? groupsByEmployee[selectedEmp.id].map((g) => g.name).join(', ')
+                    : 'Bez grupy')}
+                </Text>
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                   <View style={[mStyles.rolePill, { backgroundColor: selectedEmp?.role === 'owner' ? '#FEF3C7' : selectedEmp?.role === 'manager' ? '#EFF6FF' : theme.colors.surface }]}>
                     <Text style={[mStyles.rolePillText, { color: selectedEmp?.role === 'owner' ? '#D97706' : selectedEmp?.role === 'manager' ? theme.colors.primary : theme.colors.textSecondary }]}>{ROLE_LABELS[selectedEmp?.role ?? ''] ?? selectedEmp?.role}</Text>
@@ -583,8 +629,26 @@ export default function TeamFullScreen() {
 
                 {editing ? (
                   <>
-                    <Text style={mStyles.fieldLabel}>Stanowisko</Text>
-                    <TextInput style={mStyles.input} value={editJobTitle} onChangeText={setEditJobTitle} placeholder="np. Kelner" placeholderTextColor={theme.colors.textMuted} />
+                    <Text style={mStyles.fieldLabel}>Grupy</Text>
+                    {groups.length === 0 ? (
+                      <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginBottom: 12 }}>Brak grup — utwórz je w sekcji „Grupy”.</Text>
+                    ) : (
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                        {groups.map((g) => {
+                          const active = editGroupIds.includes(g.id);
+                          return (
+                            <TouchableOpacity
+                              key={g.id}
+                              style={[mStyles.chip, active && mStyles.chipActive, { borderLeftWidth: 3, borderLeftColor: g.color }]}
+                              onPress={() => setEditGroupIds((prev) => active ? prev.filter((id) => id !== g.id) : [...prev, g.id])}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={[mStyles.chipText, active && mStyles.chipTextActive]}>{g.name}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    )}
                     <Text style={mStyles.fieldLabel}>Telefon</Text>
                     <TextInput style={mStyles.input} value={editPhone} onChangeText={setEditPhone} placeholder="+48 000 000 000" placeholderTextColor={theme.colors.textMuted} keyboardType="phone-pad" />
                     <Text style={mStyles.fieldLabel}>Typ zatrudnienia</Text>
@@ -763,8 +827,12 @@ export default function TeamFullScreen() {
                 ) : (
                   <>
                     <View style={mStyles.fieldRow}>
-                      <Text style={mStyles.fieldLabel}>Stanowisko</Text>
-                      <Text style={mStyles.fieldValue}>{selectedEmp?.job_title}</Text>
+                      <Text style={mStyles.fieldLabel}>Grupy</Text>
+                      <Text style={mStyles.fieldValue}>
+                        {selectedEmp && (groupsByEmployee[selectedEmp.id]?.length
+                          ? groupsByEmployee[selectedEmp.id].map((g) => g.name).join(', ')
+                          : 'Bez grupy')}
+                      </Text>
                     </View>
                     <View style={mStyles.fieldRow}>
                       <Text style={mStyles.fieldLabel}>Telefon</Text>

@@ -233,11 +233,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (invError || invData?.error) { setIsLoading(false); return false; }
 
-    const { restaurant_id, job_title } = invData as {
+    const { restaurant_id, job_title, group_ids } = invData as {
       invitation_id: string;
       restaurant_id: string;
       restaurant_name: string;
       job_title: string;
+      group_ids: string[] | null;
     };
 
     // 2. Create Supabase Auth user
@@ -266,8 +267,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (profileError) { setIsLoading(false); return false; }
 
-    // 4. Mark invitation as used
-    await supabase.rpc('mark_invitation_used', { p_code: code.toUpperCase(), p_user_id: userId });
+    // 4. Mark invitation as used — also assigns the employee to the invitation's groups
+    await supabase.rpc('mark_invitation_used', { p_code: code.toUpperCase(), p_user_id: userId, p_group_ids: group_ids ?? [] });
 
     // 5. Load user data
     const result = await loadUserData(userId, data.email.trim());

@@ -5,8 +5,8 @@ import { ActivityIndicator, Clipboard, Platform, ScrollView, StyleSheet, Text, T
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
-import { deleteInvitation, getEmployees, getInvitations } from '../../lib/db';
-import type { DbInvitation, DbProfile } from '../../lib/supabase';
+import { deleteInvitation, getEmployeeGroups, getEmployees, getInvitations } from '../../lib/db';
+import type { DbEmployeeGroup, DbInvitation, DbProfile } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
 export default function InvitesScreen() {
@@ -20,19 +20,29 @@ export default function InvitesScreen() {
 
   const [invitations, setInvitations] = useState<DbInvitation[]>([]);
   const [employees, setEmployees] = useState<DbProfile[]>([]);
+  const [groups, setGroups] = useState<DbEmployeeGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!rid) return;
     setLoading(true);
-    const [inv, em] = await Promise.all([getInvitations(rid), getEmployees(rid)]);
+    const [inv, em, gr] = await Promise.all([getInvitations(rid), getEmployees(rid), getEmployeeGroups(rid)]);
     setInvitations(inv);
     setEmployees(em);
+    setGroups(gr);
     setLoading(false);
   }, [rid]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Groups replaced the old fixed job-title picker — show assigned group names.
+  const groupLabel = (inv: DbInvitation): string => {
+    const ids = inv.group_ids ?? [];
+    if (!ids.length) return inv.job_title || 'Bez grupy';
+    const names = groups.filter((g) => ids.includes(g.id)).map((g) => g.name);
+    return names.length ? names.join(', ') : 'Bez grupy';
+  };
 
   const activeInvites = invitations.filter((i) => !i.used && new Date(i.expires_at) > new Date());
   const usedInvites = invitations.filter((i) => i.used || new Date(i.expires_at) <= new Date());
@@ -80,7 +90,7 @@ export default function InvitesScreen() {
                       <Text style={s.invCode}>{inv.code}</Text>
                     </View>
                     <View style={s.invInfo}>
-                      <Text style={s.invJob}>{inv.job_title}</Text>
+                      <Text style={s.invJob}>{groupLabel(inv)}</Text>
                       <Text style={s.invExpiry}>Wygasa: {new Date(inv.expires_at).toLocaleDateString('pl-PL')}</Text>
                     </View>
                     <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -119,7 +129,7 @@ export default function InvitesScreen() {
                       <Text style={[s.invCode, { color: theme.colors.green }]}>{inv.code}</Text>
                     </View>
                     <View style={s.invInfo}>
-                      <Text style={s.invJob}>{inv.job_title}</Text>
+                      <Text style={s.invJob}>{groupLabel(inv)}</Text>
                       <Text style={[s.invExpiry, { color: theme.colors.green }]}>
                         {inv.used ? '✓ Użyty' : '✗ Wygasł'}
                       </Text>
