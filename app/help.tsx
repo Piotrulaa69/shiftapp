@@ -101,7 +101,7 @@ export default function HelpScreen() {
               <Ionicons name="mail-outline" size={22} color="#7C3AED" />
             </View>
             <Text style={s.contactCardTitle}>E-mail</Text>
-            <Text style={s.contactCardValue}>pomoc@shiftapp.pl</Text>
+            <Text style={s.contactCardValue}>maciej@shiftapp.pl</Text>
             <Text style={s.contactCardSub}>Odpowiadamy w ciągu 24h</Text>
           </View>
 
@@ -137,7 +137,7 @@ export default function HelpScreen() {
           <Text style={s.bottomCtaTitle}>Nie znalazłeś odpowiedzi?</Text>
           <Text style={s.bottomCtaSub}>
             Napisz do nas na adres{' '}
-            <Text style={s.bottomCtaLink}>pomoc@shiftapp.pl</Text>
+            <Text style={s.bottomCtaLink}>maciej@shiftapp.pl</Text>
             {' '}lub zadzwoń na{' '}
             <Text style={s.bottomCtaLink}>884 184 352</Text>.
             Nasz zespół odpowie najszybciej jak to możliwe.
