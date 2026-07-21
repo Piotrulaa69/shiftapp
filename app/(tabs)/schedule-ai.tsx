@@ -397,9 +397,7 @@ export default function ScheduleAIScreen() {
                 <View style={s.publishBar}>
                   <View style={{ flex: 1 }}>
                     <Text style={s.publishTitle}>Gotowy do publikacji</Text>
-                    <Text style={s.publishSub}>
-                      {editableShifts.length} zmian · {selectedCell ? 'dotknij miejsce docelowe, aby przenieść' : 'dotknij zmianę, aby ją przenieść'}
-                    </Text>
+                    <Text style={s.publishSub}>{editableShifts.length} zmian · dotknij zmianę, aby ją przenieść</Text>
                   </View>
                   <TouchableOpacity
                     style={[s.publishBtn, publishing && { opacity: 0.6 }]}
@@ -413,6 +411,17 @@ export default function ScheduleAIScreen() {
                     <Text style={s.publishBtnText}>{publishing ? 'Zapisywanie...' : 'Opublikuj grafik'}</Text>
                   </TouchableOpacity>
                 </View>
+
+                {/* Move-mode banner — unmissable confirmation that the first tap registered */}
+                {!!selectedCell && (
+                  <View style={s.moveBanner}>
+                    <Ionicons name="move-outline" size={16} color="#fff" />
+                    <Text style={s.moveBannerText}>Wybrano zmianę — dotknij miejsce docelowe, aby przenieść</Text>
+                    <TouchableOpacity onPress={() => setSelectedCell(null)} style={s.moveBannerCancel} activeOpacity={0.8}>
+                      <Text style={s.moveBannerCancelText}>Anuluj</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
 
                 {/* Schedule grid */}
                 <View style={s.grid}>
@@ -668,6 +677,10 @@ const s = StyleSheet.create({
   empRole: { fontSize: 10, color: theme.colors.textMuted },
   shiftBlock: { width: '92%', borderRadius: 6, paddingVertical: 3, alignItems: 'center', borderWidth: 1, borderLeftWidth: 3 },
   shiftBlockSelected: { opacity: 0.5, borderWidth: 2, borderColor: '#7C3AED' },
+  moveBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#7C3AED', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
+  moveBannerText: { flex: 1, fontSize: 12, fontWeight: '600', color: '#fff' },
+  moveBannerCancel: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
+  moveBannerCancelText: { fontSize: 12, fontWeight: '700', color: '#fff' },
   shiftTypeLabel: { fontSize: 8, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.3 },
   shiftTime: { fontSize: 9, fontWeight: '700' },
   shiftHours: { fontSize: 10, fontWeight: '800' },

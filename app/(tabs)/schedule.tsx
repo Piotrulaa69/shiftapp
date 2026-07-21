@@ -268,6 +268,7 @@ function ShiftModal({
   onClose,
   onSave,
   onDelete,
+  onMove,
   isOwner,
 }: {
   shift: DbShift;
@@ -275,6 +276,7 @@ function ShiftModal({
   onClose: () => void;
   onSave: (id: string, fields: Partial<DbShift>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onMove: (id: string) => void;
   isOwner: boolean;
 }) {
   const cfg = STATUS_CONFIG[shift.status as ShiftStatus] ?? { color: theme.colors.primary, bg: theme.colors.primaryLight, label: shift.status };
@@ -404,6 +406,17 @@ function ShiftModal({
         )}
       </ScrollView>
 
+      {/* Move to another day — explicit, always-reliable button (in addition
+          to long-pressing the tile directly on the calendar). */}
+      {isOwner && !editing && !confirmDelete && (
+        <View style={sm.moveRow}>
+          <TouchableOpacity style={sm.moveBtn} onPress={() => onMove(shift.id)} activeOpacity={0.7}>
+            <Ionicons name="calendar-outline" size={15} color="#7C3AED" />
+            <Text style={sm.moveBtnText}>Przenieś na inny dzień</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Footer */}
       {isOwner && (
         <View style={sm.footer}>
@@ -482,6 +495,9 @@ const sm = StyleSheet.create({
   timeChipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
   timeChipText: { fontSize: 12, fontWeight: '500', color: theme.colors.textSecondary },
   timeChipTextActive: { color: '#fff' },
+  moveRow: { paddingHorizontal: 16, paddingTop: 4 },
+  moveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 10, backgroundColor: '#F5F3FF', borderWidth: 1, borderColor: '#DDD6FE' },
+  moveBtnText: { fontSize: 13, fontWeight: '600', color: '#7C3AED' },
   footer: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: theme.colors.border,
@@ -1101,6 +1117,7 @@ export default function ScheduleScreen() {
                 onClose={() => setSelectedShift(null)}
                 onSave={handleUpdateShift}
                 onDelete={handleDeleteShift}
+                onMove={(id) => { setSelectedShift(null); startMoveShift(id); }}
               />
             )}
           </Pressable>
