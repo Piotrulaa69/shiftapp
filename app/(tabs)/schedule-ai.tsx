@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text,
     TouchableOpacity, useWindowDimensions, View
@@ -23,7 +23,12 @@ import {
 import type { DbAvailability, DbEmployeeGroup, DbProfile } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
-const DAYS = ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd'];
+const WEEKDAY_SHORT = ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd']; // indexed by dow (0=Mon)
+const MONTHS_PL = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
+
+function fmtDate(d: Date): string { return d.toISOString().split('T')[0]; }
+function dowOf(d: Date): number { const j = d.getDay(); return j === 0 ? 6 : j - 1; }
+function dowFromDateStr(s: string): number { return dowOf(new Date(s + 'T12:00:00')); }
 
 function getWeekStart(offset = 0): Date {
   const d = new Date();
@@ -33,11 +38,22 @@ function getWeekStart(offset = 0): Date {
   return d;
 }
 
-function weekLabel(weekStart: Date): string {
-  const end = new Date(weekStart);
-  end.setDate(end.getDate() + 6);
+function getMonthAnchor(offset = 0): Date {
+  const d = new Date();
+  const anchor = new Date(d.getFullYear(), d.getMonth() + offset, 1);
+  anchor.setHours(0, 0, 0, 0);
+  return anchor;
+}
+
+function daysInMonthOf(anchor: Date): number {
+  return new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0).getDate();
+}
+
+function rangeLabel(start: Date, days: number): string {
+  const end = new Date(start);
+  end.setDate(end.getDate() + days - 1);
   const fmt = (d: Date) => `${d.getDate()}.${String(d.getMonth() + 1).padStart(2, '0')}`;
-  return `${fmt(weekStart)} – ${fmt(end)}.${end.getFullYear()}`;
+  return `${fmt(start)} – ${fmt(end)}.${end.getFullYear()}`;
 }
 
 export default function ScheduleAIScreen() {
@@ -46,8 +62,35 @@ export default function ScheduleAIScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
 
+  // Generation covers either one week or a full calendar month; the grid
+  // always shows one 7-day slice at a time (viewWeekIndex pages through the
+  // month's slices) — the underlying draft/publish always covers the WHOLE
+  // generated range, not just what's currently on screen.
+  const [genMode, setGenMode] = useState<'week' | 'month'>('month');
   const [weekOffset, setWeekOffset] = useState(0);
+  const [monthOffset, setMonthOffset] = useState(0);
+  const [viewWeekIndex, setViewWeekIndex] = useState(0);
+
   const weekStart = getWeekStart(weekOffset);
+  const monthAnchor = getMonthAnchor(monthOffset);
+  const daysInMonth = daysInMonthOf(monthAnchor);
+  const weeksInMonth = Math.ceil(daysInMonth / 7);
+
+  const rangeStart = genMode === 'month' ? monthAnchor : weekStart;
+  const rangeDays = genMode === 'month' ? daysInMonth : 7;
+
+  useEffect(() => { setViewWeekIndex(0); }, [genMode, monthOffset]);
+
+  const clampedViewIndex = Math.min(viewWeekIndex, weeksInMonth - 1);
+  const viewStart = genMode === 'month'
+    ? new Date(monthAnchor.getFullYear(), monthAnchor.getMonth(), 1 + clampedViewIndex * 7)
+    : weekStart;
+  const viewDayCount = genMode === 'month' ? Math.min(7, daysInMonth - clampedViewIndex * 7) : 7;
+  const viewDates: Date[] = Array.from({ length: viewDayCount }, (_, i) => {
+    const d = new Date(viewStart);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
 
   const [activeTab, setActiveTab] = useState<'grafik' | 'dostepnosc'>('grafik');
 
@@ -68,8 +111,9 @@ export default function ScheduleAIScreen() {
   // Tap-to-move: tap a shift to pick it up, tap a destination cell to drop it
   // there (swaps if occupied). Works identically on web and native — HTML5
   // drag-and-drop doesn't exist on mobile and clashed with RN's own touch
-  // responder system on web anyway.
-  const [selectedCell, setSelectedCell] = useState<{ empId: string; dayIdx: number } | null>(null);
+  // responder system on web anyway. Keyed by absolute date (not day-of-week —
+  // a month view has the same weekday repeat multiple times).
+  const [selectedCell, setSelectedCell] = useState<{ empId: string; date: string } | null>(null);
 
   const rid = user?.restaurantId ?? '';
 
@@ -122,26 +166,24 @@ export default function ScheduleAIScreen() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Availability is per-DATE (not day-of-week), so it must be re-fetched
-  // whenever the visible week changes — sourced from the SAME `availability`
+  // Availability is per-DATE (not day-of-week), fetched across the WHOLE
+  // generation range (week or month) — sourced from the SAME `availability`
   // table the Dostępność screen reads/writes, so the AI always agrees with
   // what employees/managers actually see there.
   useEffect(() => {
     if (!rid) return;
     setAvailLoading(true);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 6);
-    const fromISO = weekStart.toISOString().slice(0, 10);
-    const toISO = weekEnd.toISOString().slice(0, 10);
-    getAvailabilityRange(rid, fromISO, toISO).then((avail) => {
+    const rangeEnd = new Date(rangeStart);
+    rangeEnd.setDate(rangeEnd.getDate() + rangeDays - 1);
+    getAvailabilityRange(rid, fmtDate(rangeStart), fmtDate(rangeEnd)).then((avail) => {
       setAvailability(avail);
       setAvailLoading(false);
     });
-  }, [rid, weekOffset]);
+  }, [rid, genMode, weekOffset, monthOffset]);
 
-  const draftKey = `schedule_draft_${rid}_${weekStart.toISOString().slice(0, 10)}`;
+  const draftKey = `schedule_draft_${rid}_${genMode}_${fmtDate(rangeStart)}`;
 
-  // Load persisted draft when week changes
+  // Load persisted draft when the generation range changes
   useEffect(() => {
     if (!rid || Platform.OS !== 'web') return;
     try {
@@ -160,18 +202,18 @@ export default function ScheduleAIScreen() {
   const handleGenerate = async () => {
     if (!prefs || employees.length === 0) return;
     setGenerating(true);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 6);
+    const rangeEnd = new Date(rangeStart);
+    rangeEnd.setDate(rangeEnd.getDate() + rangeDays - 1);
 
-    // Month-to-date hours already worked/published this month, so a monthly
-    // hour cap (max_hours_monthly) is respected across weeks, not just within
-    // the single week being generated.
-    const monthStart = new Date(weekStart.getFullYear(), weekStart.getMonth(), 1);
-    const dayBeforeWeek = new Date(weekStart);
-    dayBeforeWeek.setDate(dayBeforeWeek.getDate() - 1);
+    // Hours already worked/published earlier THIS calendar month, so a
+    // monthly hour cap (max_hours_monthly) is respected even when generating
+    // mid-month (e.g. re-generating the second half after manual edits).
+    const monthStartForCap = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1);
+    const dayBeforeRange = new Date(rangeStart);
+    dayBeforeRange.setDate(dayBeforeRange.getDate() - 1);
     const monthToDateHours: Record<string, number> = {};
-    if (dayBeforeWeek >= monthStart) {
-      const pastShifts = await getShiftsInRange(rid, monthStart.toISOString().slice(0, 10), dayBeforeWeek.toISOString().slice(0, 10));
+    if (dayBeforeRange >= monthStartForCap) {
+      const pastShifts = await getShiftsInRange(rid, fmtDate(monthStartForCap), fmtDate(dayBeforeRange));
       pastShifts.forEach((sh) => {
         if (sh.start_time && sh.end_time) {
           monthToDateHours[sh.employee_id] = (monthToDateHours[sh.employee_id] ?? 0) + hoursBetween(sh.start_time, sh.end_time);
@@ -179,9 +221,14 @@ export default function ScheduleAIScreen() {
       });
     }
 
-    const leaves = await getApprovedLeaves(rid, weekStart, weekEnd);
-    const res = generateSchedule(employees, availability, leaves as any, prefs, weekStart, restaurantSettings?.min_staffing ?? {}, groups, availabilityDefaults, shiftTypes, monthToDateHours);
+    const leaves = await getApprovedLeaves(rid, rangeStart, rangeEnd);
+    const res = generateSchedule(
+      employees, availability, leaves as any, prefs, rangeStart,
+      restaurantSettings?.min_staffing ?? {}, groups, availabilityDefaults,
+      shiftTypes, monthToDateHours, rangeDays
+    );
     setResult(res);
+    setViewWeekIndex(0);
     if (Platform.OS === 'web') {
       try { localStorage.setItem(draftKey, JSON.stringify(res.shifts)); } catch {}
     }
@@ -192,14 +239,14 @@ export default function ScheduleAIScreen() {
     setEditableShifts(result?.shifts ?? []);
   }, [result]);
 
-  const moveShift = (fromEmpId: string, fromDay: number, toEmpId: string, toDay: number) => {
-    if (fromEmpId === toEmpId && fromDay === toDay) return;
+  const moveShift = (fromEmpId: string, fromDate: string, toEmpId: string, toDate: string) => {
+    if (fromEmpId === toEmpId && fromDate === toDate) return;
     setEditableShifts(prev => {
       const updated = prev.map(sh => {
-        if (sh.employee_id === fromEmpId && sh.day_of_week === fromDay)
-          return { ...sh, employee_id: toEmpId, day_of_week: toDay };
-        if (sh.employee_id === toEmpId && sh.day_of_week === toDay)
-          return { ...sh, employee_id: fromEmpId, day_of_week: fromDay };
+        if (sh.employee_id === fromEmpId && sh.date === fromDate)
+          return { ...sh, employee_id: toEmpId, date: toDate, day_of_week: dowFromDateStr(toDate) };
+        if (sh.employee_id === toEmpId && sh.date === toDate)
+          return { ...sh, employee_id: fromEmpId, date: fromDate, day_of_week: dowFromDateStr(fromDate) };
         return sh;
       });
       if (Platform.OS === 'web') { try { localStorage.setItem(draftKey, JSON.stringify(updated)); } catch {} }
@@ -207,36 +254,28 @@ export default function ScheduleAIScreen() {
     });
   };
 
+  const periodLabel = genMode === 'month' ? `${MONTHS_PL[monthAnchor.getMonth()]} ${monthAnchor.getFullYear()}` : rangeLabel(weekStart, 7);
+
   const handlePublish = () => {
     if (!editableShifts.length) return;
+    const msg = `Opublikować ${editableShifts.length} zmian (${periodLabel})?\n\nPracownicy zobaczą je w swoim grafiku. Jeśli istnieją już zmiany w tym okresie, zostaną dodane duplikaty.`;
     if (Platform.OS === 'web') {
-      const confirmed = window.confirm(
-        `Opublikować ${editableShifts.length} zmian na tydzień ${weekLabel(weekStart)}?\n\nPracownicy zobaczą je w swoim grafiku. Jeśli istnieją już zmiany na ten tydzień, zostaną dodane duplikaty.`
-      );
-      if (confirmed) doPublish();
+      if (window.confirm(msg)) doPublish();
     } else {
-      Alert.alert(
-        'Opublikować grafik?',
-        `Zapisać ${editableShifts.length} zmian na tydzień ${weekLabel(weekStart)}? Pracownicy zobaczą je w grafiku.`,
-        [{ text: 'Anuluj', style: 'cancel' }, { text: 'Opublikuj', onPress: doPublish }]
-      );
+      Alert.alert('Opublikować grafik?', msg, [{ text: 'Anuluj', style: 'cancel' }, { text: 'Opublikuj', onPress: doPublish }]);
     }
   };
 
   const doPublish = async () => {
     setPublishing(true);
-    const pad = (n: number) => String(n).padStart(2, '0');
     let ok = 0;
     for (const sh of editableShifts) {
-      const d = new Date(weekStart);
-      d.setDate(d.getDate() + sh.day_of_week);
-      const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
       const emp = employees.find(e => e.id === sh.employee_id);
       const created = await createShift(rid, {
         employee_id: sh.employee_id,
         employee_name: sh.employee_name,
         job_title: emp?.job_title ?? '',
-        day: dateStr,
+        day: sh.date,
         start_time: sh.start_time,
         end_time: sh.end_time,
         status: 'zaplanowana',
@@ -253,21 +292,19 @@ export default function ScheduleAIScreen() {
   // Read-only: availability is edited on the real Dostępność screen — this
   // just reflects it, using the SAME resolution rules the AI schedules on
   // (explicit record → employment-type default → unconfirmed).
-  const getDayStatus = (empId: string, dayIdx: number): DayStatus => {
+  const getDayStatus = (empId: string, dateStr: string): DayStatus => {
     const emp = employees.find(e => e.id === empId);
     if (!emp) return { status: null, slot1_start: null, slot1_end: null };
-    const date = new Date(weekStart);
-    date.setDate(date.getDate() + dayIdx);
-    const dateStr = date.toISOString().split('T')[0];
     return resolveDayStatus(empId, dateStr, emp, availability, availabilityDefaults);
   };
 
-  const getAvail = (empId: string, day: number): boolean => {
-    const st = getDayStatus(empId, day).status;
+  const getAvail = (empId: string, dateStr: string): boolean => {
+    const st = getDayStatus(empId, dateStr).status;
     return st === 'available' || st === 'partial';
   };
 
-  // Build shift map from editable shifts
+  // Build shift map from editable shifts — always the WHOLE generated range,
+  // independent of which week-slice is currently displayed.
   const shiftMap: Record<string, GeneratedShift[]> = {};
   editableShifts.forEach(sh => {
     const key = sh.employee_id;
@@ -296,16 +333,16 @@ export default function ScheduleAIScreen() {
           </View>
           <View>
             <Text style={s.title}>Grafik pracy AI</Text>
-            <Text style={s.headerSub}>{weekLabel(weekStart)}</Text>
+            <Text style={s.headerSub}>{periodLabel}</Text>
           </View>
         </View>
         <View style={s.headerRight}>
           <View style={s.weekNav}>
-            <TouchableOpacity style={s.weekBtn} onPress={() => setWeekOffset(o => o - 1)} activeOpacity={0.7}>
+            <TouchableOpacity style={s.weekBtn} onPress={() => genMode === 'month' ? setMonthOffset(o => o - 1) : setWeekOffset(o => o - 1)} activeOpacity={0.7}>
               <Ionicons name="chevron-back" size={16} color={theme.colors.textSecondary} />
             </TouchableOpacity>
-            <Text style={s.weekLabel}>Tydzień</Text>
-            <TouchableOpacity style={s.weekBtn} onPress={() => setWeekOffset(o => o + 1)} activeOpacity={0.7}>
+            <Text style={s.weekLabel}>{genMode === 'month' ? 'Miesiąc' : 'Tydzień'}</Text>
+            <TouchableOpacity style={s.weekBtn} onPress={() => genMode === 'month' ? setMonthOffset(o => o + 1) : setWeekOffset(o => o + 1)} activeOpacity={0.7}>
               <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
             </TouchableOpacity>
           </View>
@@ -319,6 +356,16 @@ export default function ScheduleAIScreen() {
             <Text style={s.generateBtnText}>{generating ? 'Generowanie...' : 'Generuj AI'}</Text>
           </TouchableOpacity>
         </View>
+      </View>
+
+      {/* Week / Month mode toggle */}
+      <View style={s.modeToggle}>
+        <TouchableOpacity style={[s.modeBtn, genMode === 'week' && s.modeBtnActive]} onPress={() => setGenMode('week')} activeOpacity={0.7}>
+          <Text style={[s.modeBtnText, genMode === 'week' && s.modeBtnTextActive]}>Tydzień</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[s.modeBtn, genMode === 'month' && s.modeBtnActive]} onPress={() => setGenMode('month')} activeOpacity={0.7}>
+          <Text style={[s.modeBtnText, genMode === 'month' && s.modeBtnTextActive]}>Miesiąc</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Stats bar */}
@@ -335,7 +382,7 @@ export default function ScheduleAIScreen() {
         <View style={s.statDivider} />
         <View style={s.statItem}>
           <Text style={[s.statNum, { color: result ? '#059669' : theme.colors.textMuted }]}>
-            {result ? `${result.stats.coveredDays}/7` : '—'}
+            {result ? `${result.stats.coveredDays}/${result.stats.staffPerDay.length}` : '—'}
           </Text>
           <Text style={s.statLbl}>dni pokrytych</Text>
         </View>
@@ -388,7 +435,9 @@ export default function ScheduleAIScreen() {
                 <Text style={s.emptySub}>AI uwzględni dostępność pracowników, urlopy i preferencje godzinowe.</Text>
                 <TouchableOpacity style={s.generateBigBtn} onPress={handleGenerate} activeOpacity={0.85}>
                   <Ionicons name="sparkles" size={18} color="#fff" />
-                  <Text style={s.generateBigBtnText}>Generuj grafik na ten tydzień</Text>
+                  <Text style={s.generateBigBtnText}>
+                    {genMode === 'month' ? 'Generuj grafik na cały miesiąc' : 'Generuj grafik na ten tydzień'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             ) : (
@@ -423,13 +472,39 @@ export default function ScheduleAIScreen() {
                   </View>
                 )}
 
-                {/* Schedule grid */}
+                {/* Week-slice navigator — only relevant when viewing a generated month */}
+                {genMode === 'month' && weeksInMonth > 1 && (
+                  <View style={s.weekSliceNav}>
+                    <TouchableOpacity
+                      disabled={clampedViewIndex === 0}
+                      onPress={() => setViewWeekIndex(i => Math.max(0, i - 1))}
+                      style={[s.weekSliceBtn, clampedViewIndex === 0 && s.weekSliceBtnDisabled]}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="chevron-back" size={16} color={clampedViewIndex === 0 ? theme.colors.textMuted : '#7C3AED'} />
+                    </TouchableOpacity>
+                    <Text style={s.weekSliceLabel}>
+                      Tydzień {clampedViewIndex + 1}/{weeksInMonth} · {rangeLabel(viewDates[0], viewDates.length)}
+                    </Text>
+                    <TouchableOpacity
+                      disabled={clampedViewIndex === weeksInMonth - 1}
+                      onPress={() => setViewWeekIndex(i => Math.min(weeksInMonth - 1, i + 1))}
+                      style={[s.weekSliceBtn, clampedViewIndex === weeksInMonth - 1 && s.weekSliceBtnDisabled]}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="chevron-forward" size={16} color={clampedViewIndex === weeksInMonth - 1 ? theme.colors.textMuted : '#7C3AED'} />
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Schedule grid — one 7-day (or shorter, last slice of a month) view */}
                 <View style={s.grid}>
                   <View style={s.gridHeader}>
                     <View style={s.gridEmpCol} />
-                    {DAYS.map((d, i) => (
+                    {viewDates.map((d, i) => (
                       <View key={i} style={s.gridDayCol}>
-                        <Text style={s.gridDayText}>{d}</Text>
+                        <Text style={s.gridDayText}>{WEEKDAY_SHORT[dowOf(d)]}</Text>
+                        {genMode === 'month' && <Text style={s.gridDayNum}>{d.getDate()}</Text>}
                       </View>
                     ))}
                   </View>
@@ -450,34 +525,35 @@ export default function ScheduleAIScreen() {
                             </View>
                           )}
                         </View>
-                        {DAYS.map((_, dayIdx) => {
-                          const shift = empShifts.find(sh => sh.day_of_week === dayIdx);
-                          const avail = getAvail(emp.id, dayIdx);
+                        {viewDates.map((d) => {
+                          const cellDate = fmtDate(d);
+                          const shift = empShifts.find(sh => sh.date === cellDate);
+                          const avail = getAvail(emp.id, cellDate);
                           const color = emp.avatar_color ?? theme.colors.primary;
-                          const isThisSelected = selectedCell?.empId === emp.id && selectedCell?.dayIdx === dayIdx;
+                          const isThisSelected = selectedCell?.empId === emp.id && selectedCell?.date === cellDate;
                           const isDropHighlight = !!selectedCell && !isThisSelected;
 
                           const handleCellPress = () => {
                             // Tapped empty space in this cell (the shift block, if any,
                             // consumes its own tap and never bubbles here).
                             if (selectedCell) {
-                              moveShift(selectedCell.empId, selectedCell.dayIdx, emp.id, dayIdx);
+                              moveShift(selectedCell.empId, selectedCell.date, emp.id, cellDate);
                               setSelectedCell(null);
                             }
                           };
                           const handleShiftPress = () => {
                             if (isThisSelected) { setSelectedCell(null); return; }
                             if (selectedCell) {
-                              moveShift(selectedCell.empId, selectedCell.dayIdx, emp.id, dayIdx);
+                              moveShift(selectedCell.empId, selectedCell.date, emp.id, cellDate);
                               setSelectedCell(null);
                               return;
                             }
-                            setSelectedCell({ empId: emp.id, dayIdx });
+                            setSelectedCell({ empId: emp.id, date: cellDate });
                           };
 
                           return (
                             <TouchableOpacity
-                              key={dayIdx}
+                              key={cellDate}
                               style={[s.gridDayCol, isDropHighlight && s.gridDayColDrop]}
                               activeOpacity={selectedCell ? 0.6 : 1}
                               onPress={handleCellPress}
@@ -509,13 +585,16 @@ export default function ScheduleAIScreen() {
                   })}
                 </View>
 
-                {/* Per-employee summary */}
-                <Text style={s.sectionTitle}>Podsumowanie tygodnia</Text>
+                {/* Per-employee summary — always the WHOLE generated range's totals */}
+                <Text style={s.sectionTitle}>{genMode === 'month' ? 'Podsumowanie miesiąca' : 'Podsumowanie tygodnia'}</Text>
                 {employees.map(emp => {
                   const empShifts = shiftMap[emp.id] ?? [];
                   const total = empShifts.reduce((s, sh) => s + sh.hours, 0);
                   const color = emp.avatar_color ?? theme.colors.primary;
-                  const pct = prefs ? Math.min(total / prefs.max_hours_per_week, 1) : 0;
+                  const capHours = genMode === 'month'
+                    ? (prefs?.max_hours_monthly ?? (prefs?.max_hours_per_week ?? 0) * weeksInMonth)
+                    : (prefs?.max_hours_per_week ?? 0);
+                  const pct = capHours > 0 ? Math.min(total / capHours, 1) : 0;
                   return (
                     <View key={emp.id} style={s.summaryRow}>
                       <View style={[s.empAvatar, { backgroundColor: color + '22' }]}>
@@ -529,7 +608,7 @@ export default function ScheduleAIScreen() {
                         <View style={s.progressBg}>
                           <View style={[s.progressFill, { width: `${pct * 100}%`, backgroundColor: color }]} />
                         </View>
-                        <Text style={s.summaryMeta}>{empShifts.length} zmian · max {prefs?.max_hours_per_week}h</Text>
+                        <Text style={s.summaryMeta}>{empShifts.length} zmian · max {capHours}h{genMode === 'month' ? '/mies.' : '/tydz.'}</Text>
                       </View>
                     </View>
                   );
@@ -556,7 +635,7 @@ export default function ScheduleAIScreen() {
         {activeTab === 'dostepnosc' && (
           <View style={s.content}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <Text style={[s.sectionTitle, { flex: 1 }]}>Dostępność w tym tygodniu</Text>
+              <Text style={[s.sectionTitle, { flex: 1 }]}>Dostępność — {rangeLabel(viewDates[0] ?? viewStart, viewDates.length || 1)}</Text>
               <TouchableOpacity
                 style={s.openAvailBtn}
                 onPress={() => router.push('/(tabs)/availability' as any)}
@@ -578,7 +657,7 @@ export default function ScheduleAIScreen() {
             ) : (
               employees.map(emp => {
                 const color = emp.avatar_color ?? theme.colors.primary;
-                const statuses = DAYS.map((_, i) => getDayStatus(emp.id, i).status);
+                const statuses = viewDates.map((d) => getDayStatus(emp.id, fmtDate(d)).status);
                 const totalAvail = statuses.filter(st => st === 'available' || st === 'partial').length;
                 return (
                   <View key={emp.id} style={s.availCard}>
@@ -590,10 +669,10 @@ export default function ScheduleAIScreen() {
                         <Text style={s.empName}>{emp.first_name} {emp.last_name}</Text>
                         <Text style={s.empRole}>{emp.job_title}</Text>
                       </View>
-                      <Text style={[s.availCount, { color }]}>{totalAvail}/7 dni</Text>
+                      <Text style={[s.availCount, { color }]}>{totalAvail}/{viewDates.length} dni</Text>
                     </View>
                     <View style={s.availDays}>
-                      {DAYS.map((day, i) => {
+                      {viewDates.map((d, i) => {
                         const st = statuses[i];
                         const cfg = st === 'available' ? { bg: '#E8F8ED', border: '#22C55E', text: '#22C55E' }
                           : st === 'partial' ? { bg: '#FFF4E5', border: '#F97316', text: '#F97316' }
@@ -601,7 +680,7 @@ export default function ScheduleAIScreen() {
                           : { bg: theme.colors.surface, border: theme.colors.border, text: theme.colors.textMuted };
                         return (
                           <View key={i} style={[s.availDay, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
-                            <Text style={[s.availDayLabel, { color: cfg.text }]}>{day}</Text>
+                            <Text style={[s.availDayLabel, { color: cfg.text }]}>{WEEKDAY_SHORT[dowOf(d)]}</Text>
                           </View>
                         );
                       })}
@@ -639,6 +718,11 @@ const s = StyleSheet.create({
   generateBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#7C3AED', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 22 },
   generateBtnLoading: { backgroundColor: '#A78BFA' },
   generateBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  modeToggle: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 4, backgroundColor: theme.colors.card },
+  modeBtn: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 10, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border },
+  modeBtnActive: { backgroundColor: '#EDE9FE', borderColor: '#7C3AED' },
+  modeBtnText: { fontSize: 12, fontWeight: '700', color: theme.colors.textSecondary },
+  modeBtnTextActive: { color: '#7C3AED' },
   statsBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.card, paddingVertical: 10, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   statItem: { flex: 1, alignItems: 'center' },
   statNum: { fontSize: 15, fontWeight: '800', color: theme.colors.text },
@@ -664,12 +748,17 @@ const s = StyleSheet.create({
   publishSub: { fontSize: 11, color: '#7C3AED', marginTop: 1 },
   publishBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#7C3AED', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10 },
   publishBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  weekSliceNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: theme.colors.card, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 12, ...theme.shadows.card },
+  weekSliceBtn: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F5F3FF' },
+  weekSliceBtnDisabled: { backgroundColor: theme.colors.surface },
+  weekSliceLabel: { fontSize: 12, fontWeight: '700', color: theme.colors.text },
   gridDayColDrop: { backgroundColor: '#EDE9FE', borderRadius: 6 },
   grid: { backgroundColor: theme.colors.card, borderRadius: 14, overflow: 'hidden', ...theme.shadows.card },
   gridHeader: { flexDirection: 'row', backgroundColor: theme.colors.surface, paddingVertical: 7 },
   gridEmpCol: { width: 76, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, gap: 6 },
   gridDayCol: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 4, paddingHorizontal: 1 },
   gridDayText: { fontSize: 10, fontWeight: '700', color: theme.colors.textSecondary },
+  gridDayNum: { fontSize: 9, fontWeight: '600', color: theme.colors.textMuted, marginTop: 1 },
   gridRow: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: theme.colors.border, paddingVertical: 5 },
   empAvatar: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   empAvatarText: { fontSize: 10, fontWeight: '800' },

@@ -117,12 +117,13 @@ export function generateSchedule(
   availability: DbAvailability[],
   leaves: { employee_id: string; start_date: string; end_date: string; status: string }[],
   prefs: SchedulePrefs,
-  weekStart: Date,
+  rangeStart: Date,
   minStaffing: Record<string, any> = {},
   groups: (DbEmployeeGroup & { members: string[] })[] = [],
   availabilityDefaults: AvailabilityDefaults = { availability_contract_all_available: true, availability_freelance_all_available: false },
   shiftTypes: ShiftTypeRow[] = [],
-  monthToDateHours: Record<string, number> = {}
+  monthToDateHours: Record<string, number> = {},
+  numDays: number = 7
 ): GenerationResult {
   const shifts: GeneratedShift[] = [];
   const warnings: string[] = [];
@@ -180,6 +181,15 @@ export function generateSchedule(
   const useSimpleMode = !hasRoleConfig && !hasGroupConfig;
   const simpleMinStaff = prefs.min_staff_per_shift ?? 2;
 
+  // Diagnostic: staffing is configured PER GROUP, but no group data came in at
+  // all (e.g. RLS blocked it, or every configured group was since deleted).
+  // Without this, every group target silently resolves to 0 eligible people
+  // all week, which otherwise just looks like "the AI skipped everyone" —
+  // flag the actual cause loudly, once, at the top.
+  if (hasGroupConfig && groups.length === 0) {
+    warnings.push('Nie udało się wczytać grup pracowników, mimo że obsada jest skonfigurowana per grupa — żadne zapotrzebowanie oparte na grupach nie mogło zostać uzupełnione. Sprawdź zakładkę Grupy i uprawnienia dostępu.');
+  }
+
   // ── Shift types: real named blocks (e.g. "Rano" 8-16, "Popołudnie" 14-22) if
   // configured & enabled, otherwise a single synthetic block using the
   // restaurant's default shift time — the rest of the algorithm always
@@ -203,11 +213,16 @@ export function generateSchedule(
     return effectiveShiftTypes.map((_, i) => base + (i < remainder ? 1 : 0));
   }
 
-  for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
-    const date = new Date(weekStart);
+  for (let dayIdx = 0; dayIdx < numDays; dayIdx++) {
+    const date = new Date(rangeStart);
     date.setDate(date.getDate() + dayIdx);
     const dateStr = date.toISOString().split('T')[0];
-    const isWeekend = dayIdx >= 5; // Sat=5, Sun=6
+    // Staffing config (weekly/groups patterns) is a Mon(0)..Sun(6) weekly
+    // pattern — derive it from the ACTUAL weekday of this date, not dayIdx % 7
+    // (rangeStart isn't always a Monday — e.g. the 1st of a month rarely is).
+    const jsDay = date.getDay();
+    const dow = jsDay === 0 ? 6 : jsDay - 1;
+    const isWeekend = dow >= 5; // Sat=5, Sun=6
 
     // Who worked yesterday (for "avoid single-day gap" continuity bias) and
     // who closed last night (for the opening/closing guard).
@@ -222,10 +237,10 @@ export function generateSchedule(
         .map(([key, count]) => ({ key, count, kind: (groupMembers[key] ? 'group' : 'role') as 'group' | 'role' }));
     } else if (!useSimpleMode) {
       Object.entries(groupsConfig).forEach(([groupId, arr]) => {
-        if (arr && arr[dayIdx] > 0) dayTargets.push({ key: groupId, count: arr[dayIdx], kind: 'group' });
+        if (arr && arr[dow] > 0) dayTargets.push({ key: groupId, count: arr[dow], kind: 'group' });
       });
       Object.entries(weeklyConfig).forEach(([role, arr]) => {
-        if (arr && arr[dayIdx] > 0) dayTargets.push({ key: role, count: arr[dayIdx], kind: 'role' });
+        if (arr && arr[dow] > 0) dayTargets.push({ key: role, count: arr[dow], kind: 'role' });
       });
     } else {
       dayTargets = [{ key: '_all', count: simpleMinStaff, kind: 'all' }];
@@ -371,7 +386,7 @@ export function generateSchedule(
             employee_name: `${emp.first_name} ${emp.last_name}`,
             employee_color: COLORS[emp.id],
             date: dateStr,
-            day_of_week: dayIdx,
+            day_of_week: dow,
             start_time: start,
             end_time: end,
             hours: h,
@@ -395,8 +410,9 @@ export function generateSchedule(
       if (assignedForTarget < target.count) {
         dayCovered = false;
         const label = target.kind === 'group' ? (groupName[target.key] ?? target.key) : target.kind === 'role' ? target.key : '';
+        const dayLabel = numDays > 7 ? `${DAY_NAMES[dow]} ${dateStr.slice(8, 10)}.${dateStr.slice(5, 7)}` : DAY_NAMES[dow];
         warnings.push(
-          `${DAY_NAMES[dayIdx]}${label ? ` (${label})` : ''}: niewystarczająca obsada — ${assignedForTarget}/${target.count} os.`
+          `${dayLabel}${label ? ` (${label})` : ''}: niewystarczająca obsada — ${assignedForTarget}/${target.count} os.`
         );
       }
     }
