@@ -529,9 +529,11 @@ export default function ScheduleScreen() {
   /* Legend */
   const [showLegend, setShowLegend] = useState(false);
 
-  /* Drag state (web only) */
-  const [dragShiftId, setDragShiftId] = useState<string | null>(null);
-  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  /* Move-shift state — long-press a shift, then tap a destination day.
+     (HTML5 drag-and-drop was unreliable here: it clashes with RN's own touch
+     responder system on Pressable/TouchableOpacity, and doesn't exist at all
+     on native mobile — this works identically on web and native.) */
+  const [moveShiftId, setMoveShiftId] = useState<string | null>(null);
 
   /* Stats modal state */
   const [showStatsModal, setShowStatsModal] = useState(false);
@@ -612,21 +614,16 @@ export default function ScheduleScreen() {
   const navigateWeek = (dir: 1 | -1) => setSelectedDate(fmt(addDays(selDateObj, dir * 7)));
   const navigateDay = (dir: 1 | -1) => setSelectedDate(fmt(addDays(selDateObj, dir)));
 
-  /* ── Web drag-and-drop handlers ── */
-  const handleDragStart = (shiftId: string) => {
-    if (Platform.OS === 'web') setDragShiftId(shiftId);
-  };
-  const handleDragOver = (dateStr: string) => {
-    if (Platform.OS === 'web') setDragOverDate(dateStr);
-  };
-  const handleDrop = async (dateStr: string) => {
-    if (!dragShiftId || !dateStr) return;
-    setDragShiftId(null);
-    setDragOverDate(null);
-    const shift = allShifts.find(s => s.id === dragShiftId);
+  /* ── Move-shift: long-press a shift to pick it up, tap a day to drop it ── */
+  const startMoveShift = (shiftId: string) => { if (isOwner) setMoveShiftId(shiftId); };
+  const cancelMoveShift = () => setMoveShiftId(null);
+  const handleMoveTo = async (dateStr: string) => {
+    if (!moveShiftId) return;
+    const shift = allShifts.find(s => s.id === moveShiftId);
+    setMoveShiftId(null);
     if (!shift || shift.day === dateStr) return;
-    const updated = await dbUpdateShift(dragShiftId, { day: dateStr });
-    if (updated) setAllShifts(prev => prev.map(s => s.id === dragShiftId ? updated : s));
+    const updated = await dbUpdateShift(shift.id, { day: dateStr });
+    if (updated) setAllShifts(prev => prev.map(s => s.id === shift.id ? updated : s));
   };
 
   const handleOpenStats = async () => {
@@ -673,13 +670,10 @@ export default function ScheduleScreen() {
     const isSun = d.getDay() === 0;
     const isSat = d.getDay() === 6;
     const isOtherMonth = d.getMonth() !== curMonth;
-    const isDragOver = dragOverDate === dateStr;
-
-    const webDropProps = Platform.OS === 'web' ? {
-      onDragOver: (e: any) => { e.preventDefault(); handleDragOver(dateStr); },
-      onDrop: (e: any) => { e.preventDefault(); handleDrop(dateStr); },
-      onDragLeave: () => setDragOverDate(null),
-    } : {};
+    // While a shift is picked up (long-pressed), every day cell is a valid
+    // drop target — highlighted uniformly since there's no hover concept
+    // without native drag-over events.
+    const isMoveTarget = !!moveShiftId;
 
     const isWeekend = isSat || isSun;
     return (
@@ -691,10 +685,12 @@ export default function ScheduleScreen() {
           isOtherMonth && cal.cellOtherMonth,
           isToday && cal.cellToday,
           isSelected && cal.cellSelected,
-          isDragOver && cal.cellDragOver,
+          isMoveTarget && cal.cellDragOver,
         ]}
-        onPress={() => { setSelectedDate(dateStr); setCalView('day'); }}
-        {...(webDropProps as any)}
+        onPress={() => {
+          if (moveShiftId) { handleMoveTo(dateStr); return; }
+          setSelectedDate(dateStr); setCalView('day');
+        }}
       >
         <View style={cal.cellHeader}>
           <View style={[cal.dayNumWrap, isToday && cal.dayNumTodayWrap]}>
@@ -712,17 +708,19 @@ export default function ScheduleScreen() {
         <View style={cal.eventsWrap}>
           {cellShifts.slice(0, isDesktop ? 3 : 2).map((s) => {
             const cfg = STATUS_CONFIG[s.status as ShiftStatus];
-            const webDragProps = Platform.OS === 'web' ? {
-              draggable: isOwner,
-              onDragStart: (e: any) => { e.stopPropagation(); handleDragStart(s.id); },
-            } : {};
+            const isMovingThis = moveShiftId === s.id;
             const barColor = cfg?.color ?? theme.colors.primary;
             return (
               <Pressable
                 key={s.id}
-                style={[cal.eventBar, { borderLeftColor: barColor, backgroundColor: barColor + '18' }, dragShiftId === s.id && cal.eventDragging]}
-                onPress={(e) => { (e as any).stopPropagation?.(); setSelectedShift(s); }}
-                {...(webDragProps as any)}
+                style={[cal.eventBar, { borderLeftColor: barColor, backgroundColor: barColor + '18' }, isMovingThis && cal.eventDragging]}
+                onPress={(e) => {
+                  (e as any).stopPropagation?.();
+                  if (isMovingThis) { cancelMoveShift(); return; }
+                  setSelectedShift(s);
+                }}
+                onLongPress={(e) => { (e as any).stopPropagation?.(); startMoveShift(s.id); }}
+                delayLongPress={350}
               >
                 <Text style={[cal.eventText, { color: barColor }]} numberOfLines={1}>{s.start_time} {s.employee_name?.split(' ')[0]}</Text>
               </Pressable>
@@ -809,6 +807,17 @@ export default function ScheduleScreen() {
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* Move-shift mode banner */}
+      {!!moveShiftId && calView !== 'day' && (
+        <View style={styles.moveBanner}>
+          <Ionicons name="move-outline" size={16} color="#fff" />
+          <Text style={styles.moveBannerText}>Przenoszenie zmiany — dotknij dzień docelowy</Text>
+          <TouchableOpacity onPress={cancelMoveShift} style={styles.moveBannerCancel} activeOpacity={0.8}>
+            <Text style={styles.moveBannerCancelText}>Anuluj</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Quick Actions - Grafikowe funkcje */}
       <View style={{ paddingHorizontal: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border, backgroundColor: theme.colors.card }}>
@@ -935,17 +944,12 @@ export default function ScheduleScreen() {
               </View>
               {weekDates.map((d, i) => {
                 const colLayout = layoutEvents(allShifts.filter((s) => s.day === d));
-                const isDropTarget = dragOverDate === d && dragShiftId !== null;
-                const webColProps = isOwner && Platform.OS === 'web' ? {
-                  onDragOver: (e: any) => { e.preventDefault(); handleDragOver(d); },
-                  onDragLeave: () => setDragOverDate(null),
-                  onDrop: (e: any) => { e.preventDefault(); handleDrop(d); },
-                } as any : {};
+                const isDropTarget = !!moveShiftId;
                 return (
-                  <View
+                  <Pressable
                     key={d}
                     style={[wv.dayCol, (i === 5 || i === 6) && wv.weekendBg, isDropTarget && wv.dayColDrop]}
-                    {...webColProps}
+                    onPress={() => { if (moveShiftId) handleMoveTo(d); }}
                   >
                     {GRID_HOURS.map((h) => <View key={h} style={wv.hourLine} />)}
                     {colLayout.map(({ shift: s, col, totalCols }) => {
@@ -954,24 +958,19 @@ export default function ScheduleScreen() {
                       const cfg = STATUS_CONFIG[s.status as ShiftStatus];
                       const wPct = `${Math.floor(100 / totalCols) - 1}%`;
                       const lPct = `${Math.floor((col / totalCols) * 100) + 1}%`;
-                      const isDraggingThis = dragShiftId === s.id;
-                      const webShiftProps = isOwner && Platform.OS === 'web' ? {
-                        draggable: true,
-                        onDragStart: (e: any) => { e.dataTransfer.effectAllowed = 'move'; handleDragStart(s.id); },
-                        onDragEnd: () => { setDragShiftId(null); setDragOverDate(null); },
-                      } as any : {};
+                      const isMovingThis = moveShiftId === s.id;
                       return (
                         <TouchableOpacity
                           key={s.id}
                           style={[
                             wv.event,
                             { top, height, left: lPct as any, width: wPct as any, backgroundColor: cfg?.color ?? theme.colors.primary },
-                            isDraggingThis && { opacity: 0.35 },
-                            isOwner && Platform.OS === 'web' && { cursor: 'grab' } as any,
+                            isMovingThis && { opacity: 0.35 },
                           ]}
                           activeOpacity={0.85}
-                          onPress={() => setSelectedShift(s)}
-                          {...webShiftProps}
+                          onPress={() => { if (isMovingThis) { cancelMoveShift(); return; } setSelectedShift(s); }}
+                          onLongPress={() => startMoveShift(s.id)}
+                          delayLongPress={350}
                         >
                           <Text style={wv.eventTitle} numberOfLines={1}>{s.start_time} {s.employee_name?.split(' ')[0]}</Text>
                           {height >= 42 && <Text style={wv.eventSub} numberOfLines={1}>{s.end_time}</Text>}
@@ -981,7 +980,7 @@ export default function ScheduleScreen() {
                     <View style={wv.gridOverlay} pointerEvents="none">
                       {GRID_HOURS.map((h) => <View key={h} style={wv.hourOverlayLine} />)}
                     </View>
-                  </View>
+                  </Pressable>
                 );
               })}
             </View>
@@ -1502,6 +1501,17 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
     ...(Platform.OS === 'web' ? { height: '100vh' as any, overflow: 'hidden' as any } : {}),
   },
+  moveBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#7C3AED',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  moveBannerText: { flex: 1, fontSize: 13, fontWeight: '600', color: '#fff' },
+  moveBannerCancel: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
+  moveBannerCancelText: { fontSize: 12, fontWeight: '700', color: '#fff' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',

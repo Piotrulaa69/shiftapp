@@ -65,9 +65,11 @@ export default function ScheduleAIScreen() {
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
-  const dragRef = useRef<{ empId: string; dayIdx: number } | null>(null);
-  const [dragOver, setDragOver] = useState<{ empId: string; dayIdx: number } | null>(null);
-  const [dragging, setDragging] = useState<{ empId: string; dayIdx: number } | null>(null);
+  // Tap-to-move: tap a shift to pick it up, tap a destination cell to drop it
+  // there (swaps if occupied). Works identically on web and native — HTML5
+  // drag-and-drop doesn't exist on mobile and clashed with RN's own touch
+  // responder system on web anyway.
+  const [selectedCell, setSelectedCell] = useState<{ empId: string; dayIdx: number } | null>(null);
 
   const rid = user?.restaurantId ?? '';
 
@@ -395,7 +397,9 @@ export default function ScheduleAIScreen() {
                 <View style={s.publishBar}>
                   <View style={{ flex: 1 }}>
                     <Text style={s.publishTitle}>Gotowy do publikacji</Text>
-                    <Text style={s.publishSub}>{editableShifts.length} zmian · przeciągnij, aby przesunąć</Text>
+                    <Text style={s.publishSub}>
+                      {editableShifts.length} zmian · {selectedCell ? 'dotknij miejsce docelowe, aby przenieść' : 'dotknij zmianę, aby ją przenieść'}
+                    </Text>
                   </View>
                   <TouchableOpacity
                     style={[s.publishBtn, publishing && { opacity: 0.6 }]}
@@ -441,55 +445,54 @@ export default function ScheduleAIScreen() {
                           const shift = empShifts.find(sh => sh.day_of_week === dayIdx);
                           const avail = getAvail(emp.id, dayIdx);
                           const color = emp.avatar_color ?? theme.colors.primary;
-                          const isThisDragOver = dragOver?.empId === emp.id && dragOver?.dayIdx === dayIdx;
-                          const isThisDragging = dragging?.empId === emp.id && dragging?.dayIdx === dayIdx;
-                          const webDropProps = Platform.OS === 'web' ? {
-                            onDragOver: (e: any) => { e.preventDefault(); setDragOver({ empId: emp.id, dayIdx }); },
-                            onDragLeave: () => setDragOver(null),
-                            onDrop: (e: any) => {
-                              e.preventDefault();
-                              setDragOver(null);
-                              if (dragRef.current) {
-                                moveShift(dragRef.current.empId, dragRef.current.dayIdx, emp.id, dayIdx);
-                                dragRef.current = null;
-                                setDragging(null);
-                              }
-                            },
-                          } as any : {};
+                          const isThisSelected = selectedCell?.empId === emp.id && selectedCell?.dayIdx === dayIdx;
+                          const isDropHighlight = !!selectedCell && !isThisSelected;
+
+                          const handleCellPress = () => {
+                            // Tapped empty space in this cell (the shift block, if any,
+                            // consumes its own tap and never bubbles here).
+                            if (selectedCell) {
+                              moveShift(selectedCell.empId, selectedCell.dayIdx, emp.id, dayIdx);
+                              setSelectedCell(null);
+                            }
+                          };
+                          const handleShiftPress = () => {
+                            if (isThisSelected) { setSelectedCell(null); return; }
+                            if (selectedCell) {
+                              moveShift(selectedCell.empId, selectedCell.dayIdx, emp.id, dayIdx);
+                              setSelectedCell(null);
+                              return;
+                            }
+                            setSelectedCell({ empId: emp.id, dayIdx });
+                          };
+
                           return (
-                            <View
+                            <TouchableOpacity
                               key={dayIdx}
-                              style={[s.gridDayCol, isThisDragOver && s.gridDayColDrop]}
-                              {...webDropProps}
+                              style={[s.gridDayCol, isDropHighlight && s.gridDayColDrop]}
+                              activeOpacity={selectedCell ? 0.6 : 1}
+                              onPress={handleCellPress}
                             >
                               {shift ? (
-                                <View
-                                  style={[s.shiftBlock, { backgroundColor: color + '18', borderColor: color }, isThisDragging && { opacity: 0.3 }]}
-                                  {...(Platform.OS === 'web' ? {
-                                    draggable: true,
-                                    onDragStart: (e: any) => {
-                                      dragRef.current = { empId: emp.id, dayIdx };
-                                      setDragging({ empId: emp.id, dayIdx });
-                                      e.dataTransfer.effectAllowed = 'move';
-                                    },
-                                    onDragEnd: () => { dragRef.current = null; setDragging(null); setDragOver(null); },
-                                    style: { cursor: 'grab', backgroundColor: color + '18', borderColor: color, borderWidth: 1, borderLeftWidth: 3, width: '92%', borderRadius: 6, paddingVertical: 3, alignItems: 'center' },
-                                  } as any : {})}
+                                <TouchableOpacity
+                                  onPress={handleShiftPress}
+                                  activeOpacity={0.75}
+                                  style={[s.shiftBlock, { backgroundColor: color + '18', borderColor: color, width: '92%', borderLeftWidth: 3 }, isThisSelected && s.shiftBlockSelected]}
                                 >
                                   {shift.shift_type_name ? <Text style={[s.shiftTypeLabel, { color }]} numberOfLines={1}>{shift.shift_type_name}</Text> : null}
                                   <Text style={[s.shiftTime, { color }]}>{shift.start_time}</Text>
                                   <Text style={[s.shiftHours, { color }]}>{shift.hours}h</Text>
-                                </View>
+                                </TouchableOpacity>
                               ) : !avail ? (
                                 <View style={s.offBlock}>
                                   <Text style={s.offText}>—</Text>
                                 </View>
                               ) : (
                                 <View style={s.freeBlock}>
-                                  <Ionicons name="ellipse-outline" size={12} color={isThisDragOver ? theme.colors.primary : theme.colors.border} />
+                                  <Ionicons name="ellipse-outline" size={12} color={isDropHighlight ? theme.colors.primary : theme.colors.border} />
                                 </View>
                               )}
-                            </View>
+                            </TouchableOpacity>
                           );
                         })}
                       </View>
@@ -664,6 +667,7 @@ const s = StyleSheet.create({
   empName: { fontSize: 11, fontWeight: '700', color: theme.colors.text },
   empRole: { fontSize: 10, color: theme.colors.textMuted },
   shiftBlock: { width: '92%', borderRadius: 6, paddingVertical: 3, alignItems: 'center', borderWidth: 1, borderLeftWidth: 3 },
+  shiftBlockSelected: { opacity: 0.5, borderWidth: 2, borderColor: '#7C3AED' },
   shiftTypeLabel: { fontSize: 8, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.3 },
   shiftTime: { fontSize: 9, fontWeight: '700' },
   shiftHours: { fontSize: 10, fontWeight: '800' },
