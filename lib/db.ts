@@ -538,6 +538,20 @@ export async function getAvailabilityAll(restaurantId: string, month: string): P
   return data as DbAvailability[];
 }
 
+// Date-range variant (month-based getAvailabilityAll can miss a week that spans
+// two calendar months, e.g. Jan 29 – Feb 4) — used by the AI schedule generator.
+export async function getAvailabilityRange(restaurantId: string, fromISO: string, toISO: string): Promise<DbAvailability[]> {
+  const { data, error } = await supabase
+    .from('availability')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .gte('day', fromISO)
+    .lte('day', toISO)
+    .order('day');
+  if (error) { console.error('getAvailabilityRange', error); return []; }
+  return data as DbAvailability[];
+}
+
 export async function getAvailability(restaurantId: string, employeeId: string, month: string): Promise<DbAvailability[]> {
   const startDate = month + '-01';
   const [y, m] = month.split('-').map(Number);

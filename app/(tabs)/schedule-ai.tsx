@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text,
@@ -6,16 +7,19 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { createShift, getEmployees, getRestaurantSettings } from '../../lib/db';
+import { createShift, getAvailabilityRange, getEmployeeGroupsWithMembers, getEmployees, getRestaurantSettings } from '../../lib/db';
 import {
-    DEFAULT_PREFS, EmpAvail,
+    AvailabilityDefaults,
+    DayStatus,
+    DEFAULT_PREFS,
     GeneratedShift,
     generateSchedule,
     GenerationResult,
-    getApprovedLeaves, getEmployeeAvailability, getSchedulePrefs,
-    SchedulePrefs, upsertEmployeeAvailability,
+    getApprovedLeaves, getSchedulePrefs,
+    resolveDayStatus,
+    SchedulePrefs,
 } from '../../lib/schedule';
-import type { DbProfile } from '../../lib/supabase';
+import type { DbAvailability, DbEmployeeGroup, DbProfile } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
 const DAYS = ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd'];
@@ -37,6 +41,7 @@ function weekLabel(weekStart: Date): string {
 
 export default function ScheduleAIScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
 
@@ -48,11 +53,13 @@ export default function ScheduleAIScreen() {
   // Data
   const [employees, setEmployees] = useState<DbProfile[]>([]);
   const [prefs, setPrefs] = useState<SchedulePrefs | null>(null);
-  const [availability, setAvailability] = useState<EmpAvail[]>([]);
+  const [availability, setAvailability] = useState<DbAvailability[]>([]);
+  const [groups, setGroups] = useState<(DbEmployeeGroup & { members: string[] })[]>([]);
   const [restaurantSettings, setRestaurantSettings] = useState<any>(null);
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [editableShifts, setEditableShifts] = useState<GeneratedShift[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
+  const [availLoading, setAvailLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
@@ -62,16 +69,22 @@ export default function ScheduleAIScreen() {
 
   const rid = user?.restaurantId ?? '';
 
+  const availabilityDefaults: AvailabilityDefaults = {
+    availability_contract_all_available: restaurantSettings?.availability_contract_all_available ?? true,
+    availability_freelance_all_available: restaurantSettings?.availability_freelance_all_available ?? false,
+  };
+
   const loadData = useCallback(async () => {
     if (!rid) return;
     setDataLoading(true);
-    const [emps, p, avail, rs] = await Promise.all([
+    const [emps, p, gr, rs] = await Promise.all([
       getEmployees(rid),
       getSchedulePrefs(rid),
-      getEmployeeAvailability(rid),
+      getEmployeeGroupsWithMembers(rid),
       getRestaurantSettings(rid),
     ]);
     setEmployees(emps as DbProfile[]);
+    setGroups(gr);
     const base = p ?? DEFAULT_PREFS(rid);
     // Merge extended AI prefs from RestaurantSettings into SchedulePrefs
     const resolvedPrefs: SchedulePrefs = {
@@ -87,12 +100,28 @@ export default function ScheduleAIScreen() {
       ai_priority_preferences: rs.ai_priority_preferences,
     };
     setPrefs(resolvedPrefs);
-    setAvailability(avail);
     setRestaurantSettings(rs);
     setDataLoading(false);
   }, [rid]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Availability is per-DATE (not day-of-week), so it must be re-fetched
+  // whenever the visible week changes — sourced from the SAME `availability`
+  // table the Dostępność screen reads/writes, so the AI always agrees with
+  // what employees/managers actually see there.
+  useEffect(() => {
+    if (!rid) return;
+    setAvailLoading(true);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    const fromISO = weekStart.toISOString().slice(0, 10);
+    const toISO = weekEnd.toISOString().slice(0, 10);
+    getAvailabilityRange(rid, fromISO, toISO).then((avail) => {
+      setAvailability(avail);
+      setAvailLoading(false);
+    });
+  }, [rid, weekOffset]);
 
   const draftKey = `schedule_draft_${rid}_${weekStart.toISOString().slice(0, 10)}`;
 
@@ -118,7 +147,7 @@ export default function ScheduleAIScreen() {
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 6);
     const leaves = await getApprovedLeaves(rid, weekStart, weekEnd);
-    const res = generateSchedule(employees, availability, leaves as any, prefs, weekStart, restaurantSettings?.min_staffing ?? {});
+    const res = generateSchedule(employees, availability, leaves as any, prefs, weekStart, restaurantSettings?.min_staffing ?? {}, groups, availabilityDefaults);
     setResult(res);
     if (Platform.OS === 'web') {
       try { localStorage.setItem(draftKey, JSON.stringify(res.shifts)); } catch {}
@@ -188,21 +217,21 @@ export default function ScheduleAIScreen() {
     Alert.alert('Opublikowano!', `Zapisano ${ok} z ${editableShifts.length} zmian. Pracownicy zobaczą je w grafiku.`);
   };
 
-  const toggleAvailability = async (employeeId: string, dayIdx: number, current: boolean) => {
-    const updated: EmpAvail = {
-      employee_id: employeeId,
-      restaurant_id: rid,
-      day_of_week: dayIdx,
-      available: !current,
-    };
-    const newAvail = [...availability.filter(a => !(a.employee_id === employeeId && a.day_of_week === dayIdx)), updated];
-    setAvailability(newAvail);
-    await upsertEmployeeAvailability([updated]);
+  // Read-only: availability is edited on the real Dostępność screen — this
+  // just reflects it, using the SAME resolution rules the AI schedules on
+  // (explicit record → employment-type default → unconfirmed).
+  const getDayStatus = (empId: string, dayIdx: number): DayStatus => {
+    const emp = employees.find(e => e.id === empId);
+    if (!emp) return { status: null, slot1_start: null, slot1_end: null };
+    const date = new Date(weekStart);
+    date.setDate(date.getDate() + dayIdx);
+    const dateStr = date.toISOString().split('T')[0];
+    return resolveDayStatus(empId, dateStr, emp, availability, availabilityDefaults);
   };
 
   const getAvail = (empId: string, day: number): boolean => {
-    const a = availability.find(a => a.employee_id === empId && a.day_of_week === day);
-    return a === undefined ? true : a.available;
+    const st = getDayStatus(empId, day).status;
+    return st === 'available' || st === 'partial';
   };
 
   // Build shift map from editable shifts
@@ -479,19 +508,34 @@ export default function ScheduleAIScreen() {
           </View>
         )}
 
-        {/* ── DOSTĘPNOŚĆ TAB ── */}
+        {/* ── DOSTĘPNOŚĆ TAB (read-only — źródłem prawdy jest ekran Dostępność) ── */}
         {activeTab === 'dostepnosc' && (
           <View style={s.content}>
-            <Text style={s.sectionTitle}>Dostępność pracowników</Text>
-            <Text style={s.sectionSub}>Dotknij dzień, aby przełączyć dostępność pracownika. Zmiany zapisują się automatycznie.</Text>
-            {employees.length === 0 ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Text style={[s.sectionTitle, { flex: 1 }]}>Dostępność w tym tygodniu</Text>
+              <TouchableOpacity
+                style={s.openAvailBtn}
+                onPress={() => router.push('/(tabs)/availability' as any)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="open-outline" size={14} color="#7C3AED" />
+                <Text style={s.openAvailBtnText}>Otwórz Dostępność</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={s.sectionSub}>
+              To jest podgląd — dokładnie te dane wykorzystuje generator AI. Edycję zrób na ekranie Dostępność.
+            </Text>
+            {availLoading ? (
+              <ActivityIndicator style={{ marginTop: 16 }} color={theme.colors.primary} />
+            ) : employees.length === 0 ? (
               <View style={s.emptyState}>
                 <Text style={s.emptySub}>Brak pracowników w restauracji.</Text>
               </View>
             ) : (
               employees.map(emp => {
                 const color = emp.avatar_color ?? theme.colors.primary;
-                const totalAvail = DAYS.map((_, i) => getAvail(emp.id, i)).filter(Boolean).length;
+                const statuses = DAYS.map((_, i) => getDayStatus(emp.id, i).status);
+                const totalAvail = statuses.filter(st => st === 'available' || st === 'partial').length;
                 return (
                   <View key={emp.id} style={s.availCard}>
                     <View style={s.availHeader}>
@@ -506,16 +550,15 @@ export default function ScheduleAIScreen() {
                     </View>
                     <View style={s.availDays}>
                       {DAYS.map((day, i) => {
-                        const avail = getAvail(emp.id, i);
+                        const st = statuses[i];
+                        const cfg = st === 'available' ? { bg: '#E8F8ED', border: '#22C55E', text: '#22C55E' }
+                          : st === 'partial' ? { bg: '#FFF4E5', border: '#F97316', text: '#F97316' }
+                          : st === 'unavailable' ? { bg: '#FFF0EF', border: '#EF4444', text: '#EF4444' }
+                          : { bg: theme.colors.surface, border: theme.colors.border, text: theme.colors.textMuted };
                         return (
-                          <TouchableOpacity
-                            key={i}
-                            style={[s.availDay, avail ? { backgroundColor: color + '20', borderColor: color } : s.availDayOff]}
-                            onPress={() => toggleAvailability(emp.id, i, avail)}
-                            activeOpacity={0.7}
-                          >
-                            <Text style={[s.availDayLabel, avail ? { color } : s.availDayLabelOff]}>{day}</Text>
-                          </TouchableOpacity>
+                          <View key={i} style={[s.availDay, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
+                            <Text style={[s.availDayLabel, { color: cfg.text }]}>{day}</Text>
+                          </View>
                         );
                       })}
                     </View>
@@ -524,8 +567,10 @@ export default function ScheduleAIScreen() {
               })
             )}
             <View style={s.availLegend}>
-              <View style={s.legendItem}><View style={[s.legendDot, { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primary }]} /><Text style={s.legendText}>Dostępny</Text></View>
-              <View style={s.legendItem}><View style={[s.legendDot, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} /><Text style={s.legendText}>Niedostępny</Text></View>
+              <View style={s.legendItem}><View style={[s.legendDot, { backgroundColor: '#E8F8ED', borderColor: '#22C55E' }]} /><Text style={s.legendText}>Dostępny</Text></View>
+              <View style={s.legendItem}><View style={[s.legendDot, { backgroundColor: '#FFF4E5', borderColor: '#F97316' }]} /><Text style={s.legendText}>Częściowo</Text></View>
+              <View style={s.legendItem}><View style={[s.legendDot, { backgroundColor: '#FFF0EF', borderColor: '#EF4444' }]} /><Text style={s.legendText}>Niedostępny</Text></View>
+              <View style={s.legendItem}><View style={[s.legendDot, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} /><Text style={s.legendText}>Nie zgłoszono</Text></View>
             </View>
           </View>
         )}
@@ -594,6 +639,8 @@ const s = StyleSheet.create({
   freeBlock: { alignItems: 'center' },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: theme.colors.text },
   sectionSub: { fontSize: 12, color: theme.colors.textMuted, lineHeight: 16, marginTop: -8 },
+  openAvailBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#EDE9FE', paddingHorizontal: 10, paddingVertical: 7, borderRadius: 10 },
+  openAvailBtnText: { fontSize: 12, fontWeight: '700', color: '#7C3AED' },
   summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: theme.colors.card, borderRadius: 12, padding: 12, ...theme.shadows.card },
   summaryHours: { fontSize: 15, fontWeight: '800' },
   summaryMeta: { fontSize: 10, color: theme.colors.textMuted },
