@@ -36,6 +36,18 @@ export async function getShifts(restaurantId: string): Promise<DbShift[]> {
   return data as DbShift[];
 }
 
+export async function getShiftsInRange(restaurantId: string, fromISO: string, toISO: string): Promise<DbShift[]> {
+  const { data, error } = await supabase
+    .from('shifts')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .gte('day', fromISO)
+    .lte('day', toISO)
+    .order('day', { ascending: true });
+  if (error) { console.error('getShiftsInRange', error); return []; }
+  return data as DbShift[];
+}
+
 export async function getTodayShift(restaurantId: string, userId: string): Promise<DbShift | null> {
   const today = new Date().toISOString().split('T')[0];
   const { data, error } = await supabase

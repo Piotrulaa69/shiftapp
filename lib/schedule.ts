@@ -1,3 +1,4 @@
+import type { ShiftTypeRow } from './db';
 import type { DbAvailability, DbEmployeeGroup, DbProfile } from './supabase';
 import { supabase } from './supabase';
 
@@ -15,6 +16,8 @@ export type SchedulePrefs = {
   ai_balance_weekends?: boolean;
   ai_avoid_single_day_gaps?: boolean;
   ai_respect_day_off_requests?: boolean;
+  ai_prefer_same_shifts?: boolean;
+  ai_use_shift_types?: boolean;
   ai_min_hours_per_employee?: number;
   ai_priority_equal_hours?: number;
   ai_priority_preferences?: number;
@@ -22,6 +25,13 @@ export type SchedulePrefs = {
   ai_default_shift_start?: string;
   ai_default_shift_end?: string;
   ai_max_consecutive_days?: number;
+  // Hard scheduling rules (mirrored from RestaurantSettings — the actual
+  // editable source; schedule_preferences.max_hours_per_week etc. are never
+  // exposed in any UI, so these overrides are what real restaurants configure).
+  min_hours_between_shifts?: number;
+  min_rest_day_after?: number;
+  prevent_opening_closing?: boolean;
+  max_hours_monthly?: number;
 };
 
 // Flags pulled from RestaurantSettings that decide the DEFAULT availability of
@@ -42,6 +52,8 @@ export type GeneratedShift = {
   start_time: string;
   end_time: string;
   hours: number;
+  shift_type_id?: string;
+  shift_type_name?: string;
 };
 
 export type GenerationResult = {
@@ -51,10 +63,24 @@ export type GenerationResult = {
 };
 
 const DAY_NAMES = ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd'];
+const MS_PER_HOUR = 3_600_000;
 
 function parseHours(timeStr: string): number {
   const [h, m] = timeStr.split(':').map(Number);
   return h + (m ?? 0) / 60;
+}
+
+// Exported for callers that need to sum existing shift hours (e.g. month-to-date
+// totals for monthly-cap awareness) using the same time parsing as the generator.
+export function hoursBetween(start: string, end: string): number {
+  return Math.max(parseHours(end) - parseHours(start), 0);
+}
+
+function toDateTime(dateStr: string, hhmm: string): Date {
+  const [h, m] = hhmm.split(':').map(Number);
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setHours(h, m ?? 0, 0, 0);
+  return d;
 }
 
 function isAlwaysAvailable(emp: DbProfile, defaults: AvailabilityDefaults): boolean {
@@ -84,6 +110,8 @@ export function resolveDayStatus(
   return { status: null, slot1_start: null, slot1_end: null };
 }
 
+type Target = { key: string; count: number; kind: 'group' | 'role' | 'all' };
+
 export function generateSchedule(
   employees: DbProfile[],
   availability: DbAvailability[],
@@ -92,12 +120,15 @@ export function generateSchedule(
   weekStart: Date,
   minStaffing: Record<string, any> = {},
   groups: (DbEmployeeGroup & { members: string[] })[] = [],
-  availabilityDefaults: AvailabilityDefaults = { availability_contract_all_available: true, availability_freelance_all_available: false }
+  availabilityDefaults: AvailabilityDefaults = { availability_contract_all_available: true, availability_freelance_all_available: false },
+  shiftTypes: ShiftTypeRow[] = [],
+  monthToDateHours: Record<string, number> = {}
 ): GenerationResult {
   const shifts: GeneratedShift[] = [];
   const warnings: string[] = [];
   const staffPerDay: number[] = [];
   const dayFullyCovered: boolean[] = [];
+  const warnedEmptyTargets = new Set<string>();
 
   const COLORS: Record<string, string> = {};
   const PALETTE = ['#2563EB', '#7C3AED', '#059669', '#D97706', '#DC2626', '#0891B2', '#9333EA'];
@@ -107,26 +138,38 @@ export function generateSchedule(
   const shiftsMap: Record<string, number> = {};
   const consecutiveMap: Record<string, number> = {};
   const weekendShiftsMap: Record<string, number> = {};
+  const forcedRestRemaining: Record<string, number> = {};
+  const lastShiftEnd: Record<string, Date | null> = {};
+  const lastShiftTypeId: Record<string, string | null> = {};
   // How many times each employee was actually a CANDIDATE for some configured
   // target (group or role) this week — used to warn about employees who are
   // structurally never eligible (not in any staffed group/role), instead of
   // silently dropping them with no explanation.
   const eligibleCount: Record<string, number> = {};
   employees.forEach(e => {
-    hoursMap[e.id] = 0; shiftsMap[e.id] = 0; consecutiveMap[e.id] = 0; weekendShiftsMap[e.id] = 0; eligibleCount[e.id] = 0;
+    hoursMap[e.id] = 0; shiftsMap[e.id] = 0; consecutiveMap[e.id] = 0; weekendShiftsMap[e.id] = 0;
+    forcedRestRemaining[e.id] = 0; lastShiftEnd[e.id] = null; lastShiftTypeId[e.id] = null; eligibleCount[e.id] = 0;
   });
 
   const shiftHours = parseHours(prefs.shift_end) - parseHours(prefs.shift_start);
   const maxConsecutive = prefs.max_consecutive_days ?? 5;
+  const minRestDayAfter = prefs.min_rest_day_after ?? 1;
+  const minHoursBetweenShifts = prefs.min_hours_between_shifts ?? 11;
+  const preventOpeningClosing = prefs.prevent_opening_closing !== false;
   const respectDayOff = prefs.ai_respect_day_off_requests !== false;
   const balanceWeekends = prefs.ai_balance_weekends === true;
+  const avoidSingleDayGaps = prefs.ai_avoid_single_day_gaps === true;
+  const preferSameShiftType = prefs.ai_prefer_same_shifts !== false;
   const equalHoursPriority = prefs.ai_priority_equal_hours ?? 60;
+  const restaurantMaxMonthly = prefs.max_hours_monthly;
 
   const weeklyConfig: Record<string, number[]> = minStaffing.weekly ?? {};
   const groupsConfig: Record<string, number[]> = minStaffing.groups ?? {};
   const dateExceptions: Record<string, Record<string, number>> = minStaffing.dates ?? {};
   const groupMembers: Record<string, Set<string>> = {};
   groups.forEach(g => { groupMembers[g.id] = new Set(g.members); });
+  const groupName: Record<string, string> = {};
+  groups.forEach(g => { groupName[g.id] = g.name; });
 
   // Simple flat mode only kicks in when NOTHING has been configured at all —
   // either per-role or per-group. If a restaurant configured groups (the
@@ -137,15 +180,41 @@ export function generateSchedule(
   const useSimpleMode = !hasRoleConfig && !hasGroupConfig;
   const simpleMinStaff = prefs.min_staff_per_shift ?? 2;
 
+  // ── Shift types: real named blocks (e.g. "Rano" 8-16, "Popołudnie" 14-22) if
+  // configured & enabled, otherwise a single synthetic block using the
+  // restaurant's default shift time — the rest of the algorithm always
+  // iterates "shift types" so both modes share one code path.
+  const useRealShiftTypes = prefs.ai_use_shift_types === true && shiftTypes.length > 0;
+  const effectiveShiftTypes: ShiftTypeRow[] = useRealShiftTypes
+    ? [...shiftTypes].sort((a, b) => parseHours(a.start_time) - parseHours(b.start_time))
+    : [{ id: '_default', restaurant_id: prefs.restaurant_id, name: '', color: '', start_time: prefs.shift_start, end_time: prefs.shift_end, hours: shiftHours, created_at: '' }];
+  const openingTypeId = effectiveShiftTypes[0]?.id;
+  const closingTypeId = effectiveShiftTypes[effectiveShiftTypes.length - 1]?.id;
+
+  function effectiveMinHours(emp: DbProfile): number {
+    return (emp as any).min_hours_weekly ?? prefs.ai_min_hours_per_employee ?? prefs.min_hours_per_week ?? 0;
+  }
+
+  function distributeAcrossShiftTypes(count: number): number[] {
+    const n = effectiveShiftTypes.length;
+    if (n <= 1) return [count];
+    const base = Math.floor(count / n);
+    const remainder = count % n;
+    return effectiveShiftTypes.map((_, i) => base + (i < remainder ? 1 : 0));
+  }
+
   for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
     const date = new Date(weekStart);
     date.setDate(date.getDate() + dayIdx);
     const dateStr = date.toISOString().split('T')[0];
     const isWeekend = dayIdx >= 5; // Sat=5, Sun=6
 
-    // Get staffing targets for this day: { targetKey -> count }, plus how to
-    // resolve each targetKey to a pool of eligible employees.
-    type Target = { key: string; count: number; kind: 'group' | 'role' | 'all' };
+    // Who worked yesterday (for "avoid single-day gap" continuity bias) and
+    // who closed last night (for the opening/closing guard).
+    const workedYesterday = new Set<string>(employees.filter(e => lastShiftTypeId[e.id] !== null && consecutiveMap[e.id] > 0).map(e => e.id));
+    const closedLastNight = new Set<string>(employees.filter(e => lastShiftTypeId[e.id] === closingTypeId && consecutiveMap[e.id] > 0).map(e => e.id));
+
+    // Staffing targets for this day.
     let dayTargets: Target[] = [];
     if (dateExceptions[dateStr]) {
       dayTargets = Object.entries(dateExceptions[dateStr])
@@ -166,14 +235,14 @@ export function generateSchedule(
     const dayStatus: Record<string, DayStatus> = {};
     employees.forEach(emp => { dayStatus[emp.id] = resolveDayStatus(emp.id, dateStr, emp, availability, availabilityDefaults); });
 
-    const available = employees.filter(emp => {
-      const empMax = (emp as any).max_hours_weekly ?? prefs.max_hours_per_week;
-      if (hoursMap[emp.id] + shiftHours > empMax) return false;
+    // Day-level eligibility — everything that does NOT depend on which
+    // specific shift-type slot is being filled.
+    const dayEligibleIds = new Set(employees.filter(emp => {
+      if (forcedRestRemaining[emp.id] > 0) return false;
       if (consecutiveMap[emp.id] >= maxConsecutive) return false;
 
       if (respectDayOff) {
         const st = dayStatus[emp.id].status;
-        // unavailable, or no confirmed status at all → do not schedule.
         if (st === 'unavailable' || st === null) return false;
       }
 
@@ -185,24 +254,14 @@ export function generateSchedule(
       );
       if (onLeave) return false;
 
-      // Weekend balancing: skip emp if they have too many weekends relative to others
       if (isWeekend && balanceWeekends) {
         const avgWeekendShifts = Object.values(weekendShiftsMap).reduce((s, v) => s + v, 0) / employees.length;
         if (weekendShiftsMap[emp.id] > avgWeekendShifts + 0.5) return false;
       }
 
       return true;
-    });
+    }).map(e => e.id));
 
-    // Sort priority: equal hours (fairness) weighted by priority setting
-    available.sort((a, b) => {
-      const hoursDiff = hoursMap[a.id] - hoursMap[b.id];
-      const shiftsDiff = shiftsMap[a.id] - shiftsMap[b.id];
-      // Higher equal hours priority = more weight on hours balance
-      return equalHoursPriority >= 50 ? hoursDiff : shiftsDiff;
-    });
-
-    // Assign employees per target (group / role / flat)
     const assignedIds = new Set<string>();
     let totalAssigned = 0;
     let dayCovered = true;
@@ -210,64 +269,146 @@ export function generateSchedule(
     for (const target of dayTargets) {
       if (target.count <= 0) continue;
 
-      const pool = target.kind === 'all'
-        ? available.filter(e => !assignedIds.has(e.id))
-        : target.kind === 'group'
-        ? available.filter(e => groupMembers[target.key]?.has(e.id) && !assignedIds.has(e.id))
-        : available.filter(e => e.job_title === target.key && !assignedIds.has(e.id));
-
-      // Track eligibility (for the "employee never eligible" warning) across
-      // ALL employees matching this target, not just those actually available
-      // today, so a fully-booked person still counts as "belongs to a staffed group".
-      const eligibleToday = target.kind === 'all'
+      const eligibleForTarget = target.kind === 'all'
         ? employees
         : target.kind === 'group'
         ? employees.filter(e => groupMembers[target.key]?.has(e.id))
         : employees.filter(e => e.job_title === target.key);
-      eligibleToday.forEach(e => { eligibleCount[e.id] += 1; });
 
-      const toAssign = pool.slice(0, target.count);
-      toAssign.forEach(e => assignedIds.add(e.id));
-      totalAssigned += toAssign.length;
-
-      if (toAssign.length < target.count) {
-        dayCovered = false;
-        const label = target.kind === 'group' ? (groups.find(g => g.id === target.key)?.name ?? target.key) : target.kind === 'role' ? target.key : '';
-        warnings.push(
-          `${DAY_NAMES[dayIdx]}${label ? ` (${label})` : ''}: niewystarczająca obsada — ${toAssign.length}/${target.count} os.`
-        );
+      if (target.kind !== 'all' && eligibleForTarget.length === 0) {
+        const warnKey = `${target.kind}:${target.key}`;
+        if (!warnedEmptyTargets.has(warnKey)) {
+          warnedEmptyTargets.add(warnKey);
+          const label = target.kind === 'group' ? (groupName[target.key] ?? target.key) : target.key;
+          warnings.push(`"${label}" nie ma przypisanych pracowników — zapotrzebowanie nie może zostać uzupełnione.`);
+        }
       }
+      eligibleForTarget.forEach(e => { eligibleCount[e.id] += 1; });
 
-      for (const emp of toAssign) {
-        const st = dayStatus[emp.id];
-        const usePartialSlot = st.status === 'partial' && st.slot1_start && st.slot1_end;
-        const start = usePartialSlot ? st.slot1_start! : prefs.shift_start;
-        const end = usePartialSlot ? st.slot1_end! : prefs.shift_end;
-        const h = parseHours(end) - parseHours(start);
+      const counts = distributeAcrossShiftTypes(target.count);
+      let assignedForTarget = 0;
 
-        shifts.push({
-          employee_id: emp.id,
-          employee_name: `${emp.first_name} ${emp.last_name}`,
-          employee_color: COLORS[emp.id],
-          date: dateStr,
-          day_of_week: dayIdx,
-          start_time: start,
-          end_time: end,
-          hours: Math.max(h, 0),
+      effectiveShiftTypes.forEach((st, stIdx) => {
+        const need = counts[stIdx];
+        if (need <= 0) return;
+
+        const pool = eligibleForTarget.filter(emp => {
+          if (!dayEligibleIds.has(emp.id)) return false;
+          if (assignedIds.has(emp.id)) return false;
+
+          const empMax = (emp as any).max_hours_weekly ?? prefs.max_hours_per_week;
+          if (hoursMap[emp.id] + st.hours > empMax) return false;
+
+          const empMaxMonthly = (emp as any).max_hours_monthly ?? restaurantMaxMonthly;
+          if (empMaxMonthly) {
+            const mtd = monthToDateHours[emp.id] ?? 0;
+            if (mtd + hoursMap[emp.id] + st.hours > empMaxMonthly) return false;
+          }
+
+          const status = dayStatus[emp.id];
+          if (status.status === 'partial') {
+            if (useRealShiftTypes) {
+              // Must be able to cover the WHOLE named shift block.
+              if (!status.slot1_start || !status.slot1_end) return false;
+              if (status.slot1_start > st.start_time || status.slot1_end < st.end_time) return false;
+            }
+            // else: no real shift types — their own declared slot IS the shift, always fits.
+          }
+
+          // Minimum rest between shifts (also organically prevents clopening
+          // even when the explicit toggle below wouldn't otherwise apply).
+          const candidateStart = toDateTime(dateStr, st.start_time);
+          const last = lastShiftEnd[emp.id];
+          if (last && (candidateStart.getTime() - last.getTime()) < minHoursBetweenShifts * MS_PER_HOUR) return false;
+
+          if (preventOpeningClosing && effectiveShiftTypes.length > 1 && st.id === openingTypeId && closedLastNight.has(emp.id)) return false;
+
+          return true;
         });
-        hoursMap[emp.id] += Math.max(h, 0);
-        shiftsMap[emp.id] += 1;
-        consecutiveMap[emp.id] += 1;
-        if (isWeekend) weekendShiftsMap[emp.id] += 1;
+
+        pool.sort((a, b) => {
+          // 1. Under their minimum-hours commitment → prioritise (correctness).
+          const aUnder = hoursMap[a.id] < effectiveMinHours(a) ? 0 : 1;
+          const bUnder = hoursMap[b.id] < effectiveMinHours(b) ? 0 : 1;
+          if (aUnder !== bUnder) return aUnder - bUnder;
+
+          // 2. Fairness — equalise hours or shift count depending on priority setting.
+          const hoursDiff = hoursMap[a.id] - hoursMap[b.id];
+          const shiftsDiff = shiftsMap[a.id] - shiftsMap[b.id];
+          const fairness = equalHoursPriority >= 50 ? hoursDiff : shiftsDiff;
+          if (fairness !== 0) return fairness;
+
+          // 3. Soft preference: keep people on the same named shift block week to week.
+          if (preferSameShiftType && effectiveShiftTypes.length > 1) {
+            const aSame = lastShiftTypeId[a.id] === st.id ? 0 : 1;
+            const bSame = lastShiftTypeId[b.id] === st.id ? 0 : 1;
+            if (aSame !== bSame) return aSame - bSame;
+          }
+
+          // 4. Soft preference: avoid isolated single days off.
+          if (avoidSingleDayGaps) {
+            const aStreak = workedYesterday.has(a.id) ? 0 : 1;
+            const bStreak = workedYesterday.has(b.id) ? 0 : 1;
+            if (aStreak !== bStreak) return aStreak - bStreak;
+          }
+
+          return 0;
+        });
+
+        const toAssign = pool.slice(0, need);
+        toAssign.forEach(e => assignedIds.add(e.id));
+        assignedForTarget += toAssign.length;
+
+        for (const emp of toAssign) {
+          const status = dayStatus[emp.id];
+          const usesOwnSlot = !useRealShiftTypes && status.status === 'partial' && status.slot1_start && status.slot1_end;
+          const start = usesOwnSlot ? status.slot1_start! : st.start_time;
+          const end = usesOwnSlot ? status.slot1_end! : st.end_time;
+          const h = Math.max(parseHours(end) - parseHours(start), 0);
+
+          shifts.push({
+            employee_id: emp.id,
+            employee_name: `${emp.first_name} ${emp.last_name}`,
+            employee_color: COLORS[emp.id],
+            date: dateStr,
+            day_of_week: dayIdx,
+            start_time: start,
+            end_time: end,
+            hours: h,
+            shift_type_id: useRealShiftTypes ? st.id : undefined,
+            shift_type_name: useRealShiftTypes ? st.name : undefined,
+          });
+          hoursMap[emp.id] += h;
+          shiftsMap[emp.id] += 1;
+          consecutiveMap[emp.id] += 1;
+          lastShiftEnd[emp.id] = toDateTime(dateStr, end);
+          lastShiftTypeId[emp.id] = st.id;
+          if (isWeekend) weekendShiftsMap[emp.id] += 1;
+
+          if (consecutiveMap[emp.id] >= maxConsecutive) {
+            forcedRestRemaining[emp.id] = Math.max(forcedRestRemaining[emp.id], minRestDayAfter);
+          }
+        }
+      });
+
+      totalAssigned += assignedForTarget;
+      if (assignedForTarget < target.count) {
+        dayCovered = false;
+        const label = target.kind === 'group' ? (groupName[target.key] ?? target.key) : target.kind === 'role' ? target.key : '';
+        warnings.push(
+          `${DAY_NAMES[dayIdx]}${label ? ` (${label})` : ''}: niewystarczająca obsada — ${assignedForTarget}/${target.count} os.`
+        );
       }
     }
 
     staffPerDay.push(totalAssigned);
     dayFullyCovered.push(dayCovered);
 
-    // Reset consecutive counter for employees who didn't work today
+    // End-of-day bookkeeping: reset streaks for anyone who didn't work, and
+    // count down forced rest for anyone serving it.
     for (const emp of employees) {
       if (!assignedIds.has(emp.id)) consecutiveMap[emp.id] = 0;
+      if (forcedRestRemaining[emp.id] > 0) forcedRestRemaining[emp.id] -= 1;
     }
   }
 
@@ -285,6 +426,14 @@ export function generateSchedule(
   if (neverScheduled.length > 0) {
     const names = neverScheduled.map(e => `${e.first_name} ${e.last_name}`).join(', ');
     warnings.push(`Nie przydzielono żadnej zmiany (brak dostępności lub limit godzin): ${names}`);
+  }
+  const underMin = employees.filter(e => {
+    const min = effectiveMinHours(e);
+    return min > 0 && hoursMap[e.id] > 0 && hoursMap[e.id] < min;
+  });
+  if (underMin.length > 0) {
+    const list = underMin.map(e => `${e.first_name} ${e.last_name} (${hoursMap[e.id]}h/${effectiveMinHours(e)}h)`).join(', ');
+    warnings.push(`Poniżej minimalnej liczby godzin: ${list}`);
   }
 
   const totalHours = shifts.reduce((s, sh) => s + sh.hours, 0);

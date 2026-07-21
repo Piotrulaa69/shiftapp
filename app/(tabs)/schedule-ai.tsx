@@ -7,7 +7,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { createShift, getAvailabilityRange, getEmployeeGroupsWithMembers, getEmployees, getRestaurantSettings } from '../../lib/db';
+import { createShift, getAvailabilityRange, getEmployeeGroupsWithMembers, getEmployees, getRestaurantSettings, getShiftsInRange, getShiftTypes, type ShiftTypeRow } from '../../lib/db';
 import {
     AvailabilityDefaults,
     DayStatus,
@@ -16,6 +16,7 @@ import {
     generateSchedule,
     GenerationResult,
     getApprovedLeaves, getSchedulePrefs,
+    hoursBetween,
     resolveDayStatus,
     SchedulePrefs,
 } from '../../lib/schedule';
@@ -55,6 +56,7 @@ export default function ScheduleAIScreen() {
   const [prefs, setPrefs] = useState<SchedulePrefs | null>(null);
   const [availability, setAvailability] = useState<DbAvailability[]>([]);
   const [groups, setGroups] = useState<(DbEmployeeGroup & { members: string[] })[]>([]);
+  const [shiftTypes, setShiftTypes] = useState<ShiftTypeRow[]>([]);
   const [restaurantSettings, setRestaurantSettings] = useState<any>(null);
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [editableShifts, setEditableShifts] = useState<GeneratedShift[]>([]);
@@ -77,27 +79,39 @@ export default function ScheduleAIScreen() {
   const loadData = useCallback(async () => {
     if (!rid) return;
     setDataLoading(true);
-    const [emps, p, gr, rs] = await Promise.all([
+    const [emps, p, gr, st, rs] = await Promise.all([
       getEmployees(rid),
       getSchedulePrefs(rid),
       getEmployeeGroupsWithMembers(rid),
+      getShiftTypes(rid),
       getRestaurantSettings(rid),
     ]);
     setEmployees(emps as DbProfile[]);
     setGroups(gr);
+    setShiftTypes(st);
     const base = p ?? DEFAULT_PREFS(rid);
-    // Merge extended AI prefs from RestaurantSettings into SchedulePrefs
+    // Merge extended AI prefs + hard rules from RestaurantSettings — this is
+    // the ONLY place these are actually editable (schedule_preferences has no
+    // UI of its own), so the generator must read the restaurant's real config,
+    // not the schedule_preferences defaults.
     const resolvedPrefs: SchedulePrefs = {
       ...base,
       shift_start: rs.ai_default_shift_start || base.shift_start,
       shift_end: rs.ai_default_shift_end || base.shift_end,
+      max_hours_per_week: rs.max_hours_weekly || base.max_hours_per_week,
       max_consecutive_days: rs.ai_max_consecutive_days || base.max_consecutive_days,
       ai_balance_weekends: rs.ai_balance_weekends,
       ai_avoid_single_day_gaps: rs.ai_avoid_single_day_gaps,
       ai_respect_day_off_requests: rs.ai_respect_day_off_requests,
+      ai_prefer_same_shifts: rs.ai_prefer_same_shifts,
+      ai_use_shift_types: rs.ai_use_shift_types,
       ai_min_hours_per_employee: rs.ai_min_hours_per_employee,
       ai_priority_equal_hours: rs.ai_priority_equal_hours,
       ai_priority_preferences: rs.ai_priority_preferences,
+      min_hours_between_shifts: rs.min_hours_between_shifts,
+      min_rest_day_after: rs.min_rest_day_after,
+      prevent_opening_closing: rs.prevent_opening_closing,
+      max_hours_monthly: rs.max_hours_monthly,
     };
     setPrefs(resolvedPrefs);
     setRestaurantSettings(rs);
@@ -146,8 +160,25 @@ export default function ScheduleAIScreen() {
     setGenerating(true);
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 6);
+
+    // Month-to-date hours already worked/published this month, so a monthly
+    // hour cap (max_hours_monthly) is respected across weeks, not just within
+    // the single week being generated.
+    const monthStart = new Date(weekStart.getFullYear(), weekStart.getMonth(), 1);
+    const dayBeforeWeek = new Date(weekStart);
+    dayBeforeWeek.setDate(dayBeforeWeek.getDate() - 1);
+    const monthToDateHours: Record<string, number> = {};
+    if (dayBeforeWeek >= monthStart) {
+      const pastShifts = await getShiftsInRange(rid, monthStart.toISOString().slice(0, 10), dayBeforeWeek.toISOString().slice(0, 10));
+      pastShifts.forEach((sh) => {
+        if (sh.start_time && sh.end_time) {
+          monthToDateHours[sh.employee_id] = (monthToDateHours[sh.employee_id] ?? 0) + hoursBetween(sh.start_time, sh.end_time);
+        }
+      });
+    }
+
     const leaves = await getApprovedLeaves(rid, weekStart, weekEnd);
-    const res = generateSchedule(employees, availability, leaves as any, prefs, weekStart, restaurantSettings?.min_staffing ?? {}, groups, availabilityDefaults);
+    const res = generateSchedule(employees, availability, leaves as any, prefs, weekStart, restaurantSettings?.min_staffing ?? {}, groups, availabilityDefaults, shiftTypes, monthToDateHours);
     setResult(res);
     if (Platform.OS === 'web') {
       try { localStorage.setItem(draftKey, JSON.stringify(res.shifts)); } catch {}
@@ -445,6 +476,7 @@ export default function ScheduleAIScreen() {
                                     style: { cursor: 'grab', backgroundColor: color + '18', borderColor: color, borderWidth: 1, borderLeftWidth: 3, width: '92%', borderRadius: 6, paddingVertical: 3, alignItems: 'center' },
                                   } as any : {})}
                                 >
+                                  {shift.shift_type_name ? <Text style={[s.shiftTypeLabel, { color }]} numberOfLines={1}>{shift.shift_type_name}</Text> : null}
                                   <Text style={[s.shiftTime, { color }]}>{shift.start_time}</Text>
                                   <Text style={[s.shiftHours, { color }]}>{shift.hours}h</Text>
                                 </View>
@@ -632,6 +664,7 @@ const s = StyleSheet.create({
   empName: { fontSize: 11, fontWeight: '700', color: theme.colors.text },
   empRole: { fontSize: 10, color: theme.colors.textMuted },
   shiftBlock: { width: '92%', borderRadius: 6, paddingVertical: 3, alignItems: 'center', borderWidth: 1, borderLeftWidth: 3 },
+  shiftTypeLabel: { fontSize: 8, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.3 },
   shiftTime: { fontSize: 9, fontWeight: '700' },
   shiftHours: { fontSize: 10, fontWeight: '800' },
   offBlock: { alignItems: 'center' },
