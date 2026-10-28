@@ -44,7 +44,7 @@ export default function SubscriptionScreen() {
         .maybeSingle(),
       supabase
         .from('profiles')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .eq('restaurant_id', restaurant.id)
         .eq('is_super_admin', false)
         .eq('is_active', true),

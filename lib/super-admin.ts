@@ -93,7 +93,7 @@ export async function getSystemStats(): Promise<SystemStats> {
   const [{ count: restCount }, { count: userCount }, { count: taskCount }, { count: newCount }] =
     await Promise.all([
       supabase.from('restaurants').select('*', { count: 'exact', head: true }),
-      supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('is_super_admin', false),
+      supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('is_super_admin', false),
       supabase.from('tasks').select('*', { count: 'exact', head: true }),
       supabase.from('restaurants').select('*', { count: 'exact', head: true }).gte('created_at', monthStart),
     ]);

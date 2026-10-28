@@ -280,7 +280,8 @@ export async function deleteTraining(trainingId: string): Promise<boolean> {
 export async function getEmployees(restaurantId: string): Promise<DbProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    // Never request protected authentication secrets in employee lists.
+    .select('id,restaurant_id,first_name,last_name,role,job_title,avatar_color,is_active,created_at,phone,photo_url,onboarding_done,max_hours_weekly,max_hours_monthly,employment_type,is_super_admin,has_children,min_hours_weekly,min_hours_monthly,hourly_rate,birth_date,address,pesel,id_series_number,citizenship,nfz_branch,tax_office,pit_electronic,bank_account_number,bank_name,id_card_number,login_method')
     .eq('restaurant_id', restaurantId)
     .eq('is_active', true)
     .not('is_super_admin', 'eq', true) // Wyklucz super adminów z listy pracowników
@@ -1937,7 +1938,7 @@ export async function getTopicVideoUrl(storagePath: string): Promise<string | nu
 export async function getKioskEmployees(restaurantId: string): Promise<DbProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, first_name, last_name, job_title, avatar_color, login_method, login_pin, role, is_active')
+    .select('id, first_name, last_name, job_title, avatar_color, login_method, role, is_active')
     .eq('restaurant_id', restaurantId)
     .eq('is_active', true)
     .not('is_super_admin', 'eq', true)
@@ -1950,7 +1951,7 @@ export async function kioskLoginByPin(restaurantId: string, pin: string): Promis
   if (!pin || pin.length < 4) return null;
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select('id,restaurant_id,first_name,last_name,role,job_title,avatar_color,is_active,login_method')
     .eq('restaurant_id', restaurantId)
     .eq('login_pin', pin)
     .eq('is_active', true)

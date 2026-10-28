@@ -158,7 +158,9 @@ export default function TeamFullScreen() {
         hourly_rate: editHourlyRate ? parseFloat(editHourlyRate) : null,
       }),
       updateEmployeeLoginSettings(selectedEmp.id, {
-        login_pin: editLoginPin.trim() || null,
+        // PIN is intentionally unreadable from client-side lists. Preserve it
+        // unless the manager explicitly enters a replacement.
+        ...(editLoginPin.trim() ? { login_pin: editLoginPin.trim() } : {}),
         login_method: editLoginMethod,
       }),
       selectedEmp.role !== 'owner' && editRole !== (selectedEmp.role === 'manager' ? 'manager' : 'employee')

@@ -105,7 +105,9 @@ async function loadUserData(userId: string, email: string): Promise<{ user: Auth
   // Pobierz profil bez JOIN
   const { data: profile, error: pErr } = await supabase
     .from('profiles')
-    .select('*')
+    // SELECT * includes protected login_pin / two_factor_secret columns and
+    // fails for every authenticated user after column-level grants are applied.
+    .select('id,restaurant_id,first_name,last_name,role,job_title,avatar_color,is_active,onboarding_done,is_super_admin,has_children,employment_type')
     .eq('id', userId)
     .single();
 
