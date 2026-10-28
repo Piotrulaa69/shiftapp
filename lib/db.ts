@@ -1761,13 +1761,13 @@ export async function reviewLeaveRequestWithNotes(
 
 // ─── Courses ──────────────────────────────────────────────────────────────────
 
-export async function getCourses(restaurantId: string): Promise<DbCourse[]> {
+export async function getCourses(restaurantId: string, strict = false): Promise<DbCourse[]> {
   const { data, error } = await supabase
     .from('courses')
     .select('*')
     .eq('restaurant_id', restaurantId)
     .order('sort_order', { ascending: true });
-  if (error) { console.error('getCourses', error); return []; }
+  if (error) { console.error('getCourses', error); if (strict) throw error; return []; }
   return data as DbCourse[];
 }
 
@@ -1795,13 +1795,13 @@ export async function deleteCourse(courseId: string): Promise<boolean> {
 
 // ─── Lessons ──────────────────────────────────────────────────────────────────
 
-export async function getLessons(courseId: string): Promise<DbLesson[]> {
+export async function getLessons(courseId: string, strict = false): Promise<DbLesson[]> {
   const { data, error } = await supabase
     .from('lessons')
     .select('*')
     .eq('course_id', courseId)
     .order('sort_order', { ascending: true });
-  if (error) { console.error('getLessons', error); return []; }
+  if (error) { console.error('getLessons', error); if (strict) throw error; return []; }
   return data as DbLesson[];
 }
 
@@ -1829,13 +1829,13 @@ export async function deleteLesson(lessonId: string): Promise<boolean> {
 
 // ─── Topics ───────────────────────────────────────────────────────────────────
 
-export async function getTopics(lessonId: string): Promise<DbTopic[]> {
+export async function getTopics(lessonId: string, strict = false): Promise<DbTopic[]> {
   const { data, error } = await supabase
     .from('topics')
     .select('*')
     .eq('lesson_id', lessonId)
     .order('sort_order', { ascending: true });
-  if (error) { console.error('getTopics', error); return []; }
+  if (error) { console.error('getTopics', error); if (strict) throw error; return []; }
   return data as DbTopic[];
 }
 

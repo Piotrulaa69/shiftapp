@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator, Alert, Modal, Platform,
     ScrollView, StyleSheet,
@@ -17,6 +17,7 @@ import {
     updateLesson, updateTopic, uploadTopicVideo,
 } from '../../../lib/db';
 import type { DbEmployeeGroup, QuizQuestion } from '../../../lib/supabase';
+import { clearTrainingDraft, readTrainingDraft, trainingDraftKey, writeTrainingDraft } from '../../../lib/training-drafts';
 import { theme } from '../../../styles/theme';
 
 const CATEGORIES = ['BHP', 'Obsługa', 'Kuchnia', 'Barista', 'Sprzedaż', 'Procedury', 'Ogólne'];
@@ -46,6 +47,7 @@ export default function ManageCoursesScreen() {
   const [selectedLesson, setSelectedLesson] = useState<DbLesson | null>(null);
   const [topics, setTopics] = useState<DbTopic[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   // Modals
   const [showCourseModal, setShowCourseModal] = useState(false);
@@ -67,50 +69,139 @@ export default function ManageCoursesScreen() {
   const [tForm, setTForm] = useState<TForm>(EMPTY_TOPIC);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const saveInFlight = useRef(false);
+  const [courseDraftKey, setCourseDraftKey] = useState<string | null>(null);
+  const [lessonDraftKey, setLessonDraftKey] = useState<string | null>(null);
+  const [topicDraftKey, setTopicDraftKey] = useState<string | null>(null);
+  const [recoveredDraft, setRecoveredDraft] = useState<'course' | 'lesson' | 'topic' | null>(null);
+  const [draftError, setDraftError] = useState(false);
+
+  const showError = (title: string, message: string) => {
+    if (Platform.OS === 'web') window.alert(`${title}\n\n${message}`);
+    else Alert.alert(title, message);
+  };
+  const draftKey = (kind: string, id: string) => trainingDraftKey(user?.id ?? '', rid, kind, id);
+  const persistDraft = (key: string, value: unknown) => writeTrainingDraft(key, value).then(
+    () => setDraftError(false),
+    (error) => { console.warn('training draft', error); setDraftError(true); throw error; },
+  );
+  const restoreForm = async <T extends { title: string }>(key: string, current: T, updatedAt?: string): Promise<{ form: T; restored: boolean }> => {
+    const draft = await readTrainingDraft<T>(key);
+    const serverTime = updatedAt ? Date.parse(updatedAt) : 0;
+    if (draft && typeof draft.value?.title === 'string' && draft.savedAt > (Number.isFinite(serverTime) ? serverTime : 0)) {
+      return { form: draft.value, restored: true };
+    }
+    return { form: current, restored: false };
+  };
+
+  useEffect(() => {
+    if (showCourseModal && courseDraftKey) void persistDraft(courseDraftKey, cForm).catch(() => {});
+  }, [showCourseModal, courseDraftKey, cForm]);
+  useEffect(() => {
+    if (showLessonModal && lessonDraftKey) void persistDraft(lessonDraftKey, lForm).catch(() => {});
+  }, [showLessonModal, lessonDraftKey, lForm]);
+  useEffect(() => {
+    if (showTopicModal && topicDraftKey) void persistDraft(topicDraftKey, tForm).catch(() => {});
+  }, [showTopicModal, topicDraftKey, tForm]);
+
+  const closeDraftModal = async (kind: 'course' | 'lesson' | 'topic') => {
+    const key = kind === 'course' ? courseDraftKey : kind === 'lesson' ? lessonDraftKey : topicDraftKey;
+    const form = kind === 'course' ? cForm : kind === 'lesson' ? lForm : tForm;
+    if (key) {
+      try { await persistDraft(key, form); }
+      catch {
+        showError('Szkic nie jest zabezpieczony', 'Formularz pozostaje otwarty. Skopiuj treść lub zwolnij miejsce na urządzeniu i spróbuj ponownie.');
+        return;
+      }
+    }
+    if (kind === 'course') setShowCourseModal(false);
+    else if (kind === 'lesson') setShowLessonModal(false);
+    else setShowTopicModal(false);
+  };
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !showCourseModal && !showLessonModal && !showTopicModal) return;
+    const warnOnExit = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warnOnExit);
+    return () => window.removeEventListener('beforeunload', warnOnExit);
+  }, [showCourseModal, showLessonModal, showTopicModal]);
 
   const loadCourses = useCallback(async () => {
     if (!rid) return;
     setLoading(true);
-    const [data, grps] = await Promise.all([getCourses(rid), getEmployeeGroups(rid)]);
-    setCourses(data);
-    setGroups(grps);
-    setLoading(false);
+    try {
+      const [data, grps] = await Promise.all([getCourses(rid, true), getEmployeeGroups(rid)]);
+      setCourses(data);
+      setGroups(grps);
+      setLoadError(false);
+    } catch (error) {
+      console.error('loadCourses', error);
+      setLoadError(true);
+    } finally { setLoading(false); }
   }, [rid]);
 
-  useFocusEffect(useCallback(() => { loadCourses(); }, [loadCourses]));
+  useFocusEffect(useCallback(() => { void loadCourses(); }, [loadCourses]));
 
   const selectCourse = async (course: DbCourse) => {
-    setSelectedCourse(course);
     setLoading(true);
-    const ls = await getLessons(course.id);
-    setLessons(ls);
-    setLoading(false);
-    setView('lessons');
+    try {
+      const ls = await getLessons(course.id, true);
+      setSelectedCourse(course);
+      setLessons(ls);
+      setView('lessons');
+    } catch (error) {
+      console.error('selectCourse', error);
+      showError('Nie udało się pobrać lekcji', 'Dane nie zostały usunięte. Sprawdź połączenie i spróbuj ponownie.');
+    } finally { setLoading(false); }
   };
 
   const selectLesson = async (lesson: DbLesson) => {
-    setSelectedLesson(lesson);
     setLoading(true);
-    const ts = await getTopics(lesson.id);
-    setTopics(ts);
-    setLoading(false);
-    setView('topics');
+    try {
+      const ts = await getTopics(lesson.id, true);
+      setSelectedLesson(lesson);
+      setTopics(ts);
+      setView('topics');
+    } catch (error) {
+      console.error('selectLesson', error);
+      showError('Nie udało się pobrać tematów', 'Dane nie zostały usunięte. Sprawdź połączenie i spróbuj ponownie.');
+    } finally { setLoading(false); }
   };
 
   // ─── Course CRUD ─────────────────────────────────────────────────────────────
-  const openNewCourse = () => { setEditingCourse(null); setCForm(EMPTY_COURSE); setShowCourseModal(true); };
-  const openEditCourse = (c: DbCourse) => { setEditingCourse(c); setCForm({ title: c.title, description: c.description ?? '', category: c.category, required: c.required, assigned_group_ids: c.assigned_group_ids ?? [] }); setShowCourseModal(true); };
+  const openNewCourse = async () => {
+    const key = draftKey('course', 'new');
+    const { form, restored } = await restoreForm(key, EMPTY_COURSE);
+    setDraftError(false); setEditingCourse(null); setCForm(form); setRecoveredDraft(restored ? 'course' : null); setCourseDraftKey(key); setShowCourseModal(true);
+  };
+  const openEditCourse = async (c: DbCourse) => {
+    const key = draftKey('course', c.id);
+    const current = { title: c.title, description: c.description ?? '', category: c.category, required: c.required, assigned_group_ids: c.assigned_group_ids ?? [] };
+    const { form, restored } = await restoreForm(key, current, c.updated_at);
+    setDraftError(false); setEditingCourse(c); setCForm(form); setRecoveredDraft(restored ? 'course' : null); setCourseDraftKey(key); setShowCourseModal(true);
+  };
   const saveCourse = async () => {
-    if (!cForm.title.trim()) { Alert.alert('Błąd', 'Podaj tytuł kursu'); return; }
+    if (saveInFlight.current) return;
+    if (!cForm.title.trim()) { showError('Brak tytułu', 'Podaj tytuł kursu.'); return; }
+    saveInFlight.current = true;
     setSaving(true);
-    if (editingCourse) {
-      await updateCourse(editingCourse.id, { title: cForm.title.trim(), description: cForm.description.trim() || null, category: cForm.category, required: cForm.required, assigned_group_ids: cForm.assigned_group_ids });
-    } else {
-      await createCourse(rid, { title: cForm.title.trim(), description: cForm.description.trim() || null, category: cForm.category, required: cForm.required, assigned_group_ids: cForm.assigned_group_ids });
+    try {
+      if (courseDraftKey) await persistDraft(courseDraftKey, cForm).catch(() => {});
+      const fields = { title: cForm.title.trim(), description: cForm.description.trim() || null, category: cForm.category, required: cForm.required, assigned_group_ids: cForm.assigned_group_ids };
+      const saved = editingCourse ? await updateCourse(editingCourse.id, fields) : !!await createCourse(rid, fields);
+      if (!saved) { showError('Błąd zapisu', 'Kurs nie został zapisany w bazie. Formularz i jego szkic pozostają otwarte. Spróbuj ponownie.'); return; }
+      setCourseDraftKey(null);
+      if (courseDraftKey) await clearTrainingDraft(courseDraftKey).catch((error) => console.warn('clear course draft', error));
+      setShowCourseModal(false);
+      try { await loadCourses(); }
+      catch (error) { console.error('refreshCoursesAfterSave', error); showError('Kurs zapisany', 'Nie udało się odświeżyć listy. Otwórz ekran ponownie, gdy połączenie wróci.'); }
+    } catch (error) {
+      console.error('saveCourse', error);
+      showError('Błąd zapisu', 'Kurs nie został zapisany. Formularz pozostaje otwarty. Spróbuj ponownie.');
+    } finally {
+      saveInFlight.current = false;
+      setSaving(false);
     }
-    setSaving(false);
-    setShowCourseModal(false);
-    await loadCourses();
   };
   const removeCourse = (c: DbCourse) => Alert.alert('Usuń kurs', `Usunąć "${c.title}" wraz ze wszystkimi lekcjami?`, [
     { text: 'Anuluj', style: 'cancel' },
@@ -118,20 +209,41 @@ export default function ManageCoursesScreen() {
   ]);
 
   // ─── Lesson CRUD ─────────────────────────────────────────────────────────────
-  const openNewLesson = () => { setEditingLesson(null); setLForm(EMPTY_LESSON); setShowLessonModal(true); };
-  const openEditLesson = (l: DbLesson) => { setEditingLesson(l); setLForm({ title: l.title, description: l.description ?? '' }); setShowLessonModal(true); };
+  const openNewLesson = async () => {
+    if (!selectedCourse) return;
+    const key = draftKey('lesson', `new:${selectedCourse.id}`);
+    const { form, restored } = await restoreForm(key, EMPTY_LESSON);
+    setDraftError(false); setEditingLesson(null); setLForm(form); setRecoveredDraft(restored ? 'lesson' : null); setLessonDraftKey(key); setShowLessonModal(true);
+  };
+  const openEditLesson = async (l: DbLesson) => {
+    const key = draftKey('lesson', l.id);
+    const current = { title: l.title, description: l.description ?? '' };
+    const { form, restored } = await restoreForm(key, current, l.updated_at);
+    setDraftError(false); setEditingLesson(l); setLForm(form); setRecoveredDraft(restored ? 'lesson' : null); setLessonDraftKey(key); setShowLessonModal(true);
+  };
   const saveLesson = async () => {
-    if (!lForm.title.trim()) { Alert.alert('Błąd', 'Podaj tytuł lekcji'); return; }
+    if (saveInFlight.current) return;
+    if (!lForm.title.trim()) { showError('Brak tytułu', 'Podaj tytuł lekcji.'); return; }
+    if (!selectedCourse) return;
+    saveInFlight.current = true;
     setSaving(true);
-    if (editingLesson) {
-      await updateLesson(editingLesson.id, { title: lForm.title.trim(), description: lForm.description.trim() || null });
-    } else {
-      await createLesson(rid, selectedCourse!.id, { title: lForm.title.trim(), description: lForm.description.trim() || null, sort_order: lessons.length });
+    try {
+      if (lessonDraftKey) await persistDraft(lessonDraftKey, lForm).catch(() => {});
+      const fields = { title: lForm.title.trim(), description: lForm.description.trim() || null };
+      const saved = editingLesson ? await updateLesson(editingLesson.id, fields) : !!await createLesson(rid, selectedCourse.id, { ...fields, sort_order: lessons.length });
+      if (!saved) { showError('Błąd zapisu', 'Lekcja nie została zapisana w bazie. Formularz i jego szkic pozostają otwarte. Spróbuj ponownie.'); return; }
+      setLessonDraftKey(null);
+      if (lessonDraftKey) await clearTrainingDraft(lessonDraftKey).catch((error) => console.warn('clear lesson draft', error));
+      setShowLessonModal(false);
+      try { setLessons(await getLessons(selectedCourse.id, true)); }
+      catch (error) { console.error('refreshLessonsAfterSave', error); showError('Lekcja zapisana', 'Nie udało się odświeżyć listy. Otwórz kurs ponownie, gdy połączenie wróci.'); }
+    } catch (error) {
+      console.error('saveLesson', error);
+      showError('Błąd zapisu', 'Lekcja nie została zapisana. Formularz pozostaje otwarty. Spróbuj ponownie.');
+    } finally {
+      saveInFlight.current = false;
+      setSaving(false);
     }
-    setSaving(false);
-    setShowLessonModal(false);
-    const ls = await getLessons(selectedCourse!.id);
-    setLessons(ls);
   };
   const removeLesson = (l: DbLesson) => Alert.alert('Usuń lekcję', `Usunąć "${l.title}"?`, [
     { text: 'Anuluj', style: 'cancel' },
@@ -139,19 +251,30 @@ export default function ManageCoursesScreen() {
   ]);
 
   // ─── Topic CRUD ──────────────────────────────────────────────────────────────
-  const openNewTopic = () => { setEditingTopic(null); setTForm(EMPTY_TOPIC); setShowTopicModal(true); };
-  const openEditTopic = (t: DbTopic) => {
+  const openNewTopic = async () => {
+    if (!selectedLesson) return;
+    const key = draftKey('topic', `new:${selectedLesson.id}`);
+    const { form, restored } = await restoreForm(key, EMPTY_TOPIC);
+    setDraftError(false); setEditingTopic(null); setTForm(form); setRecoveredDraft(restored ? 'topic' : null); setTopicDraftKey(key); setShowTopicModal(true);
+  };
+  const openEditTopic = async (t: DbTopic) => {
     setEditingTopic(t);
     const qd = t.quiz_data;
-    setTForm({
+    const current = {
       title: t.title, description: t.description ?? '', content_text: t.content_text ?? '', video_url: t.video_url ?? '',
       quiz_enabled: !!qd, quiz_pass_score: qd?.pass_score ?? 70, quiz_questions: qd?.questions ?? [],
-    });
+    };
+    const key = draftKey('topic', t.id);
+    const { form, restored } = await restoreForm(key, current, t.updated_at);
+    setDraftError(false); setTForm(form); setRecoveredDraft(restored ? 'topic' : null); setTopicDraftKey(key);
     setShowTopicModal(true);
   };
   const saveTopic = async () => {
-    if (!tForm.title.trim()) { Alert.alert('Błąd', 'Podaj tytuł tematu'); return; }
-    if (tForm.quiz_enabled && tForm.quiz_questions.length === 0) { Alert.alert('Błąd', 'Dodaj co najmniej jedno pytanie do quizu lub wyłącz quiz'); return; }
+    if (saveInFlight.current) return;
+    if (!tForm.title.trim()) { showError('Brak tytułu', 'Podaj tytuł tematu.'); return; }
+    if (tForm.quiz_enabled && tForm.quiz_questions.length === 0) { showError('Brak pytań', 'Dodaj co najmniej jedno pytanie do quizu lub wyłącz quiz.'); return; }
+    if (!selectedLesson) return;
+    saveInFlight.current = true;
     setSaving(true);
     const quiz_data = tForm.quiz_enabled && tForm.quiz_questions.length > 0
       ? { questions: tForm.quiz_questions, pass_score: tForm.quiz_pass_score } : null;
@@ -163,15 +286,22 @@ export default function ManageCoursesScreen() {
       sort_order: editingTopic ? editingTopic.sort_order : topics.length,
       quiz_data,
     };
-    if (editingTopic) {
-      await updateTopic(editingTopic.id, fields);
-    } else {
-      await createTopic(rid, selectedLesson!.id, fields);
+    try {
+      if (topicDraftKey) await persistDraft(topicDraftKey, tForm).catch(() => {});
+      const saved = editingTopic ? await updateTopic(editingTopic.id, fields) : !!await createTopic(rid, selectedLesson.id, fields);
+      if (!saved) { showError('Błąd zapisu', 'Temat i quiz nie zostały zapisane w bazie. Formularz i jego szkic pozostają otwarte. Spróbuj ponownie.'); return; }
+      setTopicDraftKey(null);
+      if (topicDraftKey) await clearTrainingDraft(topicDraftKey).catch((error) => console.warn('clear topic draft', error));
+      setShowTopicModal(false);
+      try { setTopics(await getTopics(selectedLesson.id, true)); }
+      catch (error) { console.error('refreshTopicsAfterSave', error); showError('Temat zapisany', 'Nie udało się odświeżyć listy. Otwórz lekcję ponownie, gdy połączenie wróci.'); }
+    } catch (error) {
+      console.error('saveTopic', error);
+      showError('Błąd zapisu', 'Temat nie został zapisany. Formularz pozostaje otwarty. Spróbuj ponownie.');
+    } finally {
+      saveInFlight.current = false;
+      setSaving(false);
     }
-    setSaving(false);
-    setShowTopicModal(false);
-    const ts = await getTopics(selectedLesson!.id);
-    setTopics(ts);
   };
   const removeTopic = (t: DbTopic) => Alert.alert('Usuń temat', `Usunąć "${t.title}"?`, [
     { text: 'Anuluj', style: 'cancel' },
@@ -260,11 +390,17 @@ export default function ManageCoursesScreen() {
         <ActivityIndicator style={{ marginTop: 60 }} size="large" color={theme.colors.primary} />
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scroll, isDesktop && styles.scrollDesktop]} style={{ flex: 1 }}>
+          {loadError && (
+            <TouchableOpacity style={styles.empty} onPress={() => { void loadCourses(); }} accessibilityRole="button">
+              <Ionicons name="cloud-offline-outline" size={32} color={theme.colors.error} />
+              <Text style={styles.emptyText}>Nie udało się pobrać kursów. Dane nie zostały usunięte. Dotknij, aby spróbować ponownie.</Text>
+            </TouchableOpacity>
+          )}
 
           {/* ── COURSES view ── */}
           {view === 'courses' && (
             <>
-              {courses.length === 0 && (
+              {!loadError && courses.length === 0 && (
                 <View style={styles.empty}><Ionicons name="book-outline" size={48} color={theme.colors.border} /><Text style={styles.emptyText}>Brak kursów — kliknij + żeby dodać</Text></View>
               )}
               {courses.map((c) => {
@@ -363,16 +499,18 @@ export default function ManageCoursesScreen() {
       )}
 
       {/* ── Course Modal ── */}
-      <Modal visible={showCourseModal} transparent animationType={isDesktop ? 'fade' : 'slide'}>
+      <Modal visible={showCourseModal} transparent animationType={isDesktop ? 'fade' : 'slide'} onRequestClose={() => { void closeDraftModal('course'); }}>
         <View style={m.overlay}>
           <View style={[m.sheet, isDesktop && m.sheetDesktop]}>
             <View style={m.sheetHeader}>
               <Text style={m.sheetTitle}>{editingCourse ? 'Edytuj kurs' : 'Nowy kurs'}</Text>
-              <TouchableOpacity onPress={() => setShowCourseModal(false)} hitSlop={8}>
+              <TouchableOpacity onPress={() => { void closeDraftModal('course'); }} hitSlop={8}>
                 <Ionicons name="close" size={22} color={theme.colors.textSecondary} />
               </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={m.body}>
+              {recoveredDraft === 'course' && <Text style={m.draftNotice}>Przywrócono niezapisany szkic z tego urządzenia.</Text>}
+              {draftError && <Text style={m.draftError}>Szkic nie został zapisany na urządzeniu. Nie zamykaj formularza, dopóki nie zapiszesz zmian.</Text>}
               <Text style={m.label}>Tytuł kursu *</Text>
               <TextInput style={m.input} placeholder="np. Obsługa kasy, BHP wstęp" placeholderTextColor={theme.colors.textMuted} value={cForm.title} onChangeText={(v) => setCForm((f) => ({ ...f, title: v }))} />
               <Text style={m.label}>Opis</Text>
@@ -419,7 +557,7 @@ export default function ManageCoursesScreen() {
               )}
             </ScrollView>
             <View style={m.footer}>
-              <TouchableOpacity style={m.cancelBtn} onPress={() => setShowCourseModal(false)}><Text style={m.cancelBtnText}>Anuluj</Text></TouchableOpacity>
+              <TouchableOpacity style={m.cancelBtn} onPress={() => { void closeDraftModal('course'); }}><Text style={m.cancelBtnText}>Anuluj</Text></TouchableOpacity>
               <TouchableOpacity style={m.saveBtn} onPress={saveCourse} disabled={saving}>
                 {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={m.saveBtnText}>Zapisz kurs</Text>}
               </TouchableOpacity>
@@ -429,23 +567,25 @@ export default function ManageCoursesScreen() {
       </Modal>
 
       {/* ── Lesson Modal ── */}
-      <Modal visible={showLessonModal} transparent animationType={isDesktop ? 'fade' : 'slide'}>
+      <Modal visible={showLessonModal} transparent animationType={isDesktop ? 'fade' : 'slide'} onRequestClose={() => { void closeDraftModal('lesson'); }}>
         <View style={m.overlay}>
           <View style={[m.sheet, isDesktop && m.sheetDesktop]}>
             <View style={m.sheetHeader}>
               <Text style={m.sheetTitle}>{editingLesson ? 'Edytuj lekcję' : 'Nowa lekcja'}</Text>
-              <TouchableOpacity onPress={() => setShowLessonModal(false)} hitSlop={8}>
+              <TouchableOpacity onPress={() => { void closeDraftModal('lesson'); }} hitSlop={8}>
                 <Ionicons name="close" size={22} color={theme.colors.textSecondary} />
               </TouchableOpacity>
             </View>
             <View style={m.body}>
+              {recoveredDraft === 'lesson' && <Text style={m.draftNotice}>Przywrócono niezapisany szkic z tego urządzenia.</Text>}
+              {draftError && <Text style={m.draftError}>Szkic nie został zapisany na urządzeniu. Nie zamykaj formularza, dopóki nie zapiszesz zmian.</Text>}
               <Text style={m.label}>Tytuł lekcji *</Text>
               <TextInput style={m.input} placeholder="np. Powitanie gościa" placeholderTextColor={theme.colors.textMuted} value={lForm.title} onChangeText={(v) => setLForm((f) => ({ ...f, title: v }))} />
               <Text style={m.label}>Opis</Text>
               <TextInput style={[m.input, m.inputMulti]} placeholder="Krótki opis lekcji..." placeholderTextColor={theme.colors.textMuted} value={lForm.description} onChangeText={(v) => setLForm((f) => ({ ...f, description: v }))} multiline numberOfLines={3} />
             </View>
             <View style={m.footer}>
-              <TouchableOpacity style={m.cancelBtn} onPress={() => setShowLessonModal(false)}><Text style={m.cancelBtnText}>Anuluj</Text></TouchableOpacity>
+              <TouchableOpacity style={m.cancelBtn} onPress={() => { void closeDraftModal('lesson'); }}><Text style={m.cancelBtnText}>Anuluj</Text></TouchableOpacity>
               <TouchableOpacity style={m.saveBtn} onPress={saveLesson} disabled={saving}>
                 {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={m.saveBtnText}>Zapisz lekcję</Text>}
               </TouchableOpacity>
@@ -455,16 +595,18 @@ export default function ManageCoursesScreen() {
       </Modal>
 
       {/* ── Topic Modal ── */}
-      <Modal visible={showTopicModal} transparent animationType={isDesktop ? 'fade' : 'slide'}>
+      <Modal visible={showTopicModal} transparent animationType={isDesktop ? 'fade' : 'slide'} onRequestClose={() => { void closeDraftModal('topic'); }}>
         <View style={m.overlay}>
           <View style={[m.sheet, isDesktop && m.sheetDesktop]}>
             <View style={m.sheetHeader}>
               <Text style={m.sheetTitle}>{editingTopic ? 'Edytuj temat' : 'Nowy temat'}</Text>
-              <TouchableOpacity onPress={() => setShowTopicModal(false)} hitSlop={8}>
+              <TouchableOpacity onPress={() => { void closeDraftModal('topic'); }} hitSlop={8}>
                 <Ionicons name="close" size={22} color={theme.colors.textSecondary} />
               </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={m.body}>
+              {recoveredDraft === 'topic' && <Text style={m.draftNotice}>Przywrócono niezapisany szkic z tego urządzenia.</Text>}
+              {draftError && <Text style={m.draftError}>Szkic nie został zapisany na urządzeniu. Nie zamykaj formularza, dopóki nie zapiszesz zmian.</Text>}
               <Text style={m.label}>Tytuł tematu *</Text>
               <TextInput style={m.input} placeholder="np. Jak parzyć espresso" placeholderTextColor={theme.colors.textMuted} value={tForm.title} onChangeText={(v) => setTForm((f) => ({ ...f, title: v }))} />
               <Text style={m.label}>Krótki opis</Text>
@@ -570,7 +712,7 @@ export default function ManageCoursesScreen() {
               )}
             </ScrollView>
             <View style={m.footer}>
-              <TouchableOpacity style={m.cancelBtn} onPress={() => setShowTopicModal(false)}><Text style={m.cancelBtnText}>Anuluj</Text></TouchableOpacity>
+              <TouchableOpacity style={m.cancelBtn} onPress={() => { void closeDraftModal('topic'); }}><Text style={m.cancelBtnText}>Anuluj</Text></TouchableOpacity>
               <TouchableOpacity style={m.saveBtn} onPress={saveTopic} disabled={saving}>
                 {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={m.saveBtnText}>Zapisz temat</Text>}
               </TouchableOpacity>
@@ -618,6 +760,8 @@ const m = StyleSheet.create({
   sheetDesktop: { maxWidth: 520 },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   sheetTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.text, flex: 1 },
+  draftNotice: { padding: 10, borderRadius: 8, backgroundColor: theme.colors.primaryLight, color: theme.colors.primary, fontSize: 12, fontWeight: '700', marginBottom: 6 },
+  draftError: { padding: 10, borderRadius: 8, backgroundColor: '#FEF2F2', color: theme.colors.error, fontSize: 12, fontWeight: '700', marginBottom: 6 },
   body: { padding: 20, paddingBottom: 8 },
   label: { fontSize: 13, fontWeight: '700', color: theme.colors.textSecondary, marginTop: 12, marginBottom: 6 },
   input: { borderWidth: 1.5, borderColor: theme.colors.border, borderRadius: theme.borderRadius.md, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: theme.colors.text, backgroundColor: theme.colors.surface },
