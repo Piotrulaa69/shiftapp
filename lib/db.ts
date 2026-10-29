@@ -8,21 +8,32 @@ import type {
     DbAbsence,
     DbAnnouncement,
     DbAvailability, DbClockIn, DbConversation, DbCourse, DbCourseProgress, DbDocument, DbDocumentTemplate,
-    DbEmployeeGroup, DbEmployeeGroupAssignment, DbEmployeeLeaveQuota, DbEmployeeLeaveTypeSetting,
-    DbInvitation, DbLeaveRequest, DbLeaveType, DbLesson, DbMessage, DbPointsLedger,
+    DbEmployeeGroup, DbEmployeeGroupAssignment, DbEmployeeLeaveQuota, DbEmployeeLeaveTypeSetting, DbEmployeeTrainingProgress,
+    DbInvitation, DbLeaveRequest, DbLeaveType, DbLesson, DbLessonQuizProgress, DbMessage, DbPointsLedger,
     DbProfile, DbPromoCode, DbRestaurant, DbShift, DbShiftSwap, DbTask,
-    DbTopic, DbTopicProgress,
+    DbTopic, DbTopicProgress, DbTrainingCategory,
     DbTraining
 } from './supabase';
+import { cached, invalidate } from './query-cache';
+import { createClientUuid, isSessionError, retrySupabase } from './retry';
 import { createIsolatedClient, supabase } from './supabase';
 
 // Re-export types for screens
-export type { DbProfile as AppUser, DbCourse, DbCourseProgress, DbLesson, DbTopic, DbTopicProgress, DbInvitation as Invitation, DbRestaurant as Restaurant, DbShift as Shift, DbTask as Task, DbTraining as Training };
+export type { DbProfile as AppUser, DbCourse, DbCourseProgress, DbLesson, DbLessonQuizProgress, DbTrainingCategory, DbTopic, DbTopicProgress, DbInvitation as Invitation, DbRestaurant as Restaurant, DbShift as Shift, DbTask as Task, DbTraining as Training };
 
 export type ShiftStatus = 'zaplanowana' | 'do_potwierdzenia' | 'potwierdzona' | 'urlop';
 export type TaskPriority = 'wysoki' | 'normalny' | 'niski';
 export type TaskStatus = 'do_zrobienia' | 'w_trakcie' | 'czeka_na_zatwierdzenie' | 'zatwierdzone' | 'odrzucone' | 'zamkniete';
 export type ConfirmationType = 'photo' | 'values' | 'description';
+
+async function reliableSupabaseRequest<T extends { error?: unknown }>(operation: () => PromiseLike<T>): Promise<T> {
+  let result = await retrySupabase(operation);
+  if (isSessionError(result.error)) {
+    const { error: refreshError } = await supabase.auth.refreshSession();
+    if (!refreshError) result = await retrySupabase(operation);
+  }
+  return result;
+}
 
 // ─── Shifts ───────────────────────────────────────────────────────────────────
 
@@ -211,14 +222,74 @@ export async function updateTask(
 
 // ─── Trainings ────────────────────────────────────────────────────────────────
 
+type TrainingContentTable = 'trainings' | 'quiz_questions' | 'courses' | 'lessons' | 'topics' | 'training_categories';
+
+/** Stable IDs make a retried content INSERT safe after a lost HTTP response. */
+async function insertTrainingContent<T>(
+  table: TrainingContentTable,
+  restaurantId: string,
+  fields: Record<string, unknown>,
+): Promise<T | null> {
+  const id = createClientUuid();
+  const readCreated = () => supabase.from(table).select('*').eq('restaurant_id', restaurantId).eq('id', id).maybeSingle();
+  try {
+    const { data, error } = await reliableSupabaseRequest(() => supabase
+      .from(table)
+      .insert({ restaurant_id: restaurantId, ...fields, id })
+      .select('*')
+      .single());
+    if (!error && data) return data as T;
+    if ((error as { code?: string } | null)?.code === '23505') {
+      const existing = await readCreated();
+      if (existing.data) return existing.data as T;
+    }
+    console.error(`insertTrainingContent:${table}`, error);
+    return null;
+  } catch (error) {
+    const existing = await readCreated();
+    if (existing.data) return existing.data as T;
+    console.error(`insertTrainingContent:${table}`, error);
+    return null;
+  }
+}
+
 export async function getTrainings(restaurantId: string): Promise<DbTraining[]> {
-  const { data, error } = await supabase
+  const { data, error } = await retrySupabase(() => supabase
     .from('trainings')
     .select('*')
     .eq('restaurant_id', restaurantId)
-    .order('created_at', { ascending: true });
-  if (error) { console.error('getTrainings', error); return []; }
-  return data as DbTraining[];
+    .order('created_at', { ascending: true }));
+  if (error) { console.error('getTrainings', error); throw error; }
+  return (data ?? []) as DbTraining[];
+}
+
+export async function getEmployeeTrainingProgress(restaurantId: string, employeeId: string): Promise<DbEmployeeTrainingProgress[]> {
+  const { data, error } = await reliableSupabaseRequest(() => supabase
+    .from('employee_training_progress')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .eq('employee_id', employeeId));
+  if (error) { console.error('getEmployeeTrainingProgress', error); throw error; }
+  return (data ?? []) as DbEmployeeTrainingProgress[];
+}
+
+export type SavedTrainingResult = {
+  saved_status: DbEmployeeTrainingProgress['status'];
+  saved_percent: number;
+  newly_completed: boolean;
+  awarded_points: number;
+};
+
+export async function saveEmployeeTrainingResult(trainingId: string, percent: number): Promise<SavedTrainingResult> {
+  const { data, error } = await reliableSupabaseRequest(() => supabase.rpc('save_employee_training_result', {
+    p_training_id: trainingId,
+    p_percent: percent,
+  }));
+  if (error || !data?.[0]) {
+    console.error('saveEmployeeTrainingResult', error);
+    throw error ?? new Error('Nie udało się zapisać postępu szkolenia.');
+  }
+  return data[0] as SavedTrainingResult;
 }
 
 export async function createTraining(
@@ -1250,7 +1321,7 @@ export async function getQuizQuestions(trainingId: string): Promise<DbQuizQuesti
     .select('*')
     .eq('training_id', trainingId)
     .order('sort_order', { ascending: true });
-  if (error) { console.error('getQuizQuestions', error); return []; }
+  if (error) { console.error('getQuizQuestions', error); throw error; }
   return (data ?? []) as DbQuizQuestion[];
 }
 
@@ -1762,103 +1833,232 @@ export async function reviewLeaveRequestWithNotes(
 
 // ─── Courses ──────────────────────────────────────────────────────────────────
 
-export async function getCourses(restaurantId: string, strict = false): Promise<DbCourse[]> {
+export async function getTrainingCategories(restaurantId: string, strict = false): Promise<DbTrainingCategory[]> {
   const { data, error } = await supabase
-    .from('courses')
+    .from('training_categories')
     .select('*')
     .eq('restaurant_id', restaurantId)
-    .order('sort_order', { ascending: true });
-  if (error) { console.error('getCourses', error); if (strict) throw error; return []; }
-  return data as DbCourse[];
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true });
+  if (error) { console.error('getTrainingCategories', error); if (strict) throw error; return []; }
+  return data as DbTrainingCategory[];
+}
+
+/** Read the restaurant's actual categories; never recreate deleted defaults. */
+export async function ensureTrainingCategories(restaurantId: string): Promise<DbTrainingCategory[]> {
+  return getTrainingCategories(restaurantId, true);
+}
+
+export async function createTrainingCategory(
+  restaurantId: string,
+  name: string,
+  color: string,
+): Promise<{ category: DbTrainingCategory | null; error?: string }> {
+  const id = createClientUuid();
+  const { data, error } = await reliableSupabaseRequest(() => supabase.from('training_categories')
+    .insert({ id, restaurant_id: restaurantId, name: name.trim(), color })
+    .select().single());
+  if (error) {
+    if (error.code === '23505') {
+      const { data: saved } = await supabase.from('training_categories').select('*').eq('id', id).eq('restaurant_id', restaurantId).maybeSingle();
+      if (saved) return { category: saved as DbTrainingCategory };
+    }
+    console.error('createTrainingCategory', error);
+    return { category: null, error: error.code === '23505' ? 'Kategoria o tej nazwie już istnieje.' : 'Nie udało się dodać kategorii.' };
+  }
+  invalidate('courses:');
+  return { category: data as DbTrainingCategory };
+}
+
+export async function updateTrainingCategory(
+  categoryId: string,
+  fields: { name?: string; color?: string },
+): Promise<{ success: boolean; error?: string }> {
+  const payload = { ...fields, ...(fields.name != null ? { name: fields.name.trim() } : {}) };
+  const { data, error } = await reliableSupabaseRequest(() => supabase
+    .from('training_categories')
+    .update(payload)
+    .eq('id', categoryId)
+    .select('id')
+    .maybeSingle());
+  if (error || !data) {
+    console.error('updateTrainingCategory', error);
+    return {
+      success: false,
+      error: error?.code === '23505'
+        ? 'Kategoria o tej nazwie już istnieje.'
+        : 'Nie udało się zapisać kategorii. Sprawdź uprawnienia i spróbuj ponownie.',
+    };
+  }
+  // Renaming is propagated by the database trigger to courses/trainings. Drop
+  // the in-memory course cache so the new name is visible immediately rather
+  // than after its one-minute TTL expires.
+  invalidate('courses:');
+  invalidate('course:');
+  return { success: true };
+}
+
+export async function deleteTrainingCategory(categoryId: string): Promise<{ success: boolean; error?: string }> {
+  const { data, error } = await reliableSupabaseRequest(() => supabase
+    .from('training_categories')
+    .delete()
+    .eq('id', categoryId)
+    .select('id')
+    .maybeSingle());
+  if (error || !data) {
+    console.error('deleteTrainingCategory', error);
+    const inUse = error?.message.includes('TRAINING_CATEGORY_IN_USE');
+    return { success: false, error: inUse ? 'Nie można usunąć kategorii używanej przez szkolenia lub kursy.' : 'Nie udało się usunąć kategorii lub nie masz do tego uprawnień.' };
+  }
+  invalidate('courses:');
+  return { success: true };
+}
+
+export async function getCourses(restaurantId: string): Promise<DbCourse[]> {
+  return cached(`courses:${restaurantId}`, async () => {
+    const { data, error } = await retrySupabase(() => supabase
+      .from('courses')
+      .select('*')
+      .eq('restaurant_id', restaurantId)
+      .order('sort_order', { ascending: true }));
+    // Never cache a transport/RLS failure as an empty course list. A subsequent
+    // refresh or restored connection must be able to fetch the real content.
+    if (error) { console.error('getCourses', error); throw error; }
+    return (data ?? []) as DbCourse[];
+  });
+}
+
+export async function getCourse(courseId: string): Promise<DbCourse | null> {
+  return cached(`course:${courseId}`, async () => {
+    const { data, error } = await supabase.from('courses').select('*').eq('id', courseId).maybeSingle();
+    if (error) { console.error('getCourse', error); throw error; }
+    return data as DbCourse | null;
+  });
 }
 
 export async function createCourse(restaurantId: string, fields: Partial<DbCourse>): Promise<DbCourse | null> {
-  const { data, error } = await supabase
-    .from('courses')
-    .insert({ restaurant_id: restaurantId, ...fields })
-    .select()
-    .single();
-  if (error) { console.error('createCourse', error); return null; }
-  return data as DbCourse;
+  const data = await insertTrainingContent<DbCourse>('courses', restaurantId, fields);
+  if (!data) return null;
+  invalidate('courses:');
+  return data;
 }
 
 export async function updateCourse(courseId: string, fields: Partial<DbCourse>): Promise<boolean> {
-  const { error } = await supabase.from('courses').update(fields).eq('id', courseId);
-  if (error) { console.error('updateCourse', error); }
-  return !error;
+  try {
+    const { data, error } = await reliableSupabaseRequest(() => supabase.from('courses').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', courseId).select('id').maybeSingle());
+    if (error || !data) { console.error('updateCourse', error); return false; }
+    invalidate('courses:');
+    invalidate(`course:${courseId}`);
+    return true;
+  } catch (error) {
+    console.error('updateCourse', error);
+    return false;
+  }
 }
 
 export async function deleteCourse(courseId: string): Promise<boolean> {
   const { error } = await supabase.from('courses').delete().eq('id', courseId);
   if (error) { console.error('deleteCourse', error); }
+  if (!error) { invalidate('courses:'); invalidate(`course:${courseId}`); invalidate('course-lessons:'); invalidate('course-topics:'); }
   return !error;
 }
 
 // ─── Lessons ──────────────────────────────────────────────────────────────────
 
-export async function getLessons(courseId: string, strict = false): Promise<DbLesson[]> {
-  const { data, error } = await supabase
-    .from('lessons')
-    .select('*')
-    .eq('course_id', courseId)
-    .order('sort_order', { ascending: true });
-  if (error) { console.error('getLessons', error); if (strict) throw error; return []; }
-  return data as DbLesson[];
+export async function getLessons(courseId: string): Promise<DbLesson[]> {
+  return cached(`course-lessons:${courseId}`, async () => {
+    const { data, error } = await supabase
+      .from('lessons')
+      .select('*')
+      .eq('course_id', courseId)
+      .order('sort_order', { ascending: true });
+    if (error) { console.error('getLessons', error); throw error; }
+    return data as DbLesson[];
+  });
 }
 
 export async function createLesson(restaurantId: string, courseId: string, fields: Partial<DbLesson>): Promise<DbLesson | null> {
-  const { data, error } = await supabase
-    .from('lessons')
-    .insert({ restaurant_id: restaurantId, course_id: courseId, ...fields })
-    .select()
-    .single();
-  if (error) { console.error('createLesson', error); return null; }
-  return data as DbLesson;
+  const data = await insertTrainingContent<DbLesson>('lessons', restaurantId, { course_id: courseId, ...fields });
+  if (!data) return null;
+  invalidate(`course-lessons:${courseId}`);
+  invalidate('course-topics:');
+  return data;
 }
 
 export async function updateLesson(lessonId: string, fields: Partial<DbLesson>): Promise<boolean> {
-  const { error } = await supabase.from('lessons').update(fields).eq('id', lessonId);
-  if (error) { console.error('updateLesson', error); }
-  return !error;
+  try {
+    const { data, error } = await reliableSupabaseRequest(() => supabase.from('lessons').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', lessonId).select('id').maybeSingle());
+    if (error || !data) { console.error('updateLesson', error); return false; }
+    invalidate('course-lessons:');
+    invalidate('course-topics:');
+    return true;
+  } catch (error) {
+    console.error('updateLesson', error);
+    return false;
+  }
 }
 
 export async function deleteLesson(lessonId: string): Promise<boolean> {
   const { error } = await supabase.from('lessons').delete().eq('id', lessonId);
   if (error) { console.error('deleteLesson', error); }
+  if (!error) { invalidate('course-lessons:'); invalidate('lesson-topics:'); invalidate('course-topics:'); }
   return !error;
 }
 
 // ─── Topics ───────────────────────────────────────────────────────────────────
 
-export async function getTopics(lessonId: string, strict = false): Promise<DbTopic[]> {
-  const { data, error } = await supabase
-    .from('topics')
-    .select('*')
-    .eq('lesson_id', lessonId)
-    .order('sort_order', { ascending: true });
-  if (error) { console.error('getTopics', error); if (strict) throw error; return []; }
-  return data as DbTopic[];
+export async function getTopics(lessonId: string): Promise<DbTopic[]> {
+  return cached(`lesson-topics:${lessonId}`, async () => {
+    const { data, error } = await supabase
+      .from('topics')
+      .select('*')
+      .eq('lesson_id', lessonId)
+      .order('sort_order', { ascending: true });
+    if (error) { console.error('getTopics', error); throw error; }
+    return data as DbTopic[];
+  });
+}
+
+/** Fetch every topic for a course in one request instead of one request per lesson. */
+export async function getTopicsForLessons(lessonIds: string[]): Promise<DbTopic[]> {
+  if (lessonIds.length === 0) return [];
+  const ids = [...new Set(lessonIds)].sort();
+  return cached(`course-topics:${ids.join(',')}`, async () => {
+    const { data, error } = await supabase
+      .from('topics')
+      .select('*')
+      .in('lesson_id', ids)
+      .order('sort_order', { ascending: true });
+    if (error) { console.error('getTopicsForLessons', error); throw error; }
+    return data as DbTopic[];
+  });
 }
 
 export async function createTopic(restaurantId: string, lessonId: string, fields: Partial<DbTopic>): Promise<DbTopic | null> {
-  const { data, error } = await supabase
-    .from('topics')
-    .insert({ restaurant_id: restaurantId, lesson_id: lessonId, ...fields })
-    .select()
-    .single();
-  if (error) { console.error('createTopic', error); return null; }
-  return data as DbTopic;
+  const data = await insertTrainingContent<DbTopic>('topics', restaurantId, { lesson_id: lessonId, ...fields });
+  if (!data) return null;
+  invalidate(`lesson-topics:${lessonId}`);
+  invalidate('course-topics:');
+  return data;
 }
 
 export async function updateTopic(topicId: string, fields: Partial<DbTopic>): Promise<boolean> {
-  const { error } = await supabase.from('topics').update(fields).eq('id', topicId);
-  if (error) { console.error('updateTopic', error); }
-  return !error;
+  try {
+    const { data, error } = await reliableSupabaseRequest(() => supabase.from('topics').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', topicId).select('id').maybeSingle());
+    if (error || !data) { console.error('updateTopic', error); return false; }
+    invalidate('lesson-topics:');
+    invalidate('course-topics:');
+    return true;
+  } catch (error) {
+    console.error('updateTopic', error);
+    return false;
+  }
 }
 
 export async function deleteTopic(topicId: string): Promise<boolean> {
   const { error } = await supabase.from('topics').delete().eq('id', topicId);
   if (error) { console.error('deleteTopic', error); }
+  if (!error) { invalidate('lesson-topics:'); invalidate('course-topics:'); }
   return !error;
 }
 
@@ -1878,13 +2078,34 @@ export async function markTopicCompleted(restaurantId: string, topicId: string, 
   return !error;
 }
 
+/** Persist every quiz attempt; completion is still granted separately on pass. */
+export async function saveTopicQuizResult(
+  restaurantId: string,
+  topicId: string,
+  employeeId: string,
+  score: number,
+  passed: boolean,
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('topic_progress')
+    .upsert({
+      topic_id: topicId,
+      employee_id: employeeId,
+      restaurant_id: restaurantId,
+      quiz_score: score,
+      quiz_passed: passed,
+    }, { onConflict: 'topic_id,employee_id' });
+  if (error) { console.error('saveTopicQuizResult', error); }
+  return !error;
+}
+
 export async function getTopicProgress(restaurantId: string, employeeId: string): Promise<DbTopicProgress[]> {
   const { data, error } = await supabase
     .from('topic_progress')
     .select('*')
     .eq('employee_id', employeeId)
     .eq('restaurant_id', restaurantId);
-  if (error) { console.error('getTopicProgress', error); return []; }
+  if (error) { console.error('getTopicProgress', error); throw error; }
   return data as DbTopicProgress[];
 }
 
@@ -1894,23 +2115,47 @@ export async function getCourseProgress(restaurantId: string, employeeId: string
     .select('*')
     .eq('employee_id', employeeId)
     .eq('restaurant_id', restaurantId);
-  if (error) { console.error('getCourseProgress', error); return []; }
+  if (error) { console.error('getCourseProgress', error); throw error; }
   return data as DbCourseProgress[];
 }
 
+export async function getLessonQuizProgress(restaurantId: string, employeeId: string, courseId: string): Promise<DbLessonQuizProgress[]> {
+  const { data, error } = await reliableSupabaseRequest(() => supabase
+    .from('lesson_quiz_progress')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .eq('employee_id', employeeId)
+    .eq('course_id', courseId));
+  if (error) { console.error('getLessonQuizProgress', error); throw error; }
+  return (data ?? []) as DbLessonQuizProgress[];
+}
+
+export async function submitTrainingQuiz(
+  scope: 'course' | 'lesson',
+  targetId: string,
+  answers: Record<string, string>,
+): Promise<{ score: number; passed: boolean; completed: boolean }> {
+  // An attempt is not idempotent (attempt_count increments). Do not blindly
+  // replay it after a timeout: keep answers on screen and let the user retry.
+  const { data, error } = await supabase.rpc('submit_training_quiz', {
+    p_scope: scope,
+    p_target_id: targetId,
+    p_answers: answers,
+  });
+  if (error || !data?.[0]) {
+    console.error('submitTrainingQuiz', error);
+    throw error ?? new Error('Nie udało się zapisać wyniku quizu.');
+  }
+  return data[0] as { score: number; passed: boolean; completed: boolean };
+}
+
 export async function upsertCourseProgress(restaurantId: string, courseId: string, employeeId: string, progressPercent: number): Promise<boolean> {
-  const completed = progressPercent >= 100;
-  const { error } = await supabase
-    .from('course_progress')
-    .upsert({
-      course_id: courseId,
-      employee_id: employeeId,
-      restaurant_id: restaurantId,
-      progress_percent: progressPercent,
-      completed,
-      completed_at: completed ? new Date().toISOString() : null,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'course_id,employee_id' });
+  // Keep the old call signature for topic screens, but calculate progress on
+  // the server so a course quiz/lesson quiz cannot be skipped by reaching 100%
+  // on topics alone. The server uses auth.uid(), not the passed employee ID.
+  const { error } = await reliableSupabaseRequest(() => supabase.rpc('sync_course_progress', {
+    p_course_id: courseId,
+  }));
   if (error) { console.error('upsertCourseProgress', error); }
   return !error;
 }

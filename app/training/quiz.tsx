@@ -13,9 +13,8 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
-import { addPoints, DbQuizQuestion, getQuizQuestions, notify } from '../../lib/db';
+import { DbQuizQuestion, getQuizQuestions, notify, saveEmployeeTrainingResult } from '../../lib/db';
 import type { QuizQuestion } from '../../lib/quiz-data';
 import { getQuizForTraining } from '../../lib/quiz-data';
 import { supabase } from '../../lib/supabase';
@@ -28,15 +27,22 @@ export default function QuizScreen() {
     title: string;
   }>();
   const router = useRouter();
-  const { showSuccess } = useAlert();
   const { user } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
+
+  const goBackToTrainingList = () => router.replace({
+    pathname: '/(tabs)/szkolenia' as any,
+    params: { tab: 'szkolenia' },
+  });
 
   const fallbackQuiz = getQuizForTraining(category ?? '');
 
   const [dbQuestions, setDbQuestions] = useState<DbQuizQuestion[] | null>(null);
   const [loadingQ, setLoadingQ] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [current, setCurrent] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [answered, setAnswered] = useState(false);
@@ -56,7 +62,10 @@ export default function QuizScreen() {
 
   useEffect(() => {
     if (!trainingId) { setLoadingQ(false); return; }
-    getQuizQuestions(trainingId).then((qs) => { setDbQuestions(qs); setLoadingQ(false); });
+    getQuizQuestions(trainingId)
+      .then((qs) => { setDbQuestions(qs); setLoadError(false); })
+      .catch((error) => { console.error('loadQuizQuestions', error); setLoadError(true); })
+      .finally(() => setLoadingQ(false));
   }, [trainingId]);
 
   useEffect(() => {
@@ -75,33 +84,53 @@ export default function QuizScreen() {
   };
 
   const handleNext = async () => {
+    if (saving) return;
     if (current + 1 < questions.length) {
       setCurrent((c) => c + 1);
       setSelected(null);
       setAnswered(false);
     } else {
-      setFinished(true);
-      const finalPct = Math.round(((score + (selected === q.correctIndex ? 1 : 0)) / questions.length) * 100);
-      const passed = finalPct >= 80;
-      if (trainingId) {
-        const { data: tr } = await supabase.from('trainings').select('restaurant_id, points, title').eq('id', trainingId).single();
-        await supabase
-          .from('trainings')
-          .update({ progress_percent: finalPct, status: passed ? 'ukonczone' : 'w_toku' })
-          .eq('id', trainingId);
-        if (passed && tr && user?.id) {
-          const pts = tr.points ?? 0;
-          if (pts > 0) {
-            await addPoints(tr.restaurant_id, user.id, pts, 'training_completed', trainingId, `Szkolenie ukończone: ${tr.title}`);
-          }
-          await notify(tr.restaurant_id, user.id, 'task', 'Szkolenie ukończone! 🎓', `Ukończyłeś szkolenie "${tr.title}" z wynikiem ${finalPct}%.${pts > 0 ? ` +${pts} pkt!` : ''}`, trainingId);
+      if (!trainingId || !user?.id) { setSaveError(true); return; }
+      setSaving(true);
+      setSaveError(false);
+      try {
+        const finalPct = Math.round((score / questions.length) * 100);
+        const result = await saveEmployeeTrainingResult(trainingId, finalPct);
+        setFinished(true);
+        if (result.newly_completed) {
+          const { data: training } = await supabase.from('trainings').select('restaurant_id, title').eq('id', trainingId).maybeSingle();
+          if (training) void notify(training.restaurant_id, user.id, 'task', 'Szkolenie ukończone! 🎓', `Ukończyłeś szkolenie "${training.title}" z wynikiem ${finalPct}%.`, trainingId);
         }
+      } catch (error) {
+        console.error('finishTrainingQuiz', error);
+        setSaveError(true);
+      } finally {
+        setSaving(false);
       }
     }
   };
 
-  const finalScore = score + (selected === q?.correctIndex ? 1 : 0);
+  const finalScore = score;
   const pct = Math.round((finalScore / questions.length) * 100);
+
+  const handleManualComplete = async () => {
+    if (!trainingId || !user?.id || saving) return;
+    setSaving(true);
+    setSaveError(false);
+    try {
+      const result = await saveEmployeeTrainingResult(trainingId, 100);
+      if (result.newly_completed) {
+        const { data: training } = await supabase.from('trainings').select('restaurant_id, title').eq('id', trainingId).maybeSingle();
+        if (training) void notify(training.restaurant_id, user.id, 'task', 'Szkolenie ukończone! 🎓', `Ukończyłeś szkolenie "${training.title}".`, trainingId);
+      }
+      goBackToTrainingList();
+    } catch (error) {
+      console.error('completeTrainingWithoutQuiz', error);
+      setSaveError(true);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const optionStyle = (idx: number) => {
     if (!answered) return styles.option;
@@ -123,6 +152,17 @@ export default function QuizScreen() {
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={{ color: theme.colors.textMuted, fontSize: 14 }}>Ładowanie pytań...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (loadError || !trainingId) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 16 }}>
+          <Text style={{ color: theme.colors.error, textAlign: 'center' }}>Nie udało się pobrać pytań. Sprawdź połączenie i spróbuj ponownie.</Text>
+          <TouchableOpacity onPress={goBackToTrainingList}><Text style={{ color: theme.colors.primary }}>Wróć do szkoleń</Text></TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -151,23 +191,15 @@ export default function QuizScreen() {
             </View>
             <TouchableOpacity
               style={[styles.resultBtnFull, { backgroundColor: theme.colors.primary }]}
-              onPress={async () => {
-                if (trainingId) {
-                  const { data: tr } = await supabase.from('trainings').select('restaurant_id, points, title').eq('id', trainingId).single();
-                  await supabase.from('trainings').update({ progress_percent: 100, status: 'ukonczone' }).eq('id', trainingId);
-                  if (tr && user?.id) {
-                    if ((tr.points ?? 0) > 0) await addPoints(tr.restaurant_id, user.id, tr.points, 'training_completed', trainingId, `Szkolenie ukończone: ${tr.title}`);
-                    await notify(tr.restaurant_id, user.id, 'task', 'Szkolenie ukończone! 🎓', `Ukończyłeś szkolenie "${tr.title}".`, trainingId);
-                  }
-                }
-                router.back();
-              }}
+              onPress={handleManualComplete}
+              disabled={saving}
               activeOpacity={0.85}
             >
               <Ionicons name="checkmark-circle" size={20} color="#fff" />
               <Text style={styles.resultBtnFullText}>Oznacz jako ukończone</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.resultBtnFull, styles.resultBtnOutline]} onPress={() => router.back()} activeOpacity={0.8}>
+            {saveError && <Text style={{ color: theme.colors.error, textAlign: 'center' }}>Nie udało się zapisać ukończenia. Spróbuj ponownie.</Text>}
+            <TouchableOpacity style={[styles.resultBtnFull, styles.resultBtnOutline]} onPress={goBackToTrainingList} activeOpacity={0.8}>
               <Text style={[styles.resultBtnFullText, { color: theme.colors.primary }]}>Wróć do szkoleń</Text>
             </TouchableOpacity>
           </View>
@@ -216,7 +248,7 @@ export default function QuizScreen() {
               {passed && (
                 <View style={[styles.xpBadge, { backgroundColor: '#FEF9C3' }]}>
                   <Ionicons name="star" size={16} color={theme.colors.yellow} />
-                  <Text style={styles.xpText}>+{Math.round(pct / 10) * 10} XP zdobyte!</Text>
+                  <Text style={styles.xpText}>Wynik zapisany</Text>
                 </View>
               )}
             </View>
@@ -224,7 +256,7 @@ export default function QuizScreen() {
             {/* Buttons */}
             <TouchableOpacity
               style={[styles.resultBtnFull, { backgroundColor: theme.colors.primary }]}
-              onPress={() => router.back()}
+              onPress={goBackToTrainingList}
               activeOpacity={0.85}
             >
               <Ionicons name="checkmark-circle" size={20} color={theme.colors.white} />
@@ -254,7 +286,7 @@ export default function QuizScreen() {
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.backBtn} onPress={goBackToTrainingList} activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
@@ -334,9 +366,10 @@ export default function QuizScreen() {
       {/* Next button */}
       {answered && (
         <View style={styles.footer}>
-          <TouchableOpacity style={styles.nextBtn} onPress={handleNext} activeOpacity={0.85}>
+          {saveError && <Text style={{ color: theme.colors.error, marginBottom: 8, textAlign: 'center' }}>Nie udało się zapisać wyniku. Spróbuj ponownie.</Text>}
+          <TouchableOpacity style={styles.nextBtn} onPress={handleNext} disabled={saving} activeOpacity={0.85}>
             <Text style={styles.nextBtnText}>
-              {current + 1 < questions.length ? 'Następne pytanie' : 'Zobacz wynik'}
+              {saving ? 'Zapisywanie...' : current + 1 < questions.length ? 'Następne pytanie' : 'Zobacz wynik'}
             </Text>
             <Ionicons name="arrow-forward" size={18} color={theme.colors.white} />
           </TouchableOpacity>

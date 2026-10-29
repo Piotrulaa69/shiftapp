@@ -87,7 +87,7 @@ export type DbProfile = {
   bank_account_number: string | null;
   bank_name: string | null;
   id_card_number: string | null;
-  login_pin: string | null;
+  login_pin?: string | null;
   login_method: 'pin' | 'qr';
   created_at: string;
 };
@@ -202,6 +202,16 @@ export type DbTraining = {
   assigned_roles: string[];
   deadline: string | null;
   created_at: string;
+};
+
+export type DbEmployeeTrainingProgress = {
+  training_id: string;
+  employee_id: string;
+  restaurant_id: string;
+  progress_percent: number;
+  status: 'w_toku' | 'ukonczone' | 'nierozpoczete';
+  completed_at: string | null;
+  updated_at: string;
 };
 
 export type DbClockIn = {
@@ -435,8 +445,20 @@ export type DbCourse = {
   cover_image_url: string | null;
   assigned_roles: string[];
   assigned_group_ids: string[];
+  assigned_employee_ids: string[];
+  quiz_data: DbTopicQuiz | null;
   required: boolean;
   is_template: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DbTrainingCategory = {
+  id: string;
+  restaurant_id: string;
+  name: string;
+  color: string;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -448,13 +470,23 @@ export type DbLesson = {
   restaurant_id: string;
   title: string;
   description: string | null;
+  quiz_data: DbTopicQuiz | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
 };
 
 export type QuizAnswer = { id: string; text: string; correct: boolean };
-export type QuizQuestion = { id: string; question: string; answers: QuizAnswer[] };
+export type QuizQuestionType = 'single_choice' | 'open';
+export type QuizQuestion = {
+  id: string;
+  question: string;
+  /** Missing on legacy questions and therefore treated as single choice. */
+  type?: QuizQuestionType;
+  answers: QuizAnswer[];
+  /** Accepted free-text variants for open questions. */
+  accepted_answers?: string[];
+};
 export type DbTopicQuiz = { questions: QuizQuestion[]; pass_score: number };
 
 export type DbTopic = {
@@ -492,7 +524,22 @@ export type DbCourseProgress = {
   restaurant_id: string;
   progress_percent: number;
   completed: boolean;
+  quiz_score: number | null;
+  quiz_passed: boolean;
+  quiz_attempt_count: number;
+  quiz_last_attempt_at: string | null;
   completed_at: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type DbLessonQuizProgress = {
+  lesson_id: string;
+  course_id: string;
+  employee_id: string;
+  restaurant_id: string;
+  quiz_score: number | null;
+  quiz_passed: boolean;
+  attempt_count: number;
+  last_attempt_at: string | null;
 };

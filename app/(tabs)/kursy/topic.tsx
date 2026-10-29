@@ -1,13 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator, Platform, ScrollView, StyleSheet, Text,
     TouchableOpacity, useWindowDimensions, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../../context/AuthContext';
-import { getLessons, getTopicProgress, getTopics, getTopicVideoUrl, markTopicCompleted, upsertCourseProgress } from '../../../lib/db';
+import { getTopicProgress, getTopicVideoUrl, markTopicCompleted, upsertCourseProgress } from '../../../lib/db';
 import { DbTopic, supabase } from '../../../lib/supabase';
 import { theme } from '../../../styles/theme';
 
@@ -22,82 +22,85 @@ export default function TopicScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const rid = user?.restaurantId ?? '';
+  const uid = user?.id ?? '';
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
 
   const [topic, setTopic] = useState<DbTopic | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoLoading, setVideoLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [completed, setCompleted] = useState(false);
   const [marking, setMarking] = useState(false);
-  const [quizStarted, setQuizStarted] = useState(false);
-  const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
-  const [quizSubmitted, setQuizSubmitted] = useState(false);
-  const [quizScore, setQuizScore] = useState(0);
-  const [quizPassed, setQuizPassed] = useState(false);
+  const [error, setError] = useState('');
+  const [reload, setReload] = useState(0);
+  const markInFlight = useRef(false);
 
   useEffect(() => {
-    if (!topicId || !rid) return;
+    if (!topicId || !rid || !uid) return;
+    let cancelled = false;
     (async () => {
       setLoading(true);
-      const { data } = await supabase.from('topics').select('*').eq('id', topicId).single();
+      setError('');
+      setVideoUrl(null);
+      try {
+      const [{ data, error: fetchError }, progress] = await Promise.all([
+        supabase.from('topics').select('*').eq('id', topicId).single(),
+        getTopicProgress(rid, uid),
+      ]);
+      if (cancelled) return;
+      if (fetchError) throw fetchError;
       setTopic(data ?? null);
+      setCompleted(progress.some((p) => p.topic_id === topicId && p.completed));
 
       if (data?.video_storage_path) {
+        setVideoLoading(true);
+        setLoading(false);
         const url = await getTopicVideoUrl(data.video_storage_path);
+        if (cancelled) return;
         setVideoUrl(url);
+        if (!url) setError('Nie udało się pobrać filmu. Treść tematu pozostaje dostępna — spróbuj ponownie.');
       } else if (data?.video_url) {
         setVideoUrl(data.video_url);
       }
-
-      const progress = await getTopicProgress(rid, user!.id);
-      setCompleted(progress.some((p) => p.topic_id === topicId && p.completed));
-      setLoading(false);
+      } catch (cause) {
+        console.error('load training topic', cause);
+        if (!cancelled) setError('Nie udało się pobrać tematu lub postępu. Spróbuj ponownie.');
+      } finally {
+        if (!cancelled) { setVideoLoading(false); setLoading(false); }
+      }
     })();
-  }, [topicId, rid]);
-
-  const submitQuiz = async () => {
-    if (!topic?.quiz_data) return;
-    const qs = topic.quiz_data.questions;
-    let correct = 0;
-    for (const q of qs) {
-      const selected = quizAnswers[q.id];
-      const correctAnswer = q.answers.find(a => a.correct);
-      if (selected && selected === correctAnswer?.id) correct++;
-    }
-    const score = qs.length > 0 ? Math.round((correct / qs.length) * 100) : 0;
-    const passed = score >= topic.quiz_data.pass_score;
-    setQuizScore(score);
-    setQuizPassed(passed);
-    setQuizSubmitted(true);
-    if (passed && !completed) await handleMarkDone();
-  };
-
-  const resetQuiz = () => { setQuizStarted(false); setQuizSubmitted(false); setQuizAnswers({}); setQuizScore(0); setQuizPassed(false); };
+    return () => { cancelled = true; };
+  }, [topicId, rid, uid, reload]);
 
   const handleMarkDone = async () => {
-    if (!topic || !courseId || completed) return;
+    if (!topic || !courseId || completed || markInFlight.current) return;
+    markInFlight.current = true;
     setMarking(true);
-    await markTopicCompleted(rid, topic.id, user!.id);
-
-    const lessons = await getLessons(courseId);
-    let totalTopics = 0;
-    let doneTopics = 0;
-    const allProgress = await getTopicProgress(rid, user!.id);
-    const doneIds = new Set(allProgress.filter((p) => p.completed).map((p) => p.topic_id));
-    doneIds.add(topic.id);
-
-    for (const lesson of lessons) {
-      const topics = await getTopics(lesson.id);
-      totalTopics += topics.length;
-      doneTopics += topics.filter((t) => doneIds.has(t.id)).length;
+    setError('');
+    try {
+      const marked = await markTopicCompleted(rid, topic.id, uid);
+      if (!marked) { setError('Nie udało się zapisać ukończenia tematu. Spróbuj ponownie.'); return; }
+      setCompleted(true);
+      if (!await upsertCourseProgress(rid, courseId, uid, 0)) setError('Temat zapisany, ale postęp kursu nie został odświeżony. Otwórz kurs ponownie.');
+    } catch (cause) {
+      console.error('complete training topic', cause);
+      setError('Nie udało się zapisać postępu. Spróbuj ponownie.');
+    } finally {
+      markInFlight.current = false;
+      setMarking(false);
     }
+  };
 
-    const pct = totalTopics > 0 ? Math.round((doneTopics / totalTopics) * 100) : 0;
-    await upsertCourseProgress(rid, courseId, user!.id, pct);
-
-    setCompleted(true);
-    setMarking(false);
+  const goBackToCourse = () => {
+    if (courseId) {
+      router.replace({
+        pathname: '/(tabs)/kursy/[courseId]' as any,
+        params: { courseId },
+      });
+      return;
+    }
+    router.replace({ pathname: '/(tabs)/szkolenia' as any, params: { tab: 'kursy' } });
   };
 
   if (loading) return (
@@ -108,14 +111,16 @@ export default function TopicScreen() {
 
   if (!topic) return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <Text style={{ padding: 24, color: theme.colors.textSecondary }}>Nie znaleziono tematu.</Text>
+      <TouchableOpacity onPress={goBackToCourse} style={{ padding: 20 }}><Text>Wróć do kursu</Text></TouchableOpacity>
+      <Text style={{ padding: 24, color: theme.colors.textSecondary }}>{error || 'Nie znaleziono tematu.'}</Text>
+      {error && <TouchableOpacity onPress={() => setReload((value) => value + 1)} style={{ padding: 20 }}><Text>Ponów ładowanie</Text></TouchableOpacity>}
     </SafeAreaView>
   );
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={[styles.header, isDesktop && styles.headerDesktop]}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.push('/(tabs)/szkolenia' as any)} style={styles.backBtn} activeOpacity={0.7}>
+        <TouchableOpacity onPress={goBackToCourse} style={styles.backBtn} activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={20} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{title ?? topic.title}</Text>
@@ -123,9 +128,17 @@ export default function TopicScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scroll, isDesktop && styles.scrollDesktop]}>
+        {!!error && <TouchableOpacity onPress={() => setReload((value) => value + 1)} style={{ padding: 16 }}><Text style={{ color: theme.colors.error }}>{error}</Text></TouchableOpacity>}
 
         {/* Video player */}
-        {videoUrl && Platform.OS === 'web' && (() => {
+        {videoLoading && (
+          <View style={[styles.videoWrapper, styles.videoPlaceholder]}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={styles.videoPlaceholderText}>Ładowanie filmu…</Text>
+          </View>
+        )}
+
+        {!videoLoading && videoUrl && Platform.OS === 'web' && (() => {
           const { isYoutube, embedUrl } = parseVideoUrl(videoUrl);
           return (
             <View style={styles.videoWrapper}>
@@ -148,7 +161,7 @@ export default function TopicScreen() {
           );
         })()}
 
-        {videoUrl && Platform.OS !== 'web' && (
+        {!videoLoading && videoUrl && Platform.OS !== 'web' && (
           <View style={[styles.videoWrapper, { backgroundColor: '#111' }]}>
             <View style={styles.videoPlaceholder}>
               <View style={styles.playIcon}>
@@ -159,7 +172,7 @@ export default function TopicScreen() {
           </View>
         )}
 
-        {!videoUrl && (
+        {!videoLoading && !videoUrl && (
           <View style={styles.noVideoBox}>
             <Ionicons name="document-text-outline" size={20} color={theme.colors.textMuted} />
             <Text style={styles.noVideoText}>Temat bez materiału wideo</Text>
@@ -176,85 +189,6 @@ export default function TopicScreen() {
             <Text style={styles.contentText}>{topic.content_text}</Text>
           </View>
         ) : null}
-
-        {/* Quiz section */}
-        {topic.quiz_data && topic.quiz_data.questions.length > 0 && (
-          <View style={styles.quizCard}>
-            <View style={styles.quizCardHeader}>
-              <View style={styles.quizIconBox}>
-                <Ionicons name="help-circle-outline" size={18} color={theme.colors.primary} />
-              </View>
-              <Text style={styles.quizCardTitle}>Quiz sprawdzający</Text>
-              <View style={styles.quizBadge}>
-                <Text style={styles.quizBadgeText}>{topic.quiz_data.questions.length} pytań</Text>
-              </View>
-            </View>
-
-            {!quizStarted && !quizSubmitted && (
-              <TouchableOpacity style={styles.startQuizBtn} onPress={() => setQuizStarted(true)} activeOpacity={0.85}>
-                <Ionicons name="play-circle-outline" size={20} color="#fff" />
-                <Text style={styles.startQuizBtnText}>Rozpocznij quiz</Text>
-              </TouchableOpacity>
-            )}
-
-            {quizStarted && !quizSubmitted && (
-              <View>
-                {topic.quiz_data.questions.map((q, qi) => (
-                  <View key={q.id} style={styles.questionBlock}>
-                    <Text style={styles.questionText}><Text style={styles.questionNum}>{qi + 1}. </Text>{q.question}</Text>
-                    {q.answers.map((a) => {
-                      const selected = quizAnswers[q.id] === a.id;
-                      return (
-                        <TouchableOpacity
-                          key={a.id}
-                          style={[styles.answerBtn, selected && styles.answerBtnSelected]}
-                          onPress={() => setQuizAnswers(prev => ({ ...prev, [q.id]: a.id }))}
-                          activeOpacity={0.75}
-                        >
-                          <View style={[styles.answerDot, selected && styles.answerDotSelected]}>
-                            {selected && <View style={styles.answerDotInner} />}
-                          </View>
-                          <Text style={[styles.answerText, selected && styles.answerTextSelected]}>{a.text}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                ))}
-                <TouchableOpacity
-                  style={[styles.submitQuizBtn, Object.keys(quizAnswers).length < topic.quiz_data.questions.length && styles.submitQuizBtnDisabled]}
-                  disabled={Object.keys(quizAnswers).length < topic.quiz_data.questions.length}
-                  onPress={submitQuiz}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.submitQuizBtnText}>Sprawdź odpowiedzi ({Object.keys(quizAnswers).length}/{topic.quiz_data.questions.length})</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {quizSubmitted && (
-              <View style={styles.quizResult}>
-                <View style={[styles.quizScoreCircle, quizPassed && styles.quizScoreCirclePassed]}>
-                  <Text style={styles.quizScoreText}>{quizScore}%</Text>
-                </View>
-                <Text style={[styles.quizResultLabel, quizPassed && styles.quizResultLabelPassed]}>
-                  {quizPassed ? 'Zaliczono! 🎉' : 'Nie zaliczono'}
-                </Text>
-                <Text style={styles.quizResultSub}>
-                  {quizPassed
-                    ? 'Temat został oznaczony jako ukończony'
-                    : `Wymagane ${topic.quiz_data.pass_score}% poprawnch odpowiedzi`
-                  }
-                </Text>
-                {!quizPassed && (
-                  <TouchableOpacity style={styles.retryQuizBtn} onPress={resetQuiz} activeOpacity={0.8}>
-                    <Ionicons name="refresh-outline" size={16} color={theme.colors.primary} />
-                    <Text style={styles.retryQuizText}>Spróbuj ponownie</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-          </View>
-        )}
 
       </ScrollView>
 
@@ -329,6 +263,7 @@ const styles = StyleSheet.create({
   answerDotInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: theme.colors.primary },
   answerText: { fontSize: 14, color: theme.colors.text, flex: 1 },
   answerTextSelected: { color: theme.colors.primary, fontWeight: '600' },
+  openAnswerInput: { minHeight: 96, padding: 12, borderRadius: theme.borderRadius.md, borderWidth: 1.5, borderColor: theme.colors.border, backgroundColor: theme.colors.surface, color: theme.colors.text, fontSize: 14, lineHeight: 21 },
   submitQuizBtn: { backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.full, paddingVertical: 14, alignItems: 'center', marginTop: 8 },
   submitQuizBtnDisabled: { opacity: 0.45 },
   submitQuizBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },

@@ -20,7 +20,8 @@ import MobileHeader from '../../components/MobileHeader';
 import { useAlert } from '../../context/AlertContext';
 import { useAuth } from '../../context/AuthContext';
 import { assignEmployeeToGroup, createEmployeeGroup, createQuizQuestion, createTraining, deleteEmployeeGroup, deleteQuizQuestion, deleteTraining, generateInvitation, getAbsences, getEmployeeGroupsWithMembers, getEmployeeLeaveQuota, getEmployees, getInvitations, getLeaveRequests, getQuizQuestions, getTrainings, removeEmployee, removeEmployeeFromGroup, reviewAbsence, reviewLeaveRequestWithNotes, setEmployeeLeaveQuota, updateEmployeeGroup, updateEmployeeRole, updateProfile, updateRestaurant, updateTraining } from '../../lib/db';
-import type { DbAbsence, DbEmployeeGroup, DbInvitation, DbLeaveRequest, DbProfile, DbTraining } from '../../lib/supabase';
+import type { DbAbsence, DbEmployeeGroup, DbInvitation, DbLeaveRequest, DbProfile, DbTraining, DbTrainingCategory } from '../../lib/supabase';
+import { getTrainingCategories } from '../../lib/db';
 import { theme } from '../../styles/theme';
 
 const JOB_OPTIONS = ['Kelner', 'Kucharz', 'Barista', 'Lider zmiany', 'Hostessa', 'Pizzaiolo', 'Sprzątanie'];
@@ -44,6 +45,7 @@ export default function AdminScreen() {
   const [employees, setEmployees] = useState<DbProfile[]>([]);
   const [invitations, setInvitations] = useState<DbInvitation[]>([]);
   const [trainings, setTrainings] = useState<DbTraining[]>([]);
+  const [trainingCategories, setTrainingCategories] = useState<DbTrainingCategory[]>([]);
   const [leaveRequests, setLeaveRequests] = useState<DbLeaveRequest[]>([]);
   const [absences, setAbsences] = useState<DbAbsence[]>([]);
   const [groups, setGroups] = useState<(DbEmployeeGroup & { members: string[] })[]>([]);
@@ -110,7 +112,8 @@ export default function AdminScreen() {
     if (!rid) return;
     getEmployees(rid).then(setEmployees);
     getInvitations(rid).then(setInvitations);
-    getTrainings(rid).then(setTrainings);
+    getTrainings(rid).then(setTrainings).catch((error) => console.error('admin trainings', error));
+    getTrainingCategories(rid, true).then(setTrainingCategories).catch((error) => console.error('admin training categories', error));
     getLeaveRequests(rid).then(setLeaveRequests);
     getAbsences(rid).then(setAbsences);
     getEmployeeGroupsWithMembers(rid).then(setGroups);
@@ -200,7 +203,7 @@ export default function AdminScreen() {
 
   const openNewTraining = () => {
     setEditingTraining(null);
-    setTForm(EMPTY_TRAINING);
+    setTForm({ ...EMPTY_TRAINING, category: trainingCategories[0]?.name ?? '' });
     setHasQuiz(false);
     setPendingQs([]);
     setQDraft(EMPTY_QDRAFT);
@@ -825,7 +828,7 @@ export default function AdminScreen() {
                   <Text style={s.mLabel}>Kategoria</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
                     <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 4 }}>
-                      {['BHP', 'Obsługa', 'Procedury', 'Kuchnia', 'Jakość', 'Sprzedaż', 'Inne'].map((cat) => (
+                      {Array.from(new Set([...trainingCategories.map((category) => category.name), ...(tForm.category ? [tForm.category] : [])])).map((cat) => (
                         <TouchableOpacity key={cat} style={[s.chip, tForm.category === cat && s.chipActive]} onPress={() => setTForm((f) => ({ ...f, category: cat }))} activeOpacity={0.7}>
                           <Text style={[s.chipText, tForm.category === cat && s.chipTextActive]}>{cat}</Text>
                         </TouchableOpacity>

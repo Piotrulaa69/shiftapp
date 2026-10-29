@@ -67,7 +67,9 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function toAuthUser(profile: DbProfile, email: string): AuthUser {
+type SessionProfile = Pick<DbProfile, 'id' | 'first_name' | 'last_name' | 'role' | 'job_title' | 'restaurant_id' | 'avatar_color' | 'onboarding_done' | 'is_super_admin' | 'employment_type'> & { has_children?: boolean };
+
+function toAuthUser(profile: SessionProfile, email: string): AuthUser {
   const firstName = profile.first_name;
   const lastName = profile.last_name;
   const initials = `${firstName[0] ?? ''}${lastName[0] ?? ''}`.toUpperCase();
@@ -113,11 +115,11 @@ async function loadUserData(userId: string, email: string): Promise<{ user: Auth
 
   if (pErr || !profile) return null;
 
-  const isSuperAdmin = (profile as DbProfile).is_super_admin === true;
-  const restaurantId = (profile as DbProfile).restaurant_id;
+  const isSuperAdmin = profile.is_super_admin === true;
+  const restaurantId = profile.restaurant_id;
 
   // Enforce account deactivation — a disabled (non super-admin) account has no access.
-  if (!isSuperAdmin && (profile as DbProfile).is_active === false) {
+  if (!isSuperAdmin && profile.is_active === false) {
     await supabase.auth.signOut();
     return null;
   }
@@ -125,7 +127,7 @@ async function loadUserData(userId: string, email: string): Promise<{ user: Auth
   // Jeśli super admin nie ma restauracji, to jest OK
   if (isSuperAdmin && !restaurantId) {
     return {
-      user: toAuthUser(profile as DbProfile, email),
+      user: toAuthUser(profile, email),
       restaurant: null,
     };
   }
@@ -144,7 +146,7 @@ async function loadUserData(userId: string, email: string): Promise<{ user: Auth
   }
 
   return {
-    user: toAuthUser(profile as DbProfile, email),
+    user: toAuthUser(profile, email),
     restaurant,
   };
 }

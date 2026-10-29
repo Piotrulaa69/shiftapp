@@ -1,13 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileHeader from '../../components/MobileHeader';
 import { CardSkeleton, Skeleton } from '../../components/Skeleton';
 import { useAuth } from '../../context/AuthContext';
-import { getCourseProgress, getCourses, getMyGroupIds, getPointsForEmployee, getTeamPoints, getTrainings } from '../../lib/db';
-import type { DbCourse, DbCourseProgress, DbPointsLedger, DbTraining } from '../../lib/supabase';
+import { getCourseProgress, getCourses, getEmployeeTrainingProgress, getPointsForEmployee, getTeamPoints, getTrainingCategories, getTrainings } from '../../lib/db';
+import type { DbCourse, DbCourseProgress, DbEmployeeTrainingProgress, DbPointsLedger, DbTraining, DbTrainingCategory } from '../../lib/supabase';
 import { theme } from '../../styles/theme';
 
 type FilterKey = 'wszystkie' | 'dla_mnie' | 'obowiazkowe' | 'nowe';
@@ -52,9 +52,10 @@ const CAT_CONFIG: Record<string, { icon: string; color: string; bg: string }> = 
 };
 const DEFAULT_CAT = { icon: 'book-outline', color: theme.colors.primary, bg: theme.colors.primaryLight };
 
-function TrainingCard({ training }: { training: DbTraining }) {
+function TrainingCard({ training, categoryColor }: { training: DbTraining; categoryColor?: string }) {
   const cfg = STATUS_CONFIG[training.status];
-  const cat = CAT_CONFIG[training.category] ?? DEFAULT_CAT;
+  const baseCat = CAT_CONFIG[training.category] ?? DEFAULT_CAT;
+  const cat = categoryColor ? { ...baseCat, color: categoryColor, bg: categoryColor + '18' } : baseCat;
   const router = useRouter();
 
   const handleStart = () => {
@@ -95,7 +96,7 @@ function TrainingCard({ training }: { training: DbTraining }) {
             <View style={tStyles.progressBg}>
               <View style={[tStyles.progressFill, { width: `${training.progress_percent}%` }]} />
             </View>
-            <Text style={tStyles.progressPct}>{training.progress_percent}%</Text>
+            <Text style={tStyles.progressPct} numberOfLines={1}>{training.progress_percent}%</Text>
           </View>
         )}
 
@@ -154,7 +155,7 @@ const tStyles = StyleSheet.create({
   progressGroup: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   progressBg: { flex: 1, height: 6, backgroundColor: theme.colors.surface, borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: theme.colors.primary, borderRadius: 3 },
-  progressPct: { fontSize: 11, fontWeight: '700', color: theme.colors.primary, width: 30, textAlign: 'right' },
+  progressPct: { fontSize: 11, fontWeight: '700', color: theme.colors.primary, width: 38, textAlign: 'right' },
   footer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   requiredTag: { flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 },
   requiredTagText: { fontSize: 11, fontWeight: '600', color: theme.colors.orange },
@@ -181,48 +182,74 @@ const CAT_ICONS_COURSES: Record<string, string> = {
 export default function SzkoleniaScreen() {
   const { user } = useAuth();
   const router = useRouter();
+  const { tab } = useLocalSearchParams<{ tab?: string }>();
   const rid = user?.restaurantId ?? '';
+  const uid = user?.id ?? '';
   const isOwner = user?.role === 'owner';
   const isManager = user?.role === 'manager';
   const [trainings, setTrainings] = useState<DbTraining[]>([]);
   const [courses, setCourses] = useState<DbCourse[]>([]);
+  const [trainingCategories, setTrainingCategories] = useState<DbTrainingCategory[]>([]);
   const [courseProgress, setCourseProgress] = useState<DbCourseProgress[]>([]);
+  const [trainingProgress, setTrainingProgress] = useState<DbEmployeeTrainingProgress[]>([]);
+  const [loadError, setLoadError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterKey>('wszystkie');
   const [activeTab, setActiveTab] = useState<TabKey>('kursy');
   const [points, setPoints] = useState<DbPointsLedger[]>([]);
   const [ranking, setRanking] = useState<{ employee_id: string; total: number; name: string }[]>([]);
   const [pointsLoading, setPointsLoading] = useState(false);
-  const [myGroupIds, setMyGroupIds] = useState<string[]>([]);
 
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
 
   const [refreshing, setRefreshing] = useState(false);
+  const loadedOnce = useRef(false);
+
+  // Returning from a nested training screen must restore the section the user
+  // actually came from instead of falling back to the dashboard tab.
+  useEffect(() => {
+    if (tab === 'kursy' || tab === 'szkolenia' || tab === 'punkty') setActiveTab(tab);
+  }, [tab]);
 
   const loadAll = useCallback(async () => {
-    if (!rid) return;
-    const [tr, cs, cp, gids] = await Promise.all([
+    if (!rid || !uid) return;
+    const [tr, cs, cp, categories, progress, myPoints] = await Promise.all([
       getTrainings(rid),
       getCourses(rid),
-      getCourseProgress(rid, user!.id),
-      getMyGroupIds(user!.id),
+      getCourseProgress(rid, uid),
+      getTrainingCategories(rid, true),
+      getEmployeeTrainingProgress(rid, uid),
+      getPointsForEmployee(rid, uid),
     ]);
+    // Supabase RLS already returns only content assigned to this employee.
+    // Re-filtering against a separately fetched group list can silently hide
+    // valid trainings/courses when that request is delayed or fails on mobile.
     setTrainings(tr);
     setCourses(cs);
     setCourseProgress(cp);
-    setMyGroupIds(gids);
-  }, [rid, user?.id]);
+    setTrainingCategories(categories);
+    setTrainingProgress(progress);
+    setPoints(myPoints);
+    setLoadError(false);
+    if (!tab && cs.length === 0 && tr.length > 0) setActiveTab('szkolenia');
+  }, [rid, uid, tab]);
 
   useFocusEffect(useCallback(() => {
     if (!rid) return;
-    setLoading(true);
-    loadAll().then(() => setLoading(false));
-  }, [rid]));
+    if (!loadedOnce.current) setLoading(true);
+    loadAll().catch((error) => {
+      console.error('loadTrainings', error);
+      setLoadError(true);
+    }).finally(() => {
+      loadedOnce.current = true;
+      setLoading(false);
+    });
+  }, [rid, loadAll]));
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadAll();
+    try { await loadAll(); } catch (error) { console.error('refreshTrainings', error); setLoadError(true); }
     setRefreshing(false);
   }, [loadAll]);
 
@@ -251,13 +278,14 @@ export default function SzkoleniaScreen() {
     </SafeAreaView>
   );
 
-  const requiredCount = trainings.filter((t) => t.required && t.status !== 'ukonczone').length;
-  const totalPoints = points.reduce((sum, p) => sum + p.points, 0);
-
-  const visible = trainings.filter((t) => {
-    const roles = t.assigned_roles ?? [];
-    return roles.length === 0 || roles.includes(user?.jobTitle ?? '');
+  const progressByTraining = new Map(trainingProgress.map((progress) => [progress.training_id, progress]));
+  const visible = trainings.map((training) => {
+    const progress = progressByTraining.get(training.id);
+    return { ...training, status: progress?.status ?? 'nierozpoczete' as const, progress_percent: progress?.progress_percent ?? 0 };
   });
+  const requiredCount = visible.filter((t) => t.required && t.status !== 'ukonczone').length;
+  const totalPoints = points.reduce((sum, p) => sum + p.points, 0);
+  const categoryColorMap = new Map(trainingCategories.map((category) => [category.name, category.color]));
 
   const filtered = activeFilter === 'obowiazkowe'
     ? visible.filter((t) => t.required)
@@ -299,14 +327,47 @@ export default function SzkoleniaScreen() {
           </TouchableOpacity>
         ))}
         {(isOwner || isManager) && (
-          <TouchableOpacity style={styles.tabBtn} onPress={() => router.push('/(tabs)/kursy/manage' as any)} activeOpacity={0.7}>
-            <Ionicons name="settings-outline" size={15} color={theme.colors.textSecondary} />
-            <Text style={styles.tabBtnText}>Zarządzaj</Text>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity style={styles.tabBtn} onPress={() => router.push('/(tabs)/kursy/manage?categories=true' as any)} activeOpacity={0.7}>
+              <Ionicons name="pricetags-outline" size={15} color={theme.colors.textSecondary} />
+              <Text style={styles.tabBtnText}>Kategorie</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.tabBtn} onPress={() => router.push('/(tabs)/kursy/manage' as any)} activeOpacity={0.7}>
+              <Ionicons name="settings-outline" size={15} color={theme.colors.textSecondary} />
+              <Text style={styles.tabBtnText}>Zarządzaj</Text>
+            </TouchableOpacity>
+          </>
         )}
       </ScrollView>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, isDesktop && styles.scrollContentDesktop]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}>
+        {loadError && (
+          <TouchableOpacity style={styles.requiredBanner} onPress={onRefresh} accessibilityRole="button">
+            <Text style={styles.requiredTitle}>Nie udało się pobrać szkoleń lub postępów. Dotknij, aby ponowić.</Text>
+          </TouchableOpacity>
+        )}
+        {(isOwner || isManager) && (
+          <TouchableOpacity
+            style={styles.categoryEditCard}
+            onPress={() => router.push('/(tabs)/kursy/manage?categories=true' as any)}
+            activeOpacity={0.82}
+            accessibilityRole="button"
+            accessibilityLabel="Edytuj kategorie szkoleń"
+          >
+            <View style={styles.categoryEditIcon}>
+              <Ionicons name="pricetags-outline" size={20} color={theme.colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.categoryEditTitle}>Kategorie szkoleń</Text>
+              <Text style={styles.categoryEditSub}>{trainingCategories.length} kategorii · edytuj nazwy i kolory, dodawaj własne</Text>
+            </View>
+            <View style={styles.categoryEditAction}>
+              <Ionicons name="pencil-outline" size={16} color={theme.colors.primary} />
+              <Text style={styles.categoryEditActionText}>Edytuj</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+
         {/* Progress card */}
         {(() => {
           const lvl = getLevel(totalPoints);
@@ -333,7 +394,7 @@ export default function SzkoleniaScreen() {
           {[
             { key: 'dla_mnie' as FilterKey, label: 'Dla mnie' },
             { key: 'obowiazkowe' as FilterKey, label: 'Obowiązkowe' },
-            { key: 'wszystkie' as FilterKey, label: 'Nowe' },
+            { key: 'wszystkie' as FilterKey, label: 'Wszystkie' },
           ].map((f) => (
             <TouchableOpacity
               key={f.key}
@@ -364,16 +425,16 @@ export default function SzkoleniaScreen() {
           <View style={styles.body}>
             <Text style={styles.sectionTitle}>Dostępne kursy</Text>
             {(() => {
-              const visibleCourses = (isOwner || isManager)
-                ? courses
-                : courses.filter(c => !c.assigned_group_ids?.length || c.assigned_group_ids.some(id => myGroupIds.includes(id)));
+              const visibleCourses = courses.filter((course) => activeFilter === 'obowiazkowe' ? course.required
+                : activeFilter === 'dla_mnie' ? course.required || !courseProgress.some((progress) => progress.course_id === course.id && progress.completed)
+                : true);
               return visibleCourses.length === 0 ? (
               <View style={styles.emptyState}>
                 <Ionicons name="play-circle-outline" size={40} color={theme.colors.border} />
-                <Text style={styles.emptyText}>Brak kursów{(isOwner || isManager) ? ' — dodaj pierwszy w Zarządzaj' : ' przypisanych do twojej grupy'}</Text>
+                <Text style={styles.emptyText}>Brak kursów{(isOwner || isManager) ? ' — dodaj pierwszy w Zarządzaj' : ' przypisanych do Ciebie lub Twojej grupy'}</Text>
               </View>
             ) : visibleCourses.map((c) => {
-              const color = CAT_COLORS[c.category] ?? theme.colors.primary;
+              const color = categoryColorMap.get(c.category) ?? CAT_COLORS[c.category] ?? theme.colors.primary;
               const icon = CAT_ICONS_COURSES[c.category] ?? 'book-outline';
               const cp = courseProgress.find((p) => p.course_id === c.id);
               const pct = cp?.progress_percent ?? 0;
@@ -407,7 +468,7 @@ export default function SzkoleniaScreen() {
                         <View style={cStyles.progressBg}>
                           <View style={[cStyles.progressFill, { width: `${pct}%` as any, backgroundColor: color }]} />
                         </View>
-                        <Text style={[cStyles.progressPct, { color }]}>{pct}%</Text>
+                        <Text style={[cStyles.progressPct, { color }]} numberOfLines={1}>{pct}%</Text>
                       </View>
                     )}
                     <View style={cStyles.footer}>
@@ -432,13 +493,24 @@ export default function SzkoleniaScreen() {
             {/* Training list */}
             <View style={styles.body}>
               <Text style={styles.sectionTitle}>Polecane dla Ciebie</Text>
+              {(isOwner || isManager) && (
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.colors.primary, borderRadius: 12, paddingVertical: 12, marginBottom: 16 }}
+                  onPress={() => router.push({ pathname: '/(tabs)/admin' as any, params: { tab: 'trainings' } })}
+                  accessibilityRole="button"
+                  accessibilityLabel="Dodaj lub edytuj szkolenia"
+                >
+                  <Ionicons name="add-circle-outline" size={19} color={theme.colors.white} />
+                  <Text style={{ color: theme.colors.white, fontSize: 14, fontWeight: '700' }}>Dodaj lub edytuj szkolenia</Text>
+                </TouchableOpacity>
+              )}
               {filtered.length === 0 ? (
                 <View style={styles.emptyState}>
                   <Ionicons name="book-outline" size={40} color={theme.colors.border} />
                   <Text style={styles.emptyText}>Brak szkoleń w tej kategorii</Text>
                 </View>
               ) : filtered.map((t) => (
-                <TrainingCard key={t.id} training={t} />
+                <TrainingCard key={t.id} training={t} categoryColor={categoryColorMap.get(t.category)} />
               ))}
             </View>
           </>
@@ -541,6 +613,13 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.full,
   },
   xpText: { fontSize: 13, fontWeight: '700', color: theme.colors.text },
+
+  categoryEditCard: { flexDirection: 'row', alignItems: 'center', gap: 11, marginHorizontal: 16, marginTop: 16, padding: 14, borderRadius: theme.borderRadius.lg, backgroundColor: theme.colors.primaryLight, borderWidth: 1, borderColor: '#BFDBFE' },
+  categoryEditIcon: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.card },
+  categoryEditTitle: { fontSize: 14, fontWeight: '800', color: theme.colors.text },
+  categoryEditSub: { fontSize: 11, lineHeight: 16, color: theme.colors.textMuted, marginTop: 2 },
+  categoryEditAction: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 7, borderRadius: 9, backgroundColor: theme.colors.card },
+  categoryEditActionText: { fontSize: 11, fontWeight: '800', color: theme.colors.primary },
 
   progressCard: {
     backgroundColor: theme.colors.card,
@@ -702,7 +781,7 @@ const cStyles = StyleSheet.create({
   progressGroup: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   progressBg: { flex: 1, height: 6, backgroundColor: theme.colors.surface, borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: '100%', borderRadius: 3 },
-  progressPct: { fontSize: 11, fontWeight: '700', width: 30, textAlign: 'right' },
+  progressPct: { fontSize: 11, fontWeight: '700', width: 38, textAlign: 'right' },
   footer: { flexDirection: 'row', alignItems: 'center' },
   btn: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: theme.borderRadius.full, paddingHorizontal: 14, paddingVertical: 7 },
   btnDone: { backgroundColor: theme.colors.surface },

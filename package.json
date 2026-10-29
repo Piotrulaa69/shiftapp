@@ -8,7 +8,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "build": "expo export --platform web",
+    "build": "npm run test:training && expo export --platform web",
+    "test:training": "node --test scripts/training-regression.test.cjs",
     "lint": "expo lint"
   },
   "dependencies": {

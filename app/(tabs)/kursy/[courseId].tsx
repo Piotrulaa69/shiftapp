@@ -1,25 +1,28 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
 import {
     ActivityIndicator, Platform, ScrollView, StyleSheet, Text,
     TouchableOpacity, useWindowDimensions, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../../context/AuthContext';
+import { useAlert } from '../../../context/AlertContext';
 import {
-    DbCourseProgress, DbLesson, DbTopic, DbTopicProgress,
-    getCourseProgress, getLessons, getTopicProgress, getTopics,
+    DbLesson, DbLessonQuizProgress, DbTopic, DbTopicProgress,
+    getCourse, getCourseProgress, getLessonQuizProgress, getLessons, getTopicProgress, getTopicsForLessons,
     markTopicCompleted, upsertCourseProgress,
 } from '../../../lib/db';
-import { DbCourse, supabase } from '../../../lib/supabase';
+import { DbCourse } from '../../../lib/supabase';
 import { theme } from '../../../styles/theme';
 
 export default function CourseDetailScreen() {
   const { courseId } = useLocalSearchParams<{ courseId: string }>();
   const router = useRouter();
   const { user } = useAuth();
+  const { showAlert } = useAlert();
   const rid = user?.restaurantId ?? '';
+  const uid = user?.id ?? '';
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
 
@@ -27,41 +30,68 @@ export default function CourseDetailScreen() {
   const [lessons, setLessons] = useState<DbLesson[]>([]);
   const [topicsMap, setTopicsMap] = useState<Record<string, DbTopic[]>>({});
   const [topicProgress, setTopicProgress] = useState<DbTopicProgress[]>([]);
-  const [courseProgress, setCourseProgress] = useState<DbCourseProgress | null>(null);
+  const [lessonQuizProgress, setLessonQuizProgress] = useState<DbLessonQuizProgress[]>([]);
+  const [courseQuizPassed, setCourseQuizPassed] = useState(false);
   const [expandedLessons, setExpandedLessons] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const loadedCourseId = useRef<string | null>(null);
+  const requestNumber = useRef(0);
 
   const load = useCallback(async () => {
-    if (!courseId || !rid) return;
-    setLoading(true);
-    const [{ data: c }, ls, tp, cp] = await Promise.all([
-      supabase.from('courses').select('*').eq('id', courseId).single(),
-      getLessons(courseId),
-      getTopicProgress(rid, user!.id),
-      getCourseProgress(rid, user!.id),
-    ]);
-    setCourse(c ?? null);
-    setLessons(ls);
-    setTopicProgress(tp);
-    const found = cp.find((p) => p.course_id === courseId) ?? null;
-    setCourseProgress(found);
+    if (!courseId || !rid || !uid) return;
+    const request = ++requestNumber.current;
+    const isFirstLoadForCourse = loadedCourseId.current !== courseId;
+    if (isFirstLoadForCourse) setLoading(true);
+    try {
+      const [c, ls, tp, lqp, cp] = await Promise.all([
+        getCourse(courseId),
+        getLessons(courseId),
+        getTopicProgress(rid, uid),
+        getLessonQuizProgress(rid, uid, courseId),
+        getCourseProgress(rid, uid),
+      ]);
+      const allCourseTopics = await getTopicsForLessons(ls.map((lesson) => lesson.id));
+      if (request !== requestNumber.current) return;
+      setCourse(c ?? null);
+      setLessons(ls);
+      setTopicProgress(tp);
+      setLessonQuizProgress(lqp);
+      setCourseQuizPassed(cp.some((progress) => progress.course_id === courseId && progress.quiz_passed));
+      const tMap: Record<string, DbTopic[]> = {};
+      ls.forEach((lesson) => { tMap[lesson.id] = []; });
+      allCourseTopics.forEach((topic) => { (tMap[topic.lesson_id] ??= []).push(topic); });
+      setTopicsMap(tMap);
+      setExpandedLessons((current) => isFirstLoadForCourse ? new Set(ls.map((l) => l.id)) : current);
+      loadedCourseId.current = courseId;
+      setLoadError(false);
+    } catch (error) {
+      console.error('loadCourseDetail', error);
+      if (request === requestNumber.current) setLoadError(true);
+    } finally {
+      if (request === requestNumber.current) setLoading(false);
+    }
+  }, [courseId, rid, uid]);
 
-    const tMap: Record<string, DbTopic[]> = {};
-    await Promise.all(ls.map(async (l) => {
-      tMap[l.id] = await getTopics(l.id);
-    }));
-    setTopicsMap(tMap);
-    setExpandedLessons(new Set(ls.map((l) => l.id)));
-    setLoading(false);
-  }, [courseId, rid, user?.id]);
-
-  useEffect(() => { load(); }, [load]);
+  // Tab screens stay mounted in expo-router. Reload on every focus so lessons
+  // added in management and progress changed inside a topic never stay stale.
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const allTopics = Object.values(topicsMap).flat();
   const completedIds = new Set(topicProgress.filter((p) => p.completed).map((p) => p.topic_id));
   const totalTopics = allTopics.length;
   const completedCount = allTopics.filter((t) => completedIds.has(t.id)).length;
-  const pct = totalTopics > 0 ? Math.round((completedCount / totalTopics) * 100) : 0;
+  const lessonQuizzes = lessons.filter((lesson) => !!lesson.quiz_data?.questions.length);
+  const passedLessonQuizIds = new Set(lessonQuizProgress.filter((progress) => progress.quiz_passed).map((progress) => progress.lesson_id));
+  const courseQuizExists = !!course?.quiz_data?.questions.length;
+  const totalUnits = totalTopics + lessonQuizzes.length + (courseQuizExists ? 1 : 0);
+  const completedUnits = completedCount + lessonQuizzes.filter((lesson) => passedLessonQuizIds.has(lesson.id)).length + (courseQuizExists && courseQuizPassed ? 1 : 0);
+  const pct = totalUnits > 0 ? Math.round((completedUnits / totalUnits) * 100) : 0;
+  const allLessonsDone = lessons.every((lesson) => {
+    const topics = topicsMap[lesson.id] ?? [];
+    return topics.every((topic) => completedIds.has(topic.id))
+      && (!lesson.quiz_data?.questions.length || passedLessonQuizIds.has(lesson.id));
+  });
 
   const handleTopicPress = (topic: DbTopic) => {
     router.push({
@@ -77,12 +107,24 @@ export default function CourseDetailScreen() {
 
   const handleMarkDone = async (topic: DbTopic) => {
     if (completedIds.has(topic.id)) return;
-    await markTopicCompleted(rid, topic.id, user!.id);
-    const newCompleted = completedCount + 1;
-    const newPct = Math.round((newCompleted / totalTopics) * 100);
-    await upsertCourseProgress(rid, courseId!, user!.id, newPct);
-    await load();
+    const marked = await markTopicCompleted(rid, topic.id, user!.id);
+    if (!marked) { showAlert('Nie zapisano postępu', 'Spróbuj ponownie. Temat nie został oznaczony jako ukończony.'); return; }
+    setTopicProgress((current) => [
+      ...current.filter((progress) => progress.topic_id !== topic.id),
+      { topic_id: topic.id, employee_id: user!.id, restaurant_id: rid, completed: true } as DbTopicProgress,
+    ]);
+    if (!await upsertCourseProgress(rid, courseId!, user!.id, 0)) showAlert('Temat zapisany', 'Nie udało się odświeżyć postępu kursu. Odśwież kurs i spróbuj ponownie.');
   };
+
+  const openQuiz = (scope: 'course' | 'lesson', targetId: string) => router.push({
+    pathname: '/(tabs)/kursy/quiz' as any,
+    params: { courseId, scope, targetId },
+  });
+
+  const goBackToTrainingCenter = () => router.replace({
+    pathname: '/(tabs)/szkolenia' as any,
+    params: { tab: 'kursy' },
+  });
 
   if (loading) return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -92,7 +134,8 @@ export default function CourseDetailScreen() {
 
   if (!course) return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <Text style={{ padding: 24, color: theme.colors.textSecondary }}>Nie znaleziono kursu.</Text>
+      <Text style={{ padding: 24, color: theme.colors.textSecondary }}>{loadError ? 'Nie udało się pobrać kursu. Dane mogły zostać zapisane — spróbuj ponownie.' : 'Nie znaleziono kursu.'}</Text>
+      {loadError && <TouchableOpacity onPress={() => { void load(); }} style={{ paddingHorizontal: 24 }}><Text style={{ color: theme.colors.primary, fontWeight: '700' }}>Ponów</Text></TouchableOpacity>}
     </SafeAreaView>
   );
 
@@ -100,7 +143,7 @@ export default function CourseDetailScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header */}
       <View style={[styles.header, isDesktop && styles.headerDesktop]}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.push('/(tabs)/szkolenia' as any)} style={styles.backBtn} activeOpacity={0.7}>
+        <TouchableOpacity onPress={goBackToTrainingCenter} style={styles.backBtn} activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={20} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{course.title}</Text>
@@ -108,6 +151,7 @@ export default function CourseDetailScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scroll, isDesktop && styles.scrollDesktop]}>
+        {loadError && <TouchableOpacity onPress={() => { void load(); }} style={{ padding: 14 }}><Text style={{ color: theme.colors.error }}>Nie udało się odświeżyć kursu. Dotknij, aby ponowić.</Text></TouchableOpacity>}
         {/* Progress card */}
         <View style={styles.progressCard}>
           <View style={styles.progressTopRow}>
@@ -122,19 +166,26 @@ export default function CourseDetailScreen() {
           <View style={styles.progressBg}>
             <View style={[styles.progressFill, { width: `${pct}%` as any }]} />
           </View>
-          <Text style={styles.progressHint}>{completedCount} / {totalTopics} tematów ukończonych</Text>
+          <Text style={styles.progressHint}>{completedCount} / {totalTopics} tematów · {completedUnits} / {totalUnits} elementów kursu ukończonych</Text>
         </View>
 
         {/* Lessons */}
         {lessons.map((lesson, li) => {
           const topics = topicsMap[lesson.id] ?? [];
-          const lessonCompleted = topics.length > 0 && topics.every((t) => completedIds.has(t.id));
-          const lessonPct = topics.length > 0
-            ? Math.round((topics.filter((t) => completedIds.has(t.id)).length / topics.length) * 100)
+          const hasLessonQuiz = !!lesson.quiz_data?.questions.length;
+          const topicsDone = topics.every((topic) => completedIds.has(topic.id));
+          const lessonQuizPassed = passedLessonQuizIds.has(lesson.id);
+          const lessonCompleted = (topics.length > 0 || hasLessonQuiz) && topicsDone && (!hasLessonQuiz || lessonQuizPassed);
+          const lessonTotal = topics.length + (hasLessonQuiz ? 1 : 0);
+          const lessonPct = lessonTotal > 0
+            ? Math.round(((topics.filter((t) => completedIds.has(t.id)).length + (hasLessonQuiz && lessonQuizPassed ? 1 : 0)) / lessonTotal) * 100)
             : 0;
           const isExpanded = expandedLessons.has(lesson.id);
           const toggleLesson = () => setExpandedLessons((prev) => {
-            const n = new Set(prev); n.has(lesson.id) ? n.delete(lesson.id) : n.add(lesson.id); return n;
+            const n = new Set(prev);
+            if (n.has(lesson.id)) n.delete(lesson.id);
+            else n.add(lesson.id);
+            return n;
           });
 
           return (
@@ -198,11 +249,26 @@ export default function CourseDetailScreen() {
                       </TouchableOpacity>
                     );
                   })}
+                  {hasLessonQuiz && <TouchableOpacity
+                    style={[styles.quizRow, !topicsDone && styles.quizLocked]}
+                    onPress={() => openQuiz('lesson', lesson.id)} disabled={!topicsDone}>
+                    <Ionicons name={lessonQuizPassed ? 'checkmark-circle' : 'help-circle-outline'} size={21} color={lessonQuizPassed ? theme.colors.green : theme.colors.primary} />
+                    <View style={{ flex: 1 }}><Text style={styles.quizRowTitle}>Quiz lekcji</Text><Text style={styles.quizRowSub}>{lessonQuizPassed ? 'Zaliczony' : topicsDone ? `${lesson.quiz_data!.questions.length} pytań · rozwiąż po tematach` : 'Dostępny po ukończeniu tematów'}</Text></View>
+                    <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+                  </TouchableOpacity>}
                 </View>
               )}
             </View>
           );
         })}
+
+        {courseQuizExists && <TouchableOpacity
+          style={[styles.courseQuizCard, !allLessonsDone && styles.quizLocked]}
+          onPress={() => openQuiz('course', course.id)} disabled={!allLessonsDone}>
+          <Ionicons name={courseQuizPassed ? 'checkmark-circle' : 'school-outline'} size={26} color={courseQuizPassed ? theme.colors.green : theme.colors.primary} />
+          <View style={{ flex: 1 }}><Text style={styles.quizRowTitle}>Quiz końcowy kursu</Text><Text style={styles.quizRowSub}>{courseQuizPassed ? 'Zaliczony' : allLessonsDone ? `${course.quiz_data!.questions.length} pytań · rozpocznij` : 'Dostępny po ukończeniu lekcji'}</Text></View>
+          <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+        </TouchableOpacity>}
 
         {lessons.length === 0 && (
           <View style={styles.empty}>
@@ -259,6 +325,13 @@ const styles = StyleSheet.create({
   topicTag: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   topicTagText: { fontSize: 10, color: theme.colors.textSecondary },
   doneBtn: { padding: 4 },
+  quizRequiredBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 5, borderRadius: theme.borderRadius.full, backgroundColor: theme.colors.primaryLight },
+  quizRequiredText: { fontSize: 10, fontWeight: '700', color: theme.colors.primary },
+  quizRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 1, borderTopColor: theme.colors.border, padding: 14 },
+  courseQuizCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.lg, padding: 17, marginTop: 7 },
+  quizLocked: { opacity: 0.48 },
+  quizRowTitle: { color: theme.colors.text, fontSize: 14, fontWeight: '700' },
+  quizRowSub: { color: theme.colors.textMuted, fontSize: 11, marginTop: 3 },
 
   empty: { alignItems: 'center', paddingVertical: 60, gap: 12 },
   emptyText: { fontSize: 14, color: theme.colors.textMuted },
