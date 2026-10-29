@@ -16,10 +16,11 @@ import {
     DbCourse, DbLesson, DbTopic,
     createTrainingCategory, deleteCourse, deleteLesson,
     deleteTopic, deleteTrainingCategory, ensureTrainingCategories, getCourses, getEmployeeGroups, getEmployees, getLessons, getTopics, updateCourse,
-    updateLesson, updateTopic, updateTrainingCategory, uploadTopicVideo,
+    updateLesson, updateTopic, updateTrainingCategory, uploadTopicVideo, saveCourseLessonQuiz,
 } from '../../../lib/db';
 import type { DbEmployeeGroup, DbProfile, DbTopicQuiz, DbTrainingCategory } from '../../../lib/supabase';
 import { clearTrainingDraft, readTrainingDraft, trainingDraftKey, writeTrainingDraft } from '../../../lib/training-drafts';
+import type { QuizSaveResult } from '../../../lib/training-quiz-persistence';
 import { theme } from '../../../styles/theme';
 
 const CATEGORY_COLORS = ['#2563EB', '#16A34A', '#EF4444', '#F97316', '#8B5CF6', '#06B6D4', '#DB2777', '#64748B'];
@@ -374,21 +375,19 @@ export default function ManageCoursesScreen() {
     setLessons(await getLessons(selectedCourse!.id));
   }, 'Usuń');
 
-  const saveQuiz = async (quiz: DbTopicQuiz | null): Promise<boolean> => {
-    if (!quizTarget) return false;
-    const saved = quizTarget.scope === 'course'
-      ? await updateCourse(quizTarget.id, { quiz_data: quiz })
-      : await updateLesson(quizTarget.id, { quiz_data: quiz });
-    if (!saved) return false;
+  const saveQuiz = async (quiz: DbTopicQuiz | null): Promise<QuizSaveResult> => {
+    if (!quizTarget) return { saved: false, reason: 'unverified' };
+    const result = await saveCourseLessonQuiz(quizTarget.scope, quizTarget.id, quizTarget.updatedAt, quiz);
+    if (!result.saved) return result;
     if (quizTarget.scope === 'course') {
-      setCourses((current) => current.map((course) => course.id === quizTarget.id ? { ...course, quiz_data: quiz } : course));
-      setSelectedCourse((course) => course?.id === quizTarget.id ? { ...course, quiz_data: quiz } : course);
+      setCourses((current) => current.map((course) => course.id === quizTarget.id ? { ...course, quiz_data: quiz, updated_at: result.updatedAt } : course));
+      setSelectedCourse((course) => course?.id === quizTarget.id ? { ...course, quiz_data: quiz, updated_at: result.updatedAt } : course);
     } else {
-      setLessons((current) => current.map((lesson) => lesson.id === quizTarget.id ? { ...lesson, quiz_data: quiz } : lesson));
-      setSelectedLesson((lesson) => lesson?.id === quizTarget.id ? { ...lesson, quiz_data: quiz } : lesson);
+      setLessons((current) => current.map((lesson) => lesson.id === quizTarget.id ? { ...lesson, quiz_data: quiz, updated_at: result.updatedAt } : lesson));
+      setSelectedLesson((lesson) => lesson?.id === quizTarget.id ? { ...lesson, quiz_data: quiz, updated_at: result.updatedAt } : lesson);
     }
     setQuizTarget(null);
-    return true;
+    return result;
   };
 
   // ─── Topic CRUD ──────────────────────────────────────────────────────────────

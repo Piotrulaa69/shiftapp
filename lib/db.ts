@@ -16,7 +16,9 @@ import type {
 } from './supabase';
 import { cached, invalidate } from './query-cache';
 import { createClientUuid, isSessionError, retrySupabase } from './retry';
+import { sameTrainingQuiz, type QuizSaveResult } from './training-quiz-persistence';
 import { createIsolatedClient, supabase } from './supabase';
+import type { DbTopicQuiz } from './supabase';
 
 // Re-export types for screens
 export type { DbProfile as AppUser, DbCourse, DbCourseProgress, DbLesson, DbLessonQuizProgress, DbTrainingCategory, DbTopic, DbTopicProgress, DbInvitation as Invitation, DbRestaurant as Restaurant, DbShift as Shift, DbTask as Task, DbTraining as Training };
@@ -1995,6 +1997,50 @@ export async function updateLesson(lessonId: string, fields: Partial<DbLesson>):
   } catch (error) {
     console.error('updateLesson', error);
     return false;
+  }
+}
+
+/** Save a course or lesson quiz only against the version the editor opened.
+ * A fresh server read is required before a draft may be discarded. */
+export async function saveCourseLessonQuiz(
+  scope: 'course' | 'lesson', targetId: string, expectedUpdatedAt: string, quiz: DbTopicQuiz | null,
+): Promise<QuizSaveResult> {
+  const table = scope === 'course' ? 'courses' : 'lessons';
+  let writeFailed = false;
+  try {
+    const { data, error } = await reliableSupabaseRequest(() => supabase.from(table)
+      .update({ quiz_data: quiz, updated_at: new Date().toISOString() })
+      .eq('id', targetId)
+      .eq('updated_at', expectedUpdatedAt)
+      .select('quiz_data,updated_at')
+      .maybeSingle());
+    if (error || !data) {
+      writeFailed = true;
+      if (error) console.error('saveCourseLessonQuiz', error);
+    }
+  } catch (error) {
+    writeFailed = true;
+    console.error('saveCourseLessonQuiz', error);
+  }
+
+  try {
+    const { data, error } = await reliableSupabaseRequest(() => supabase.from(table)
+      .select('quiz_data,updated_at')
+      .eq('id', targetId)
+      .maybeSingle());
+    if (error || !data) {
+      if (error) console.error('verifyCourseLessonQuiz', error);
+      return { saved: false, reason: 'unverified' };
+    }
+    if (sameTrainingQuiz(data.quiz_data as DbTopicQuiz | null, quiz)) {
+      invalidate(scope === 'course' ? 'courses:' : 'course-lessons:');
+      if (scope === 'course') invalidate(`course:${targetId}`);
+      return { saved: true, updatedAt: data.updated_at as string };
+    }
+    return { saved: false, reason: !writeFailed && data.updated_at === expectedUpdatedAt ? 'unverified' : 'conflict' };
+  } catch (error) {
+    console.error('verifyCourseLessonQuiz', error);
+    return { saved: false, reason: 'unverified' };
   }
 }
 

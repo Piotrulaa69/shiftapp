@@ -23,6 +23,7 @@ function load(file, dependencies, globals = {}) {
 
 function mockDatabase(responses) {
   const calls = [];
+  const quizPersistence = load('lib/training-quiz-persistence.ts', {});
   const builder = {};
   for (const name of ['select', 'eq', 'order', 'insert', 'update', 'delete', 'in', 'not']) {
     builder[name] = (...args) => { calls.push([name, ...args]); return builder; };
@@ -38,9 +39,60 @@ function mockDatabase(responses) {
     './supabase': { supabase },
     './query-cache': { cached: (_key, fetcher) => fetcher(), invalidate() {} },
     './retry': { retrySupabase: (operation) => operation(), isSessionError: () => false, createClientUuid: () => 'stable-id' },
+    './training-quiz-persistence': quizPersistence,
   });
   return { db, calls };
 }
+
+const twentyQuestionQuiz = {
+  pass_score: 70,
+  questions: Array.from({ length: 20 }, (_, index) => ({
+    id: `question-${index}`, question: `Pytanie ${index + 1}`, type: 'single_choice',
+    answers: [
+      { id: `yes-${index}`, text: 'Tak', correct: true },
+      { id: `no-${index}`, text: 'Nie', correct: false },
+    ],
+  })),
+};
+
+test('a 20-question quiz is confirmed by an independent read before reporting success', async () => {
+  const { db, calls } = mockDatabase([
+    { data: { quiz_data: twentyQuestionQuiz, updated_at: 'new-time' }, error: null },
+    { data: { quiz_data: twentyQuestionQuiz, updated_at: 'new-time' }, error: null },
+  ]);
+  assert.equal(JSON.stringify(await db.saveCourseLessonQuiz('course', 'course-id', 'old-time', twentyQuestionQuiz)),
+    JSON.stringify({ saved: true, updatedAt: 'new-time' }));
+  assert.equal(calls.filter(([name]) => name === 'from').length, 2);
+  assert.equal(calls.some(([name, field, value]) => name === 'eq' && field === 'updated_at' && value === 'old-time'), true);
+  assert.equal(calls.find(([name]) => name === 'update')[1].quiz_data.questions.length, 20);
+});
+
+test('a stale editor cannot overwrite another quiz version', async () => {
+  const { db } = mockDatabase([
+    { data: null, error: null },
+    { data: { quiz_data: { ...twentyQuestionQuiz, pass_score: 80 }, updated_at: 'new-time' }, error: null },
+  ]);
+  assert.equal(JSON.stringify(await db.saveCourseLessonQuiz('lesson', 'lesson-id', 'old-time', twentyQuestionQuiz)),
+    JSON.stringify({ saved: false, reason: 'conflict' }));
+});
+
+test('a lost write response succeeds only if the server has the whole quiz', async () => {
+  const { db } = mockDatabase([
+    { data: null, error: { code: 'PGRST000' } },
+    { data: { quiz_data: twentyQuestionQuiz, updated_at: 'new-time' }, error: null },
+  ]);
+  assert.equal(JSON.stringify(await db.saveCourseLessonQuiz('course', 'course-id', 'old-time', twentyQuestionQuiz)),
+    JSON.stringify({ saved: true, updatedAt: 'new-time' }));
+});
+
+test('a failed verification never clears the quiz draft', async () => {
+  const { db } = mockDatabase([
+    { data: { quiz_data: twentyQuestionQuiz, updated_at: 'new-time' }, error: null },
+    { data: null, error: { code: 'PGRST000' } },
+  ]);
+  assert.equal(JSON.stringify(await db.saveCourseLessonQuiz('course', 'course-id', 'old-time', twentyQuestionQuiz)),
+    JSON.stringify({ saved: false, reason: 'unverified' }));
+});
 
 test('all restaurant categories are returned, not a fixed seven', async () => {
   const rows = Array.from({ length: 12 }, (_, id) => ({ id, name: `Category ${id}` }));

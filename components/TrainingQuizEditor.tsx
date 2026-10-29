@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { DbTopicQuiz, QuizQuestion, QuizQuestionType } from '../lib/supabase';
 import { clearTrainingDraft, readTrainingDraft, writeTrainingDraft } from '../lib/training-drafts';
+import { sameTrainingQuiz, type QuizSaveResult } from '../lib/training-quiz-persistence';
 import { theme } from '../styles/theme';
 
 type Props = {
@@ -12,8 +13,10 @@ type Props = {
   scopeLabel: string;
   quiz: DbTopicQuiz | null;
   onClose: () => void;
-  onSave: (quiz: DbTopicQuiz | null) => Promise<boolean>;
+  onSave: (quiz: DbTopicQuiz | null) => Promise<QuizSaveResult>;
 };
+
+type QuizDraft = { enabled: boolean; passScore: number; questions: QuizQuestion[] };
 
 const newId = () => globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 11);
 
@@ -25,22 +28,36 @@ export default function TrainingQuizEditor({ visible, draftKey, sourceUpdatedAt,
   const [saving, setSaving] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [recovered, setRecovered] = useState(false);
+  const [alternateDraft, setAlternateDraft] = useState<QuizDraft | null>(null);
+  const [dirty, setDirty] = useState(false);
   const inFlight = useRef(false);
 
   useEffect(() => {
     if (!visible) return;
     let active = true;
     setHydrated(false);
-    void readTrainingDraft<{ enabled: boolean; passScore: number; questions: QuizQuestion[] }>(draftKey).then((draft) => {
+    void (async () => {
+      const primary = await readTrainingDraft<QuizDraft>(draftKey);
+      const recovery = primary ? null : await readTrainingDraft<QuizDraft>(`${draftKey}:recovery`);
+      return { draft: primary ?? recovery, fromRecovery: !primary && !!recovery };
+    })().then(({ draft, fromRecovery }) => {
       if (!active) return;
       const value = draft?.value;
       const serverTime = sourceUpdatedAt ? Date.parse(sourceUpdatedAt) : 0;
-      const valid = value && typeof value.enabled === 'boolean' && Number.isFinite(value.passScore) && Array.isArray(value.questions)
-        && draft!.savedAt > (Number.isFinite(serverTime) ? serverTime : 0);
-      setEnabled(valid ? value.enabled : !!quiz?.questions.length);
-      setPassScore(valid ? value.passScore : quiz?.pass_score ?? 70);
-      setQuestions(valid ? value.questions : quiz?.questions ?? []);
-      setRecovered(!!valid);
+      const valid = !!value && typeof value.enabled === 'boolean' && Number.isFinite(value.passScore) && Array.isArray(value.questions);
+      const different = valid && !sameTrainingQuiz(
+        value.enabled ? { pass_score: value.passScore, questions: value.questions } : null, quiz,
+      );
+      // A failed save can update the server timestamp before the client sees
+      // an error. Never discard a larger local draft because of that timestamp.
+      const useDraft = different && !fromRecovery && (value!.questions.length > (quiz?.questions.length ?? 0)
+        || draft!.savedAt > (Number.isFinite(serverTime) ? serverTime : 0));
+      setEnabled(useDraft ? value!.enabled : !!quiz?.questions.length);
+      setPassScore(useDraft ? value!.passScore : quiz?.pass_score ?? 70);
+      setQuestions(useDraft ? value!.questions : quiz?.questions ?? []);
+      setRecovered(!!useDraft);
+      setAlternateDraft(different && !useDraft ? value! : null);
+      setDirty(false);
       setError('');
       setHydrated(true);
     });
@@ -48,12 +65,12 @@ export default function TrainingQuizEditor({ visible, draftKey, sourceUpdatedAt,
   }, [visible, quiz, draftKey, sourceUpdatedAt]);
 
   useEffect(() => {
-    if (!visible || !hydrated || !draftKey) return;
+    if (!visible || !hydrated || !draftKey || !dirty) return;
     void writeTrainingDraft(draftKey, { enabled, passScore, questions }).catch((cause) => {
       console.warn('quiz draft', cause);
       setError('Nie udało się zabezpieczyć szkicu na urządzeniu. Sprawdź wolne miejsce.');
     });
-  }, [visible, hydrated, draftKey, enabled, passScore, questions]);
+  }, [visible, hydrated, draftKey, enabled, passScore, questions, dirty]);
 
   useEffect(() => {
     if (Platform.OS !== 'web' || !visible) return;
@@ -64,7 +81,7 @@ export default function TrainingQuizEditor({ visible, draftKey, sourceUpdatedAt,
 
   const close = async () => {
     if (inFlight.current) return;
-    if (hydrated && draftKey) {
+    if (hydrated && draftKey && dirty) {
       try { await writeTrainingDraft(draftKey, { enabled, passScore, questions }); }
       catch (cause) {
         console.warn('quiz draft close', cause);
@@ -76,9 +93,10 @@ export default function TrainingQuizEditor({ visible, draftKey, sourceUpdatedAt,
   };
 
   const updateQuestion = (id: string, change: Partial<QuizQuestion>) =>
-    setQuestions((current) => current.map((question) => question.id === id ? { ...question, ...change } : question));
+    { setDirty(true); setQuestions((current) => current.map((question) => question.id === id ? { ...question, ...change } : question)); };
 
   const addQuestion = (type: QuizQuestionType) => {
+    setDirty(true);
     const answers = type === 'open' ? [] : [
       { id: newId(), text: '', correct: true },
       { id: newId(), text: '', correct: false },
@@ -104,6 +122,7 @@ export default function TrainingQuizEditor({ visible, draftKey, sourceUpdatedAt,
 
   const save = async () => {
     if (inFlight.current) return;
+    if (alternateDraft) { setError('Wybierz lokalny szkic albo wersję serwera przed zapisem.'); return; }
     const issue = validate();
     if (issue) { setError(issue); return; }
     inFlight.current = true;
@@ -122,10 +141,13 @@ export default function TrainingQuizEditor({ visible, draftKey, sourceUpdatedAt,
           accepted_answers: question.accepted_answers?.map((answer) => answer.trim()).filter(Boolean),
         })),
       } : null;
-      if (await onSave(nextQuiz)) {
+      const result = await onSave(nextQuiz);
+      if (result.saved) {
         await clearTrainingDraft(draftKey).catch((cause) => console.warn('clear quiz draft', cause));
-      } else setError(draftPersisted
-        ? 'Nie udało się zapisać quizu. Szkic pozostaje na tym urządzeniu. Spróbuj ponownie.'
+      } else setError(result.reason === 'conflict'
+        ? 'Quiz zmienił się na serwerze. Szkic pozostaje na tym urządzeniu. Odśwież kurs i porównaj wersje przed ponownym zapisem.'
+        : draftPersisted
+        ? 'Nie udało się potwierdzić zapisu quizu na serwerze. Szkic pozostaje na tym urządzeniu. Spróbuj ponownie.'
         : 'Nie udało się zapisać quizu ani zabezpieczyć szkicu na tym urządzeniu. Nie zamykaj formularza.');
     } catch (cause) {
       console.error('saveTrainingQuiz', cause);
@@ -149,7 +171,25 @@ export default function TrainingQuizEditor({ visible, draftKey, sourceUpdatedAt,
           </View>
           <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             {recovered && <Text style={{ color: theme.colors.primary, fontWeight: '700', marginBottom: 10 }}>Przywrócono niezapisany szkic quizu z tego urządzenia.</Text>}
-            <TouchableOpacity style={styles.toggle} onPress={() => setEnabled((value) => !value)} accessibilityRole="switch" accessibilityState={{ checked: enabled }}>
+            {alternateDraft && <View style={styles.questionCard}>
+              <Text style={styles.hint}>Na tym urządzeniu jest inna wersja quizu ({alternateDraft.questions.length} pytań). Wybierz wersję przed edycją.</Text>
+              <TouchableOpacity style={styles.addButton} onPress={() => {
+                setEnabled(alternateDraft.enabled); setPassScore(alternateDraft.passScore); setQuestions(alternateDraft.questions);
+                setAlternateDraft(null); setRecovered(true); setDirty(false);
+              }}><Text style={styles.addLinkText}>Wczytaj lokalny szkic</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.addButton} onPress={async () => {
+                try {
+                  await writeTrainingDraft(`${draftKey}:recovery`, alternateDraft);
+                  await clearTrainingDraft(draftKey);
+                  setAlternateDraft(null);
+                } catch (cause) {
+                  console.warn('preserve alternate quiz draft', cause);
+                  setError('Nie udało się zabezpieczyć starszego szkicu. Pozostał bez zmian.');
+                }
+              }}><Text style={styles.addLinkText}>Pracuj na wersji serwera (zachowaj kopię szkicu)</Text></TouchableOpacity>
+            </View>}
+            <View pointerEvents={alternateDraft ? 'none' : 'auto'} style={alternateDraft ? { opacity: 0.45 } : undefined}>
+            <TouchableOpacity style={styles.toggle} onPress={() => { setDirty(true); setEnabled((value) => !value); }} accessibilityRole="switch" accessibilityState={{ checked: enabled }}>
               <Ionicons name="help-circle-outline" size={21} color={theme.colors.primary} />
               <Text style={styles.toggleText}>Quiz włączony</Text>
               <Ionicons name={enabled ? 'checkbox' : 'square-outline'} size={23} color={theme.colors.primary} />
@@ -159,7 +199,7 @@ export default function TrainingQuizEditor({ visible, draftKey, sourceUpdatedAt,
                 <Text style={styles.label}>Próg zaliczenia</Text>
                 <View style={styles.row}>
                   {[50, 60, 70, 80, 100].map((value) => (
-                    <TouchableOpacity key={value} style={[styles.scoreChip, passScore === value && styles.scoreChipOn]} onPress={() => setPassScore(value)}>
+                    <TouchableOpacity key={value} style={[styles.scoreChip, passScore === value && styles.scoreChipOn]} onPress={() => { setDirty(true); setPassScore(value); }}>
                       <Text style={[styles.scoreText, passScore === value && styles.scoreTextOn]}>{value}%</Text>
                     </TouchableOpacity>
                   ))}
@@ -168,7 +208,7 @@ export default function TrainingQuizEditor({ visible, draftKey, sourceUpdatedAt,
                   <View key={question.id} style={styles.questionCard}>
                     <View style={styles.questionHeader}>
                       <Text style={styles.questionTitle}>Pytanie {index + 1} · {question.type === 'open' ? 'otwarte' : 'wybór'}</Text>
-                      <TouchableOpacity onPress={() => setQuestions((current) => current.filter((item) => item.id !== question.id))} hitSlop={8}>
+                      <TouchableOpacity onPress={() => { setDirty(true); setQuestions((current) => current.filter((item) => item.id !== question.id)); }} hitSlop={8}>
                         <Ionicons name="trash-outline" size={18} color={theme.colors.error} />
                       </TouchableOpacity>
                     </View>
@@ -202,11 +242,12 @@ export default function TrainingQuizEditor({ visible, draftKey, sourceUpdatedAt,
                 </View>
               </>
             )}
+            </View>
             {!!error && <Text style={styles.error}>{error}</Text>}
           </ScrollView>
           <View style={styles.footer}>
             <TouchableOpacity style={styles.cancelButton} onPress={() => { void close(); }} disabled={saving}><Text style={styles.cancelText}>Anuluj</Text></TouchableOpacity>
-            <TouchableOpacity style={styles.saveButton} onPress={save} disabled={saving || !hydrated}>{saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>Zapisz quiz</Text>}</TouchableOpacity>
+            <TouchableOpacity style={styles.saveButton} onPress={save} disabled={saving || !hydrated || !!alternateDraft}>{saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>Zapisz quiz</Text>}</TouchableOpacity>
           </View>
         </View>
       </View>
