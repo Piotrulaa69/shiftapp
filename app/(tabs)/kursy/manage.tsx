@@ -8,6 +8,7 @@ import {
     Text, TextInput, TouchableOpacity, useWindowDimensions, View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import TrainingImage from '../../../components/TrainingImage';
 import TrainingQuizEditor from '../../../components/TrainingQuizEditor';
 import { useAuth } from '../../../context/AuthContext';
 import { useAlert } from '../../../context/AlertContext';
@@ -16,10 +17,11 @@ import {
     DbCourse, DbLesson, DbTopic,
     createTrainingCategory, deleteCourse, deleteLesson,
     deleteTopic, deleteTrainingCategory, ensureTrainingCategories, getCourses, getEmployeeGroups, getEmployees, getLessons, getTopics, updateCourse,
-    updateLesson, updateTopic, updateTrainingCategory, uploadTopicVideo, saveCourseLessonQuiz,
+    updateLesson, updateTopic, updateTrainingCategory, uploadTopicVideo, uploadTrainingImage, saveCourseLessonQuiz,
 } from '../../../lib/db';
 import type { DbEmployeeGroup, DbProfile, DbTopicQuiz, DbTrainingCategory } from '../../../lib/supabase';
 import { clearTrainingDraft, readTrainingDraft, trainingDraftKey, writeTrainingDraft } from '../../../lib/training-drafts';
+import { selectTrainingFormDraft } from '../../../lib/training-form-recovery';
 import type { QuizSaveResult } from '../../../lib/training-quiz-persistence';
 import { theme } from '../../../styles/theme';
 
@@ -34,7 +36,20 @@ const CAT_COLORS: Record<string, string> = {
 };
 
 type View3 = 'courses' | 'lessons' | 'topics';
-type TForm = { title: string; description: string; content_text: string; video_url: string };
+type CourseForm = { title: string; description: string; category: string; required: boolean; cover_image_url: string | null; assigned_group_ids: string[]; assigned_employee_ids: string[] };
+type LessonForm = { title: string; description: string };
+type TForm = { title: string; description: string; content_text: string; video_url: string; image_storage_path: string | null };
+type PendingDraft =
+  | { kind: 'course'; value: CourseForm; fromRecovery: boolean }
+  | { kind: 'lesson'; value: LessonForm; fromRecovery: boolean }
+  | { kind: 'topic'; value: TForm; fromRecovery: boolean };
+const imageTypeFromFile = (name: string, mimeType?: string | null) => {
+  if (mimeType === 'image/jpg') return 'image/jpeg';
+  if (['image/jpeg', 'image/png', 'image/webp'].includes(mimeType ?? '')) return mimeType!;
+  const extension = name.split('.').pop()?.toLowerCase();
+  return extension === 'jpg' || extension === 'jpeg' ? 'image/jpeg'
+    : extension === 'png' ? 'image/png' : extension === 'webp' ? 'image/webp' : null;
+};
 
 export default function ManageCoursesScreen() {
   const { user } = useAuth();
@@ -69,9 +84,9 @@ export default function ManageCoursesScreen() {
   const [employees, setEmployees] = useState<DbProfile[]>([]);
   const [employeeSearch, setEmployeeSearch] = useState('');
 
-  const EMPTY_COURSE = { title: '', description: '', category: '', required: false, assigned_group_ids: [] as string[], assigned_employee_ids: [] as string[] };
-  const EMPTY_LESSON = { title: '', description: '' };
-  const EMPTY_TOPIC: TForm = { title: '', description: '', content_text: '', video_url: '' };
+  const EMPTY_COURSE: CourseForm = { title: '', description: '', category: '', required: false, cover_image_url: null, assigned_group_ids: [], assigned_employee_ids: [] };
+  const EMPTY_LESSON: LessonForm = { title: '', description: '' };
+  const EMPTY_TOPIC: TForm = { title: '', description: '', content_text: '', video_url: '', image_storage_path: null };
 
   const [editingCourse, setEditingCourse] = useState<DbCourse | null>(null);
   const [editingLesson, setEditingLesson] = useState<DbLesson | null>(null);
@@ -86,6 +101,7 @@ export default function ManageCoursesScreen() {
   const [lessonDraftKey, setLessonDraftKey] = useState<string | null>(null);
   const [topicDraftKey, setTopicDraftKey] = useState<string | null>(null);
   const [recoveredDraft, setRecoveredDraft] = useState<'course' | 'lesson' | 'topic' | null>(null);
+  const [pendingDraft, setPendingDraft] = useState<PendingDraft | null>(null);
   const [draftError, setDraftError] = useState(false);
   const [editingCategory, setEditingCategory] = useState<DbTrainingCategory | null>(null);
   const [categoryName, setCategoryName] = useState('');
@@ -98,17 +114,23 @@ export default function ManageCoursesScreen() {
     (error) => { console.warn('training draft', error); setDraftError(true); throw error; },
   );
   useEffect(() => {
-    if (showCourseModal && courseDraftKey) void persistDraft(courseDraftKey, cForm).catch(() => {});
-  }, [showCourseModal, courseDraftKey, cForm]);
+    if (showCourseModal && courseDraftKey && pendingDraft?.kind !== 'course') void persistDraft(courseDraftKey, cForm).catch(() => {});
+  }, [showCourseModal, courseDraftKey, cForm, pendingDraft]);
   useEffect(() => {
-    if (showLessonModal && lessonDraftKey) void persistDraft(lessonDraftKey, lForm).catch(() => {});
-  }, [showLessonModal, lessonDraftKey, lForm]);
+    if (showLessonModal && lessonDraftKey && pendingDraft?.kind !== 'lesson') void persistDraft(lessonDraftKey, lForm).catch(() => {});
+  }, [showLessonModal, lessonDraftKey, lForm, pendingDraft]);
   useEffect(() => {
-    if (showTopicModal && topicDraftKey) void persistDraft(topicDraftKey, tForm).catch(() => {});
-  }, [showTopicModal, topicDraftKey, tForm]);
+    if (showTopicModal && topicDraftKey && pendingDraft?.kind !== 'topic') void persistDraft(topicDraftKey, tForm).catch(() => {});
+  }, [showTopicModal, topicDraftKey, tForm, pendingDraft]);
 
   const closeDraftModal = async (kind: 'course' | 'lesson' | 'topic') => {
     if (saveInFlight.current || uploading) return;
+    if (pendingDraft?.kind === kind) {
+      if (kind === 'course') setShowCourseModal(false);
+      else if (kind === 'lesson') setShowLessonModal(false);
+      else setShowTopicModal(false);
+      return;
+    }
     const key = kind === 'course' ? courseDraftKey : kind === 'lesson' ? lessonDraftKey : topicDraftKey;
     const form = kind === 'course' ? cForm : kind === 'lesson' ? lForm : tForm;
     if (key) {
@@ -131,8 +153,8 @@ export default function ManageCoursesScreen() {
   }, [showCourseModal, showLessonModal, showTopicModal]);
 
   const draftKey = (kind: string, id: string) => trainingDraftKey(user?.id ?? '', rid, kind, id);
-  const restoreForm = async <T extends { title: string }>(key: string, current: T, updatedAt?: string): Promise<{ form: T; restored: boolean }> => {
-    const draft = await readTrainingDraft<T>(key);
+  const restoreForm = async <T extends { title: string }>(key: string, current: T): Promise<{ form: T; pending: T | null; fromRecovery: boolean }> => {
+    const [draft, recovery] = await Promise.all([readTrainingDraft<T>(key), readTrainingDraft<T>(`${key}:recovery`)]);
     const legacy = draft?.value as T & { quiz_enabled?: boolean; quiz_questions?: DbTopicQuiz['questions']; quiz_pass_score?: number };
     if (key.includes(':topic:') && legacy?.quiz_enabled && legacy.quiz_questions?.length && selectedCourse) {
       // Old topic editor drafts may contain hours of unsaved quiz work. Keep
@@ -152,12 +174,44 @@ export default function ManageCoursesScreen() {
       });
       showAlert('Odzyskano szkic quizu', 'Pytania ze starego szkicu tematu zabezpieczono. Otwórz „Quiz kursu”, aby je sprawdzić i zapisać przy kursie.');
     }
-    const serverTime = updatedAt ? Date.parse(updatedAt) : 0;
-    if (draft && typeof draft.value?.title === 'string' && draft.savedAt > (Number.isFinite(serverTime) ? serverTime : 0)) {
-      return { form: { ...current, ...draft.value }, restored: true };
-    }
-    return { form: current, restored: false };
+    const candidate = selectTrainingFormDraft(current, draft, recovery);
+    return { form: current, pending: candidate?.value ?? null, fromRecovery: candidate?.fromRecovery ?? false };
   };
+
+  const usePendingDraft = () => {
+    if (!pendingDraft) return;
+    if (pendingDraft.kind === 'course') setCForm(pendingDraft.value);
+    else if (pendingDraft.kind === 'lesson') setLForm(pendingDraft.value);
+    else setTForm(pendingDraft.value);
+    setRecoveredDraft(pendingDraft.kind);
+    setPendingDraft(null);
+  };
+
+  const useServerForm = async () => {
+    if (!pendingDraft) return;
+    const key = pendingDraft.kind === 'course' ? courseDraftKey : pendingDraft.kind === 'lesson' ? lessonDraftKey : topicDraftKey;
+    if (!key) return;
+    try {
+      if (!pendingDraft.fromRecovery) await writeTrainingDraft(`${key}:recovery`, pendingDraft.value);
+      await clearTrainingDraft(key);
+      setPendingDraft(null);
+    } catch (error) {
+      console.warn('preserve training form draft', error);
+      showAlert('Szkic pozostaje', 'Nie udało się zabezpieczyć kopii szkicu. Wybierz szkic lub spróbuj ponownie.');
+    }
+  };
+
+  const draftChoice = (kind: PendingDraft['kind']) => pendingDraft?.kind === kind ? (
+    <View style={m.draftChoice}>
+      <Text style={m.draftChoiceText}>Na tym urządzeniu jest inna wersja formularza. Wybierz ją przed edycją lub zachowaj kopię i pracuj na wersji serwera.</Text>
+      <TouchableOpacity onPress={usePendingDraft} style={m.draftChoiceButton}>
+        <Text style={m.draftChoiceButtonText}>Wczytaj lokalny szkic</Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={() => { void useServerForm(); }} style={m.draftChoiceButton}>
+        <Text style={m.draftChoiceButtonText}>Wersja serwera (zachowaj kopię szkicu)</Text>
+      </TouchableOpacity>
+    </View>
+  ) : null;
 
   useEffect(() => {
     if (categories !== 'true') return;
@@ -229,29 +283,30 @@ export default function ManageCoursesScreen() {
   const openNewCourse = async () => {
     setDraftError(false);
     const key = draftKey('course', 'new');
-    const { form, restored } = await restoreForm(key, { ...EMPTY_COURSE, category: trainingCategories[0]?.name ?? '' });
-    setEditingCourse(null); setEmployeeSearch(''); setCForm(form); setRecoveredDraft(restored ? 'course' : null); setCourseDraftKey(key); setShowCourseModal(true);
+    const { form, pending, fromRecovery } = await restoreForm(key, { ...EMPTY_COURSE, category: trainingCategories[0]?.name ?? '' });
+    setEditingCourse(null); setEmployeeSearch(''); setCForm(form); setRecoveredDraft(null); setPendingDraft(pending ? { kind: 'course', value: pending, fromRecovery } : null); setCourseDraftKey(key); setShowCourseModal(true);
   };
   const openEditCourse = async (c: DbCourse) => {
     setDraftError(false);
     const key = draftKey('course', c.id);
-    const current = { title: c.title, description: c.description ?? '', category: c.category, required: c.required, assigned_group_ids: c.assigned_group_ids ?? [], assigned_employee_ids: c.assigned_employee_ids ?? [] };
-    const { form, restored } = await restoreForm(key, current, c.updated_at);
-    setEditingCourse(c); setEmployeeSearch(''); setCForm(form); setRecoveredDraft(restored ? 'course' : null); setCourseDraftKey(key); setShowCourseModal(true);
+    const current = { title: c.title, description: c.description ?? '', category: c.category, required: c.required, cover_image_url: c.cover_image_url, assigned_group_ids: c.assigned_group_ids ?? [], assigned_employee_ids: c.assigned_employee_ids ?? [] };
+    const { form, pending, fromRecovery } = await restoreForm(key, current);
+    setEditingCourse(c); setEmployeeSearch(''); setCForm(form); setRecoveredDraft(null); setPendingDraft(pending ? { kind: 'course', value: pending, fromRecovery } : null); setCourseDraftKey(key); setShowCourseModal(true);
   };
   const saveCourse = async () => {
     if (saveInFlight.current) return;
+    if (pendingDraft?.kind === 'course') { showAlert('Wybierz wersję', 'Wczytaj lokalny szkic albo wybierz wersję serwera.'); return; }
     if (!cForm.title.trim()) { showAlert('Brak tytułu', 'Podaj tytuł kursu.'); return; }
     if (!cForm.category.trim()) { showAlert('Brak kategorii', 'Dodaj kategorię w sekcji „Kategorie szkoleń”, a następnie wybierz ją dla kursu.'); return; }
     saveInFlight.current = true;
     setSaving(true);
     try {
       if (courseDraftKey) await persistDraft(courseDraftKey, cForm).catch(() => {});
-      const fields = { title: cForm.title.trim(), description: cForm.description.trim() || null, category: cForm.category, required: cForm.required, assigned_group_ids: cForm.assigned_group_ids, assigned_employee_ids: cForm.assigned_employee_ids };
+      const fields = { title: cForm.title.trim(), description: cForm.description.trim() || null, category: cForm.category, required: cForm.required, cover_image_url: cForm.cover_image_url, assigned_group_ids: cForm.assigned_group_ids, assigned_employee_ids: cForm.assigned_employee_ids };
       const saved = editingCourse
-        ? await updateCourse(editingCourse.id, fields)
+        ? await updateCourse(editingCourse.id, fields, editingCourse.updated_at)
         : !!await createCourse(rid, fields);
-      if (!saved) { showAlert('Błąd zapisu', 'Nie udało się zapisać kursu. Sprawdź połączenie i uprawnienia.'); return; }
+      if (!saved) { showAlert('Nie potwierdzono zapisu', 'Kurs lub jego zdjęcie nie zostały potwierdzone na serwerze. Szkic jest zachowany. Odśwież listę i spróbuj ponownie.'); return; }
       setCourseDraftKey(null);
       if (courseDraftKey) await clearTrainingDraft(courseDraftKey).catch((error) => console.warn('clear course draft', error));
       setShowCourseModal(false);
@@ -335,17 +390,18 @@ export default function ManageCoursesScreen() {
     setDraftError(false);
     if (!selectedCourse) return;
     const key = draftKey('lesson', `new:${selectedCourse.id}`);
-    const { form, restored } = await restoreForm(key, EMPTY_LESSON);
-    setEditingLesson(null); setLForm(form); setRecoveredDraft(restored ? 'lesson' : null); setLessonDraftKey(key); setShowLessonModal(true);
+    const { form, pending, fromRecovery } = await restoreForm(key, EMPTY_LESSON);
+    setEditingLesson(null); setLForm(form); setRecoveredDraft(null); setPendingDraft(pending ? { kind: 'lesson', value: pending, fromRecovery } : null); setLessonDraftKey(key); setShowLessonModal(true);
   };
   const openEditLesson = async (l: DbLesson) => {
     setDraftError(false);
     const key = draftKey('lesson', l.id);
-    const { form, restored } = await restoreForm(key, { title: l.title, description: l.description ?? '' }, l.updated_at);
-    setEditingLesson(l); setLForm(form); setRecoveredDraft(restored ? 'lesson' : null); setLessonDraftKey(key); setShowLessonModal(true);
+    const { form, pending, fromRecovery } = await restoreForm(key, { title: l.title, description: l.description ?? '' });
+    setEditingLesson(l); setLForm(form); setRecoveredDraft(null); setPendingDraft(pending ? { kind: 'lesson', value: pending, fromRecovery } : null); setLessonDraftKey(key); setShowLessonModal(true);
   };
   const saveLesson = async () => {
     if (saveInFlight.current) return;
+    if (pendingDraft?.kind === 'lesson') { showAlert('Wybierz wersję', 'Wczytaj lokalny szkic albo wybierz wersję serwera.'); return; }
     if (!lForm.title.trim()) { showAlert('Brak tytułu', 'Podaj tytuł lekcji.'); return; }
     if (!selectedCourse) return;
     saveInFlight.current = true;
@@ -354,9 +410,9 @@ export default function ManageCoursesScreen() {
       if (lessonDraftKey) await persistDraft(lessonDraftKey, lForm).catch(() => {});
       const fields = { title: lForm.title.trim(), description: lForm.description.trim() || null };
       const saved = editingLesson
-        ? await updateLesson(editingLesson.id, fields)
+        ? await updateLesson(editingLesson.id, fields, editingLesson.updated_at)
         : !!await createLesson(rid, selectedCourse.id, { ...fields, sort_order: lessons.length });
-      if (!saved) { showAlert('Błąd zapisu', 'Nie udało się zapisać lekcji. Sprawdź połączenie i uprawnienia.'); return; }
+      if (!saved) { showAlert('Nie potwierdzono zapisu', 'Lekcja nie została potwierdzona na serwerze. Formularz i szkic pozostają zachowane.'); return; }
       setLessonDraftKey(null);
       if (lessonDraftKey) await clearTrainingDraft(lessonDraftKey).catch((error) => console.warn('clear lesson draft', error));
       setShowLessonModal(false);
@@ -395,24 +451,26 @@ export default function ManageCoursesScreen() {
     setDraftError(false);
     if (!selectedLesson) return;
     const key = draftKey('topic', `new:${selectedLesson.id}`);
-    const { form, restored } = await restoreForm(key, EMPTY_TOPIC);
-    setEditingTopic(null); setTForm(form); setRecoveredDraft(restored ? 'topic' : null); setTopicDraftKey(key); setShowTopicModal(true);
+    const { form, pending, fromRecovery } = await restoreForm(key, EMPTY_TOPIC);
+    setEditingTopic(null); setTForm(form); setRecoveredDraft(null); setPendingDraft(pending ? { kind: 'topic', value: pending, fromRecovery } : null); setTopicDraftKey(key); setShowTopicModal(true);
   };
   const openEditTopic = async (t: DbTopic) => {
     setDraftError(false);
     const key = draftKey('topic', t.id);
     setEditingTopic(t);
     const current = {
-      title: t.title, description: t.description ?? '', content_text: t.content_text ?? '', video_url: t.video_url ?? '',
+      title: t.title, description: t.description ?? '', content_text: t.content_text ?? '', video_url: t.video_url ?? '', image_storage_path: t.image_storage_path ?? null,
     };
-    const { form, restored } = await restoreForm(key, current, t.updated_at);
+    const { form, pending, fromRecovery } = await restoreForm(key, current);
     setTForm(form);
-    setRecoveredDraft(restored ? 'topic' : null);
+    setRecoveredDraft(null);
+    setPendingDraft(pending ? { kind: 'topic', value: pending, fromRecovery } : null);
     setTopicDraftKey(key);
     setShowTopicModal(true);
   };
   const saveTopic = async () => {
     if (saveInFlight.current) return;
+    if (pendingDraft?.kind === 'topic') { showAlert('Wybierz wersję', 'Wczytaj lokalny szkic albo wybierz wersję serwera.'); return; }
     if (!tForm.title.trim()) { showAlert('Brak tytułu', 'Podaj tytuł tematu.'); return; }
     if (!selectedLesson) return;
     saveInFlight.current = true;
@@ -422,14 +480,15 @@ export default function ManageCoursesScreen() {
       description: tForm.description.trim() || null,
       content_text: tForm.content_text.trim() || null,
       video_url: tForm.video_url.trim() || null,
+      image_storage_path: tForm.image_storage_path,
       sort_order: editingTopic ? editingTopic.sort_order : topics.length,
     };
     try {
       if (topicDraftKey) await persistDraft(topicDraftKey, tForm).catch(() => {});
       const saved = editingTopic
-        ? await updateTopic(editingTopic.id, fields)
+        ? await updateTopic(editingTopic.id, fields, editingTopic.updated_at)
         : !!await createTopic(rid, selectedLesson.id, fields);
-      if (!saved) { showAlert('Błąd zapisu', 'Nie udało się zapisać tematu. Sprawdź połączenie i uprawnienia.'); return; }
+      if (!saved) { showAlert('Nie potwierdzono zapisu', 'Temat nie został potwierdzony na serwerze. Formularz i szkic pozostają zachowane.'); return; }
       setTopicDraftKey(null);
       if (topicDraftKey) await clearTrainingDraft(topicDraftKey).catch((error) => console.warn('clear topic draft', error));
       setShowTopicModal(false);
@@ -448,6 +507,30 @@ export default function ManageCoursesScreen() {
     setTopics(await getTopics(selectedLesson!.id));
   }, 'Usuń');
 
+  const pickAndUploadImage = async (scope: 'courses' | 'topics') => {
+    if (saveInFlight.current || uploading || !rid || (scope === 'topics' && !selectedLesson)) return;
+    saveInFlight.current = true;
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: 'image/*', copyToCacheDirectory: true });
+      if (result.canceled) return;
+      const file = result.assets[0];
+      const mimeType = imageTypeFromFile(file.name, file.mimeType);
+      if (!mimeType) { showAlert('Nieobsługiwane zdjęcie', 'Wybierz plik JPG, PNG lub WebP.'); return; }
+      if (file.size && file.size > 10 * 1024 * 1024) { showAlert('Zdjęcie za duże', 'Maksymalny rozmiar to 10 MB.'); return; }
+      setUploading(true);
+      const path = await uploadTrainingImage(rid, scope, file.uri, mimeType);
+      if (!path) { showAlert('Błąd przesyłania', 'Nie udało się przesłać zdjęcia. Wybierz plik ponownie.'); return; }
+      if (scope === 'courses') setCForm((form) => ({ ...form, cover_image_url: path }));
+      else setTForm((form) => ({ ...form, image_storage_path: path }));
+    } catch (error) {
+      console.error('pickAndUploadTrainingImage', error);
+      showAlert('Błąd przesyłania', 'Nie udało się przesłać zdjęcia. Formularz pozostaje otwarty.');
+    } finally {
+      setUploading(false);
+      saveInFlight.current = false;
+    }
+  };
+
   const pickAndUploadVideo = async () => {
     if (saveInFlight.current || uploading || !selectedLesson) return;
     if (!tForm.title.trim()) { showAlert('Brak tytułu', 'Wpisz najpierw tytuł tematu'); return; }
@@ -460,7 +543,7 @@ export default function ManageCoursesScreen() {
       setUploading(true);
       let topicToUpload = editingTopic;
       if (!topicToUpload) {
-        const created = await createTopic(rid, selectedLesson.id, { title: tForm.title.trim(), description: tForm.description.trim() || null, content_text: tForm.content_text.trim() || null, video_url: tForm.video_url.trim() || null, sort_order: topics.length });
+        const created = await createTopic(rid, selectedLesson.id, { title: tForm.title.trim(), description: tForm.description.trim() || null, content_text: tForm.content_text.trim() || null, video_url: tForm.video_url.trim() || null, image_storage_path: tForm.image_storage_path, sort_order: topics.length });
         if (!created) { showAlert('Błąd', 'Nie udało się zapisać tematu'); return; }
         setEditingTopic(created);
         topicToUpload = created;
@@ -562,9 +645,11 @@ export default function ManageCoursesScreen() {
                 return (
                   <View key={c.id} style={styles.card}>
                     <TouchableOpacity style={styles.cardMain} onPress={() => selectCourse(c)} activeOpacity={0.8}>
-                      <View style={[styles.cardIcon, { backgroundColor: color + '18' }]}>
-                        <Ionicons name={CAT_ICONS[c.category] as any ?? 'book-outline'} size={22} color={color} />
-                      </View>
+                      {c.cover_image_url
+                        ? <TrainingImage path={c.cover_image_url} style={styles.cardImage} />
+                        : <View style={[styles.cardIcon, { backgroundColor: color + '18' }]}>
+                            <Ionicons name={CAT_ICONS[c.category] as any ?? 'book-outline'} size={22} color={color} />
+                          </View>}
                       <View style={styles.cardInfo}>
                         <Text style={styles.cardTitle}>{c.title}</Text>
                         <Text style={styles.cardMeta}>{c.category}{c.required ? ' • Obowiązkowy' : ''}</Text>
@@ -804,10 +889,26 @@ export default function ManageCoursesScreen() {
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={m.body} keyboardShouldPersistTaps="handled">
               {recoveredDraft === 'course' && <Text style={m.draftNotice}>Przywrócono niezapisany szkic z tego urządzenia.</Text>}
               {draftError && <Text style={m.draftError}>Nie udało się zabezpieczyć szkicu na tym urządzeniu. Nie zamykaj ekranu, dopóki nie zapiszesz zmian.</Text>}
+              {draftChoice('course')}
+              <View pointerEvents={pendingDraft?.kind === 'course' ? 'none' : 'auto'} style={pendingDraft?.kind === 'course' ? { opacity: 0.45 } : undefined}>
               <Text style={m.label}>Tytuł kursu *</Text>
               <TextInput style={m.input} placeholder="np. Obsługa kasy, BHP wstęp" placeholderTextColor={theme.colors.textMuted} value={cForm.title} onChangeText={(v) => setCForm((f) => ({ ...f, title: v }))} />
               <Text style={m.label}>Opis</Text>
               <TextInput style={[m.input, m.inputMulti]} placeholder="Krótki opis kursu..." placeholderTextColor={theme.colors.textMuted} value={cForm.description} onChangeText={(v) => setCForm((f) => ({ ...f, description: v }))} multiline numberOfLines={3} />
+              <Text style={m.label}>Zdjęcie okładki kursu</Text>
+              {cForm.cover_image_url && <TrainingImage path={cForm.cover_image_url} style={m.imagePreview} />}
+              <TouchableOpacity style={m.uploadBtn} onPress={() => { void pickAndUploadImage('courses'); }} disabled={uploading || saving} activeOpacity={0.8}>
+                <View style={m.uploadBtnIcon}>
+                  {uploading ? <ActivityIndicator size="small" color={theme.colors.primary} /> : <Ionicons name="image-outline" size={20} color={theme.colors.primary} />}
+                </View>
+                <View>
+                  <Text style={m.uploadBtnText}>{cForm.cover_image_url ? 'Zmień zdjęcie okładki' : 'Dodaj zdjęcie okładki'}</Text>
+                  <Text style={m.uploadBtnSub}>JPG, PNG, WebP • maks. 10 MB</Text>
+                </View>
+              </TouchableOpacity>
+              {!!cForm.cover_image_url && <TouchableOpacity onPress={() => setCForm((form) => ({ ...form, cover_image_url: null }))} disabled={uploading || saving} style={m.removeImageBtn}>
+                <Text style={m.removeImageText}>Usuń zdjęcie z kursu</Text>
+              </TouchableOpacity>}
               <Text style={m.label}>Kategoria · {trainingCategories.length} dostępnych</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 }}>
                 {categoryNames.map((cat) => (
@@ -901,10 +1002,11 @@ export default function ManageCoursesScreen() {
                   </View>
                 </>
               )}
-            </ScrollView>
+              </View>
+              </ScrollView>
             <View style={m.footer}>
               <TouchableOpacity style={m.cancelBtn} onPress={() => { void closeDraftModal('course'); }}><Text style={m.cancelBtnText}>Anuluj</Text></TouchableOpacity>
-              <TouchableOpacity style={m.saveBtn} onPress={saveCourse} disabled={saving}>
+              <TouchableOpacity style={m.saveBtn} onPress={saveCourse} disabled={saving || uploading || pendingDraft?.kind === 'course'}>
                 {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={m.saveBtnText}>Zapisz kurs</Text>}
               </TouchableOpacity>
             </View>
@@ -925,14 +1027,17 @@ export default function ManageCoursesScreen() {
             <View style={m.body}>
               {recoveredDraft === 'lesson' && <Text style={m.draftNotice}>Przywrócono niezapisany szkic z tego urządzenia.</Text>}
               {draftError && <Text style={m.draftError}>Nie udało się zabezpieczyć szkicu na tym urządzeniu. Nie zamykaj ekranu, dopóki nie zapiszesz zmian.</Text>}
+              {draftChoice('lesson')}
+              <View pointerEvents={pendingDraft?.kind === 'lesson' ? 'none' : 'auto'} style={pendingDraft?.kind === 'lesson' ? { opacity: 0.45 } : undefined}>
               <Text style={m.label}>Tytuł lekcji *</Text>
               <TextInput style={m.input} placeholder="np. Powitanie gościa" placeholderTextColor={theme.colors.textMuted} value={lForm.title} onChangeText={(v) => setLForm((f) => ({ ...f, title: v }))} />
               <Text style={m.label}>Opis</Text>
               <TextInput style={[m.input, m.inputMulti]} placeholder="Krótki opis lekcji..." placeholderTextColor={theme.colors.textMuted} value={lForm.description} onChangeText={(v) => setLForm((f) => ({ ...f, description: v }))} multiline numberOfLines={3} />
+              </View>
             </View>
             <View style={m.footer}>
               <TouchableOpacity style={m.cancelBtn} onPress={() => { void closeDraftModal('lesson'); }}><Text style={m.cancelBtnText}>Anuluj</Text></TouchableOpacity>
-              <TouchableOpacity style={m.saveBtn} onPress={saveLesson} disabled={saving}>
+              <TouchableOpacity style={m.saveBtn} onPress={saveLesson} disabled={saving || uploading || pendingDraft?.kind === 'lesson'}>
                 {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={m.saveBtnText}>Zapisz lekcję</Text>}
               </TouchableOpacity>
             </View>
@@ -953,12 +1058,28 @@ export default function ManageCoursesScreen() {
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={m.body} keyboardShouldPersistTaps="handled">
               {recoveredDraft === 'topic' && <Text style={m.draftNotice}>Przywrócono niezapisany szkic z tego urządzenia.</Text>}
               {draftError && <Text style={m.draftError}>Nie udało się zabezpieczyć szkicu na tym urządzeniu. Nie zamykaj ekranu, dopóki nie zapiszesz zmian.</Text>}
+              {draftChoice('topic')}
+              <View pointerEvents={pendingDraft?.kind === 'topic' ? 'none' : 'auto'} style={pendingDraft?.kind === 'topic' ? { opacity: 0.45 } : undefined}>
               <Text style={m.label}>Tytuł tematu *</Text>
               <TextInput style={m.input} placeholder="np. Jak parzyć espresso" placeholderTextColor={theme.colors.textMuted} value={tForm.title} onChangeText={(v) => setTForm((f) => ({ ...f, title: v }))} />
               <Text style={m.label}>Krótki opis</Text>
               <TextInput style={[m.input, m.inputMulti]} placeholder="Opcjonalny opis..." placeholderTextColor={theme.colors.textMuted} value={tForm.description} onChangeText={(v) => setTForm((f) => ({ ...f, description: v }))} multiline numberOfLines={2} />
               <Text style={m.label}>Treść tekstowa</Text>
               <TextInput style={[m.input, m.inputMultiLg]} placeholder="Treść materiału szkoleniowego..." placeholderTextColor={theme.colors.textMuted} value={tForm.content_text} onChangeText={(v) => setTForm((f) => ({ ...f, content_text: v }))} multiline numberOfLines={5} />
+              <Text style={m.label}>Zdjęcie w materiale</Text>
+              {tForm.image_storage_path && <TrainingImage path={tForm.image_storage_path} style={m.imagePreview} resizeMode="contain" />}
+              <TouchableOpacity style={m.uploadBtn} onPress={() => { void pickAndUploadImage('topics'); }} disabled={uploading || saving} activeOpacity={0.8}>
+                <View style={m.uploadBtnIcon}>
+                  {uploading ? <ActivityIndicator size="small" color={theme.colors.primary} /> : <Ionicons name="image-outline" size={20} color={theme.colors.primary} />}
+                </View>
+                <View>
+                  <Text style={m.uploadBtnText}>{tForm.image_storage_path ? 'Zmień zdjęcie' : 'Dodaj zdjęcie'}</Text>
+                  <Text style={m.uploadBtnSub}>JPG, PNG, WebP • maks. 10 MB</Text>
+                </View>
+              </TouchableOpacity>
+              {!!tForm.image_storage_path && <TouchableOpacity onPress={() => setTForm((form) => ({ ...form, image_storage_path: null }))} disabled={uploading || saving} style={m.removeImageBtn}>
+                <Text style={m.removeImageText}>Usuń zdjęcie z tematu</Text>
+              </TouchableOpacity>}
               <Text style={m.label}>Video URL</Text>
               <TextInput style={m.input} placeholder="https://youtube.com/... lub https://cdn.example.com/video.mp4" placeholderTextColor={theme.colors.textMuted} value={tForm.video_url} onChangeText={(v) => setTForm((f) => ({ ...f, video_url: v }))} autoCapitalize="none" keyboardType="url" />
               <TouchableOpacity style={m.uploadBtn} onPress={pickAndUploadVideo} disabled={uploading || saving} activeOpacity={0.8}>
@@ -976,11 +1097,11 @@ export default function ManageCoursesScreen() {
                   <Text style={m.uploadedBadgeText}>Video przesłane do storage</Text>
                 </View>
               )}
-
+              </View>
             </ScrollView>
             <View style={m.footer}>
               <TouchableOpacity style={m.cancelBtn} onPress={() => { void closeDraftModal('topic'); }}><Text style={m.cancelBtnText}>Anuluj</Text></TouchableOpacity>
-              <TouchableOpacity style={m.saveBtn} onPress={saveTopic} disabled={saving}>
+              <TouchableOpacity style={m.saveBtn} onPress={saveTopic} disabled={saving || uploading || pendingDraft?.kind === 'topic'}>
                 {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={m.saveBtnText}>Zapisz temat</Text>}
               </TouchableOpacity>
             </View>
@@ -1022,6 +1143,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.lg, marginBottom: 10, overflow: 'hidden', ...theme.shadows.card },
   cardMain: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
   cardIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  cardImage: { width: 44, height: 44, borderRadius: 8 },
   cardInfo: { flex: 1 },
   cardTitle: { fontSize: 14, fontWeight: '700', color: theme.colors.text },
   cardMeta: { fontSize: 12, color: theme.colors.textMuted, marginTop: 2 },
@@ -1051,6 +1173,10 @@ const m = StyleSheet.create({
   inputMultiLg: { height: 120, textAlignVertical: 'top' },
   draftNotice: { padding: 10, borderRadius: 8, backgroundColor: theme.colors.primaryLight, color: theme.colors.primary, fontSize: 12, fontWeight: '700', marginBottom: 6 },
   draftError: { padding: 10, borderRadius: 8, backgroundColor: '#FEF2F2', color: theme.colors.error, fontSize: 12, fontWeight: '700', marginBottom: 6 },
+  draftChoice: { padding: 12, borderRadius: 10, backgroundColor: theme.colors.primaryLight, marginBottom: 12, gap: 8 },
+  draftChoiceText: { fontSize: 12, color: theme.colors.text, lineHeight: 18 },
+  draftChoiceButton: { paddingVertical: 9, paddingHorizontal: 10, backgroundColor: theme.colors.card, borderRadius: 8 },
+  draftChoiceButtonText: { fontSize: 12, color: theme.colors.primary, fontWeight: '700' },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: theme.borderRadius.full, backgroundColor: theme.colors.surface, borderWidth: 1.5, borderColor: theme.colors.border },
   chipActive: { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primary },
   chipText: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary },
@@ -1068,6 +1194,9 @@ const m = StyleSheet.create({
   uploadBtnIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   uploadBtnText: { fontSize: 14, fontWeight: '700', color: theme.colors.primary },
   uploadBtnSub: { fontSize: 11, color: theme.colors.primary, opacity: 0.7, marginTop: 2 },
+  imagePreview: { width: '100%', height: 180, borderRadius: theme.borderRadius.md, marginVertical: 6 },
+  removeImageBtn: { alignSelf: 'flex-start', marginTop: 8, paddingVertical: 4 },
+  removeImageText: { color: theme.colors.error, fontSize: 12, fontWeight: '700' },
   uploadedBadge: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, backgroundColor: theme.colors.greenLight, padding: 12, borderRadius: theme.borderRadius.md },
   uploadedBadgeText: { fontSize: 13, color: theme.colors.green, fontWeight: '600' },
 

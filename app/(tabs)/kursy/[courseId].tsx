@@ -6,6 +6,7 @@ import {
     TouchableOpacity, useWindowDimensions, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import TrainingImage from '../../../components/TrainingImage';
 import { useAuth } from '../../../context/AuthContext';
 import { useAlert } from '../../../context/AlertContext';
 import {
@@ -152,6 +153,7 @@ export default function CourseDetailScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scroll, isDesktop && styles.scrollDesktop]}>
         {loadError && <TouchableOpacity onPress={() => { void load(); }} style={{ padding: 14 }}><Text style={{ color: theme.colors.error }}>Nie udało się odświeżyć kursu. Dotknij, aby ponowić.</Text></TouchableOpacity>}
+        {course.cover_image_url && <TrainingImage path={course.cover_image_url} style={styles.coverImage} />}
         {/* Progress card */}
         <View style={styles.progressCard}>
           <View style={styles.progressTopRow}>
@@ -291,6 +293,7 @@ const styles = StyleSheet.create({
   scrollDesktop: { maxWidth: 720, alignSelf: 'center' as any, width: '100%', paddingHorizontal: 32 },
 
   progressCard: { backgroundColor: theme.colors.card, borderRadius: theme.borderRadius.lg, padding: 16, marginBottom: 16, ...theme.shadows.card },
+  coverImage: { width: '100%', height: 220, borderRadius: theme.borderRadius.lg, marginBottom: 16 },
   progressTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
   progressTitle: { fontSize: 16, fontWeight: '700', color: theme.colors.text, flex: 1, marginRight: 12 },
   progressDesc: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 4 },

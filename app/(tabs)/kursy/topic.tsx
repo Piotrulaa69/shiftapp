@@ -6,6 +6,7 @@ import {
     TouchableOpacity, useWindowDimensions, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import TrainingImage from '../../../components/TrainingImage';
 import { useAuth } from '../../../context/AuthContext';
 import { getTopicProgress, getTopicVideoUrl, markTopicCompleted, upsertCourseProgress } from '../../../lib/db';
 import { DbTopic, supabase } from '../../../lib/supabase';
@@ -172,7 +173,9 @@ export default function TopicScreen() {
           </View>
         )}
 
-        {!videoLoading && !videoUrl && (
+        {topic.image_storage_path && <TrainingImage path={topic.image_storage_path} style={styles.topicImage} resizeMode="contain" />}
+
+        {!videoLoading && !videoUrl && !topic.image_storage_path && (
           <View style={styles.noVideoBox}>
             <Ionicons name="document-text-outline" size={20} color={theme.colors.textMuted} />
             <Text style={styles.noVideoText}>Temat bez materiału wideo</Text>
@@ -231,6 +234,7 @@ const styles = StyleSheet.create({
 
   noVideoBox: { flexDirection: 'row', alignItems: 'center', gap: 10, margin: 16, padding: 14, backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.md },
   noVideoText: { fontSize: 13, color: theme.colors.textMuted },
+  topicImage: { width: '100%', height: 300, backgroundColor: theme.colors.surface },
 
   topicTitle: { fontSize: 22, fontWeight: '800', color: theme.colors.text, marginBottom: 8, lineHeight: 30, paddingHorizontal: 20, paddingTop: 20 },
   topicDesc: { fontSize: 15, color: theme.colors.textSecondary, marginBottom: 4, lineHeight: 22, paddingHorizontal: 20 },

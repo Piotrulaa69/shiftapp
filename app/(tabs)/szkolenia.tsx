@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileHeader from '../../components/MobileHeader';
+import TrainingImage from '../../components/TrainingImage';
 import { CardSkeleton, Skeleton } from '../../components/Skeleton';
 import { useAuth } from '../../context/AuthContext';
 import { getCourseProgress, getCourses, getEmployeeTrainingProgress, getPointsForEmployee, getTeamPoints, getTrainingCategories, getTrainings } from '../../lib/db';
@@ -449,9 +450,11 @@ export default function SzkoleniaScreen() {
                   <View style={[cStyles.accent, { backgroundColor: color }]} />
                   <View style={cStyles.body}>
                     <View style={cStyles.topRow}>
-                      <View style={[cStyles.iconCircle, { backgroundColor: color + '18' }]}>
-                        <Ionicons name={icon as any} size={22} color={color} />
-                      </View>
+                      {c.cover_image_url
+                        ? <TrainingImage path={c.cover_image_url} style={cStyles.coverImage} />
+                        : <View style={[cStyles.iconCircle, { backgroundColor: color + '18' }]}>
+                            <Ionicons name={icon as any} size={22} color={color} />
+                          </View>}
                       <View style={cStyles.info}>
                         <Text style={cStyles.title} numberOfLines={2}>{c.title}</Text>
                         <View style={cStyles.metaRow}>
@@ -771,6 +774,7 @@ const cStyles = StyleSheet.create({
   body: { flex: 1, padding: 14 },
   topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 10 },
   iconCircle: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  coverImage: { width: 44, height: 44, borderRadius: 8, flexShrink: 0 },
   info: { flex: 1 },
   title: { fontSize: 14, fontWeight: '700', color: theme.colors.text, marginBottom: 4 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

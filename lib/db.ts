@@ -1945,17 +1945,35 @@ export async function createCourse(restaurantId: string, fields: Partial<DbCours
   return data;
 }
 
-export async function updateCourse(courseId: string, fields: Partial<DbCourse>): Promise<boolean> {
+/** Confirm the values through a new read before the editor clears its local draft. */
+async function updateTrainingContent(
+  table: 'courses' | 'lessons' | 'topics', id: string, fields: Record<string, unknown>, expectedUpdatedAt?: string,
+): Promise<boolean> {
   try {
-    const { data, error } = await reliableSupabaseRequest(() => supabase.from('courses').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', courseId).select('id').maybeSingle());
-    if (error || !data) { console.error('updateCourse', error); return false; }
-    invalidate('courses:');
-    invalidate(`course:${courseId}`);
-    return true;
+    const timestamp = new Date().toISOString();
+    const { error } = await reliableSupabaseRequest(() => {
+      const query = supabase.from(table).update({ ...fields, updated_at: timestamp }).eq('id', id);
+      return (expectedUpdatedAt ? query.eq('updated_at', expectedUpdatedAt) : query).select('id').maybeSingle();
+    });
+    if (error) console.error(`updateTrainingContent:${table}`, error);
   } catch (error) {
-    console.error('updateCourse', error);
+    console.error(`updateTrainingContent:${table}`, error);
+  }
+  try {
+    const { data, error } = await reliableSupabaseRequest(() => supabase.from(table).select('*').eq('id', id).maybeSingle());
+    if (error || !data) return false;
+    return Object.entries(fields).every(([key, value]) => value === undefined
+      || JSON.stringify((data as Record<string, unknown>)[key] ?? null) === JSON.stringify(value ?? null));
+  } catch (error) {
+    console.error(`verifyTrainingContent:${table}`, error);
     return false;
   }
+}
+
+export async function updateCourse(courseId: string, fields: Partial<DbCourse>, expectedUpdatedAt?: string): Promise<boolean> {
+  const saved = await updateTrainingContent('courses', courseId, fields, expectedUpdatedAt);
+  if (saved) { invalidate('courses:'); invalidate(`course:${courseId}`); }
+  return saved;
 }
 
 export async function deleteCourse(courseId: string): Promise<boolean> {
@@ -1987,17 +2005,10 @@ export async function createLesson(restaurantId: string, courseId: string, field
   return data;
 }
 
-export async function updateLesson(lessonId: string, fields: Partial<DbLesson>): Promise<boolean> {
-  try {
-    const { data, error } = await reliableSupabaseRequest(() => supabase.from('lessons').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', lessonId).select('id').maybeSingle());
-    if (error || !data) { console.error('updateLesson', error); return false; }
-    invalidate('course-lessons:');
-    invalidate('course-topics:');
-    return true;
-  } catch (error) {
-    console.error('updateLesson', error);
-    return false;
-  }
+export async function updateLesson(lessonId: string, fields: Partial<DbLesson>, expectedUpdatedAt?: string): Promise<boolean> {
+  const saved = await updateTrainingContent('lessons', lessonId, fields, expectedUpdatedAt);
+  if (saved) { invalidate('course-lessons:'); invalidate('course-topics:'); }
+  return saved;
 }
 
 /** Save a course or lesson quiz only against the version the editor opened.
@@ -2088,17 +2099,10 @@ export async function createTopic(restaurantId: string, lessonId: string, fields
   return data;
 }
 
-export async function updateTopic(topicId: string, fields: Partial<DbTopic>): Promise<boolean> {
-  try {
-    const { data, error } = await reliableSupabaseRequest(() => supabase.from('topics').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', topicId).select('id').maybeSingle());
-    if (error || !data) { console.error('updateTopic', error); return false; }
-    invalidate('lesson-topics:');
-    invalidate('course-topics:');
-    return true;
-  } catch (error) {
-    console.error('updateTopic', error);
-    return false;
-  }
+export async function updateTopic(topicId: string, fields: Partial<DbTopic>, expectedUpdatedAt?: string): Promise<boolean> {
+  const saved = await updateTrainingContent('topics', topicId, fields, expectedUpdatedAt);
+  if (saved) { invalidate('lesson-topics:'); invalidate('course-topics:'); }
+  return saved;
 }
 
 export async function deleteTopic(topicId: string): Promise<boolean> {
@@ -2221,6 +2225,40 @@ export async function getTopicVideoUrl(storagePath: string): Promise<string | nu
   const { data } = await supabase.storage
     .from('training-videos')
     .createSignedUrl(storagePath, 3600);
+  return data?.signedUrl ?? null;
+}
+
+const TRAINING_IMAGE_TYPES: Record<string, string> = {
+  'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp',
+};
+
+/** Images stay private to the restaurant, like uploaded training videos. */
+export async function uploadTrainingImage(
+  restaurantId: string, scope: 'courses' | 'topics', fileUri: string, mimeType: string,
+): Promise<string | null> {
+  const normalizedType = mimeType === 'image/jpg' ? 'image/jpeg' : mimeType;
+  const extension = TRAINING_IMAGE_TYPES[normalizedType];
+  if (!extension) return null;
+  try {
+    const response = await fetch(fileUri);
+    const blob = await response.blob();
+    if (blob.size > 10 * 1024 * 1024) return null;
+    const path = `${restaurantId}/${scope}/${createClientUuid()}.${extension}`;
+    const { error } = await supabase.storage.from('training-images').upload(path, blob, {
+      contentType: normalizedType, upsert: false,
+    });
+    if (error) { console.error('uploadTrainingImage', error); return null; }
+    return path;
+  } catch (error) {
+    console.error('uploadTrainingImage', error);
+    return null;
+  }
+}
+
+export async function getTrainingImageUrl(pathOrUrl: string): Promise<string | null> {
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  const { data, error } = await supabase.storage.from('training-images').createSignedUrl(pathOrUrl, 3600);
+  if (error) { console.error('getTrainingImageUrl', error); return null; }
   return data?.signedUrl ?? null;
 }
 

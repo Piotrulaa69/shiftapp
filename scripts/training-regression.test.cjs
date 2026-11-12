@@ -21,8 +21,9 @@ function load(file, dependencies, globals = {}) {
   return module.exports;
 }
 
-function mockDatabase(responses) {
+function mockDatabase(responses, globals = {}) {
   const calls = [];
+  const storageCalls = [];
   const quizPersistence = load('lib/training-quiz-persistence.ts', {});
   const builder = {};
   for (const name of ['select', 'eq', 'order', 'insert', 'update', 'delete', 'in', 'not']) {
@@ -34,14 +35,18 @@ function mockDatabase(responses) {
     from: (table) => { calls.push(['from', table]); return builder; },
     rpc: (name, args) => { calls.push(['rpc', name, args]); return Promise.resolve(responses.shift()); },
     auth: { refreshSession: async () => ({ error: null }) },
+    storage: { from: (bucket) => ({
+      upload: async (path, blob, options) => { storageCalls.push(['upload', bucket, path, blob.size, options]); return { error: null }; },
+      createSignedUrl: async (path) => { storageCalls.push(['signed', bucket, path]); return { data: { signedUrl: `signed:${path}` }, error: null }; },
+    }) },
   };
   const db = load('lib/db.ts', {
     './supabase': { supabase },
     './query-cache': { cached: (_key, fetcher) => fetcher(), invalidate() {} },
     './retry': { retrySupabase: (operation) => operation(), isSessionError: () => false, createClientUuid: () => 'stable-id' },
     './training-quiz-persistence': quizPersistence,
-  });
-  return { db, calls };
+  }, globals);
+  return { db, calls, storageCalls };
 }
 
 const twentyQuestionQuiz = {
@@ -112,8 +117,35 @@ test('opening an empty category manager never recreates deleted defaults', async
 });
 
 test('an update affecting no course is not reported as saved', async () => {
-  const { db } = mockDatabase([{ data: null, error: null }]);
+  const { db } = mockDatabase([{ data: null, error: null }, { data: null, error: null }]);
   assert.equal(await db.updateCourse('course', { title: 'Changed' }), false);
+});
+
+test('course editor closes only after a fresh read confirms the saved fields', async () => {
+  const { db, calls } = mockDatabase([
+    { data: { id: 'course' }, error: null },
+    { data: { id: 'course', title: 'Previous', cover_image_url: null }, error: null },
+  ]);
+  assert.equal(await db.updateCourse('course', { title: 'Changed', cover_image_url: 'restaurant/courses/photo.jpg' }, 'old-time'), false);
+  assert.equal(calls.some(([name, field, value]) => name === 'eq' && field === 'updated_at' && value === 'old-time'), true);
+});
+
+test('lost course write response can be confirmed by the server read', async () => {
+  const { db } = mockDatabase([
+    { data: null, error: { code: 'PGRST000' } },
+    { data: { id: 'course', title: 'Changed', cover_image_url: 'restaurant/courses/photo.jpg' }, error: null },
+  ]);
+  assert.equal(await db.updateCourse('course', { title: 'Changed', cover_image_url: 'restaurant/courses/photo.jpg' }), true);
+});
+
+test('training images use private image storage and signed URLs', async () => {
+  const { db, storageCalls } = mockDatabase([], { fetch: async () => ({ blob: async () => ({ size: 128 }) }) });
+  const path = await db.uploadTrainingImage('restaurant', 'topics', 'file:photo', 'image/png');
+  assert.match(path, /^restaurant\/topics\/stable-id\.png$/);
+  assert.equal(storageCalls[0][1], 'training-images');
+  assert.equal(storageCalls[0][4].contentType, 'image/png');
+  assert.equal(await db.getTrainingImageUrl(path), `signed:${path}`);
+  assert.equal(await db.uploadTrainingImage('restaurant', 'topics', 'file:photo', 'image/gif'), null);
 });
 
 test('course reads fail explicitly instead of caching missing data', async () => {
@@ -148,6 +180,14 @@ test('draft writes and clears stay ordered, including rapid save actions', async
   assert.equal((await drafts.readTrainingDraft('key')).value.title, 'Second');
   await Promise.all([drafts.writeTrainingDraft('key', { title: 'Third' }), drafts.clearTrainingDraft('key')]);
   assert.equal(await drafts.readTrainingDraft('key'), null);
+});
+
+test('an older different form draft remains recoverable after the server timestamp changes', () => {
+  const { selectTrainingFormDraft } = load('lib/training-form-recovery.ts', {});
+  const server = { title: 'Saved title', description: 'Server text' };
+  const oldLocal = { value: { title: 'Saved title', description: 'Long local text' }, savedAt: 1 };
+  assert.equal(selectTrainingFormDraft(server, oldLocal, null).value.description, 'Long local text');
+  assert.equal(selectTrainingFormDraft(server, { value: server }, oldLocal).fromRecovery, true);
 });
 
 test('cache cannot expose a previous account or reinsert its pending response', async () => {

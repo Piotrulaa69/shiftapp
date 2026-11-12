@@ -498,6 +498,7 @@ export type DbTopic = {
   content_text: string | null;
   video_url: string | null;
   video_storage_path: string | null;
+  image_storage_path: string | null;
   video_duration_sec: number | null;
   quiz_data: DbTopicQuiz | null;
   sort_order: number;
